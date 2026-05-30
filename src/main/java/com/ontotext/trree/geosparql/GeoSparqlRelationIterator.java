@@ -1,7 +1,10 @@
 package com.ontotext.trree.geosparql;
 
+import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.lucene.LuceneMultiSearchEntityGeometryIterator;
 import com.ontotext.trree.sdk.Entities;
+import com.ontotext.trree.sdk.PluginException;
 import com.ontotext.trree.sdk.StatementIterator;
 import com.useekm.indexing.GeoConstants;
 import org.locationtech.jts.geom.Geometry;
@@ -23,6 +26,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private final Entities entities;
 
 	private Geometry knownGeometry;
+	private ExactGeometry knownExactGeometry;
 	private EntityGeometryIterator iKnownEntities;
 	private EntityGeometryIterator iCandidateEntities;
 
@@ -91,6 +95,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 
 				// Fresh known Geometry. It will be reused until a match is found or no more candidate Geometries left
 				knownGeometry = iKnownEntities.nextGeometry();
+				knownExactGeometry = iKnownEntities.lastExactGeometry();
 
 				if (searchIterator != null) {
 					// If we have a search iterator (either subject or object is unbound) we have to notify it
@@ -105,6 +110,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			}
 
 			Geometry candidateGeometry = iCandidateEntities.nextGeometry();
+			ExactGeometry candidateExactGeometry = iCandidateEntities.lastExactGeometry();
 
 			if (candidateGeometry != null) {
 				if (logger.isDebugEnabled()) {
@@ -113,8 +119,8 @@ class GeoSparqlRelationIterator extends StatementIterator {
 				}
 
 				result = trustLucene || (inverse ?
-						function.evaluate(candidateGeometry, knownGeometry) :
-						function.evaluate(knownGeometry, candidateGeometry));
+						function.evaluate(candidateExactGeometry, knownExactGeometry) :
+						function.evaluate(knownExactGeometry, candidateExactGeometry));
 			} else {
 				logger.debug(">>>>>>>> GeoSPARQL: No available candidate geometries matching the query!");
 				break;
@@ -172,20 +178,17 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		EntityGeometryIterator iterator;
 		Value value = entities.get(entityId);
 		if (value instanceof Literal) {
-			// the id refers to a literal, we need to parse the geometry
-			IRI subjType = ((Literal)value).getDatatype();
-			Geometry g;
-			if (GeoConstants.GEO_GML_LITERAL.equals(subjType)) {
-				// gml
-				g = parent.getGeometryFromString(value.stringValue(), parent.asGML);
-			} else {
-				// wkt
-				g = parent.getGeometryFromString(value.stringValue(), parent.asWKT);
-			}
-			iterator = new SingleEntityGeometryIterator(entityId, g);
+			IRI datatype = GeoConstants.GEO_GML_LITERAL.equals(((Literal)value).getDatatype())
+					? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
+			IndexGeometry indexGeometry = parent.getQueryIndexGeometry((Literal) value, datatype);
+			iterator = new SingleEntityGeometryIterator(entityId, indexGeometry);
 		} else {
 			// the id refers to an IRI referring to a geometry/feature
 			iterator = parent.indexer.getGeometriesFor(entityId);
+		}
+
+		if (iterator == null) {
+			throw new PluginException("Unable to create GeoSPARQL geometry iterator for entity id " + entityId);
 		}
 
 		return iterator;

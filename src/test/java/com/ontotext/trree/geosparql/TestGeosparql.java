@@ -146,9 +146,9 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 
 	@Test public void distance() throws RDF4JException {
 		assertEquals(1.0611006, ((Literal)new Distance().evaluate(vf(), asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"))).doubleValue(), 0.00001);
-		assertEquals(73549, (int)((Literal)new Distance().evaluate(vf(), asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
+		assertEquals(73322, (int)((Literal)new Distance().evaluate(vf(), asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
 				UnitsOfMeasure.URI_METRE)).doubleValue());
-		assertEquals(73.54954, ((Literal)new Distance().evaluate(vf(), asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
+		assertEquals(73.322403, ((Literal)new Distance().evaluate(vf(), asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
 				UnitsOfMeasure.URI_KILOMETRE)).doubleValue(), 0.00001);
 	}
 

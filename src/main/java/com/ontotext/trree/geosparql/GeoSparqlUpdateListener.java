@@ -1,8 +1,8 @@
 package com.ontotext.trree.geosparql;
 
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
 import com.ontotext.trree.sdk.*;
-import org.locationtech.jts.geom.Geometry;
 import gnu.trove.TLongHashSet;
 import gnu.trove.TLongProcedure;
 
@@ -98,13 +98,14 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		final Function<Long, String> subjectMapper = (subject) -> pluginConnection.getEntities().get(subject).stringValue();
 
 		geometriesToUpdate.forEach(new TLongProcedure() {
-			final List<Geometry> geometries = new ArrayList<Geometry>();
+			final List<IndexGeometry> geometries = new ArrayList<IndexGeometry>();
 
 			void processGeometryWithPredicate(long value, long predicate) {
 				StatementIterator sit = pluginConnection.getStatements().get(value, predicate, 0);
 				try {
 					while (sit.next()) {
-						Geometry geometry = parent.getGeometryFromLiteralId(sit.object, predicate, pluginConnection.getEntities());
+						IndexGeometry geometry = parent.getIndexGeometryFromLiteralId(value, sit.object, predicate,
+								pluginConnection.getEntities());
 						if (geometry != null) {
 							geometries.add(geometry);
 						}
@@ -143,13 +144,14 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		});
 
 		featuresToUpdate.forEach(new TLongProcedure() {
-			final List<Geometry> geometries = new ArrayList<Geometry>();
+			final List<IndexGeometry> geometries = new ArrayList<IndexGeometry>();
 
 			void processGeometryWithPredicate(long value, long predicate) {
 				StatementIterator sit = pluginConnection.getStatements().get(value, predicate, 0);
 				try {
 					while (sit.next()) {
-						Geometry geometry = parent.getGeometryFromLiteralId(sit.object, predicate, pluginConnection.getEntities());
+						IndexGeometry geometry = parent.getIndexGeometryFromLiteralId(value, sit.object, predicate,
+								pluginConnection.getEntities());
 						if (geometry != null) {
 							geometries.add(geometry);
 						}

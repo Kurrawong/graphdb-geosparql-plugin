@@ -1,8 +1,12 @@
 package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
+import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.sdk.PluginException;
 import org.locationtech.jts.geom.Geometry;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.*;
 import org.apache.lucene.util.BytesRef;
 
@@ -25,6 +29,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 
 	private long entityId;
 	private Geometry geometry;
+	private ExactGeometry exactGeometry;
 
 	LuceneEntityGeometryIterator(IndexSearcher searcher, Query query) throws IOException {
 		this.searcher = searcher;
@@ -73,6 +78,11 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	}
 
 	@Override
+	public ExactGeometry lastExactGeometry() {
+		return exactGeometry;
+	}
+
+	@Override
 	public boolean hasNextGeometry() {
 		return  // There are more geometries in this document
 				(geoDatas != null && geoDatasIndex + 1 < geoDatas.length)
@@ -112,5 +122,27 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 
 		entityId = (Long) doc.getField("id").numericValue();
 		geoDatas = doc.getBinaryValues("geoData");
+		exactGeometry = exactGeometryFromDocument(doc);
+	}
+
+	private ExactGeometry exactGeometryFromDocument(Document doc) {
+		IndexableField schemaVersion = doc.getField(IndexGeometry.FIELD_SCHEMA_VERSION);
+		if (schemaVersion == null || schemaVersion.numericValue() == null
+				|| schemaVersion.numericValue().intValue() != IndexGeometry.SCHEMA_VERSION) {
+			throw new PluginException(LuceneGeoIndexer.LEGACY_INDEX_MESSAGE);
+		}
+		String lexicalForm = doc.get(IndexGeometry.FIELD_EXACT_LEXICAL_FORM);
+		String datatype = doc.get(IndexGeometry.FIELD_EXACT_DATATYPE);
+		if (lexicalForm == null || datatype == null) {
+			throw new PluginException("GeoSPARQL Lucene schema v2 document is missing exact geometry metadata.");
+		}
+		ExactGeometry exact = ExactGeometry.fromLiteral(org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance()
+				.createLiteral(lexicalForm,
+						org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance().createIRI(datatype)));
+		String explicitCrs = doc.get(IndexGeometry.FIELD_EXACT_CRS);
+		if (explicitCrs != null && !exact.explicitCrsUri().orElse("").equals(explicitCrs)) {
+			throw new PluginException("GeoSPARQL Lucene schema v2 document has inconsistent exact CRS metadata.");
+		}
+		return exact;
 	}
 }

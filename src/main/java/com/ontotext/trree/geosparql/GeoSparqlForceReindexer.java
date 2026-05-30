@@ -1,12 +1,8 @@
 package com.ontotext.trree.geosparql;
 
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginConnection;
 import com.ontotext.trree.sdk.StatementIterator;
-import org.locationtech.jts.geom.Geometry;
-import org.apache.commons.lang3.tuple.Pair;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Utility class for reindexing all indexable data.
@@ -36,8 +32,8 @@ public class GeoSparqlForceReindexer {
 				StatementIterator geoSerItty = pluginConnection.getStatements().get(0, predicate, 0);
 				try {
 					while (geoSerItty.next()) {
-						Geometry g = plugin.getGeometryFromLiteralId(geoSerItty.object, predicate,
-								pluginConnection.getEntities());
+						IndexGeometry g = plugin.getIndexGeometryFromLiteralId(geoSerItty.subject, geoSerItty.object,
+								predicate, pluginConnection.getEntities());
 						if (g != null) {
 							indexer.indexGeometry(geoSerItty.subject, this::mapSubject, g);
 						}
@@ -64,7 +60,7 @@ public class GeoSparqlForceReindexer {
 				StatementIterator geoSerItty = pluginConnection.getStatements().get(subject, predicate, 0);
 				try {
 					while (geoSerItty.next()) {
-						Geometry g = plugin.getGeometryFromLiteralId(geoSerItty.object, predicate,
+						IndexGeometry g = plugin.getIndexGeometryFromLiteralId(subject, geoSerItty.object, predicate,
 								pluginConnection.getEntities());
 						if (g != null) {
 							indexer.indexGeometry(feature, this::mapSubject, g);

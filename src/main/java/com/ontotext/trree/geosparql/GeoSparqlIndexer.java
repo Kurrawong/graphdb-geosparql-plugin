@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql;
 
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import org.apache.lucene.spatial.query.SpatialOperation;
 import org.locationtech.jts.geom.Geometry;
 
@@ -21,7 +22,7 @@ public interface GeoSparqlIndexer {
 	 * @param subject  id of the subject
 	 * @param geometries geometries that corresponds to asWKT/asGML's object
 	 */
-	void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<Geometry> geometries);
+	void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<IndexGeometry> geometries);
 
 	/**
 	 * Returns an iterator over entities/geometries that matches the provided geometry
@@ -49,7 +50,7 @@ public interface GeoSparqlIndexer {
 
 	void rollback() throws Exception;
 
-	void indexGeometry(long subject, Function<Long, String> subjectMapper, Geometry geometry);
+	void indexGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry);
 
 	void freshIndex() throws Exception;
 }

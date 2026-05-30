@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
+import com.ontotext.trree.geosparql.jena.ExactGeometry;
 import org.locationtech.jts.geom.Geometry;
 import org.apache.lucene.spatial.query.SpatialOperation;
 
@@ -36,6 +37,11 @@ public class LuceneMultiSearchEntityGeometryIterator implements EntityGeometryIt
     @Override
     public Geometry lastGeometry() {
         return luceneIterator == null ? null : luceneIterator.lastGeometry();
+    }
+
+    @Override
+    public ExactGeometry lastExactGeometry() {
+        return luceneIterator == null ? null : luceneIterator.lastExactGeometry();
     }
 
     @Override

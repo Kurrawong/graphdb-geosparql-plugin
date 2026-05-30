@@ -1,12 +1,15 @@
 package com.ontotext.trree.geosparql;
 
-import com.useekm.types.GeoConvert;
+import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.junit.Assert;
 import org.junit.Test;
+import org.locationtech.jts.geom.Coordinate;
 
 import java.util.List;
+import java.util.Locale;
 
 public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 	private final static String EXPECTED_SUBJECT_RESULT = "http://data.bigdatagrapes.eu/resource/AUA/estate/Fasoulis/Geotrisi/geo";
@@ -50,13 +53,14 @@ public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 			"}";
 	@Test
 	public void shouldProperlyConvertAndIndexDifferentCRSThanDefault() throws Exception {
-		final String pointInCRS84 = GeoConvert
-				.wktToGeometry("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)")
-				.toString();
+		final IndexGeometry pointInCRS84 = IndexGeometry.fromExactGeometry(
+				ExactGeometry.fromWkt("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)"));
+		final String searchAreaInCRS84 = polygonAround(pointInCRS84.indexGeometry().getCoordinate(), 0.001);
 
 		importData("gdb3142.ttl", RDFFormat.TURTLE);
 		enablePlugin();
-		List<Value> resultValues = executeSparqlQueryWithResult(String.format(SUBJECT_SEARCH_QUERY_WITH_DEFAULT_CRS, pointInCRS84), "s");
+		List<Value> resultValues = executeSparqlQueryWithResult(
+				String.format(SUBJECT_SEARCH_QUERY_WITH_DEFAULT_CRS, searchAreaInCRS84), "s");
 
 		Assert.assertTrue("Should return one result", !resultValues.isEmpty());
 		Assert.assertTrue("Should return result matching subject", EXPECTED_SUBJECT_RESULT.equals(resultValues.get(0).stringValue()));
@@ -64,6 +68,15 @@ public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 		resultValues = executeSparqlQueryWithResult(SUBJECT_SEARCH_QUERY_WITH_EPSG_32634_CRS, "s");
 		Assert.assertTrue("Should return one result", !resultValues.isEmpty());
 		Assert.assertTrue("Should return result matching subject", EXPECTED_SUBJECT_RESULT.equals(resultValues.get(0).stringValue()));
+	}
+
+	private static String polygonAround(Coordinate coordinate, double delta) {
+		double minX = coordinate.x - delta;
+		double maxX = coordinate.x + delta;
+		double minY = coordinate.y - delta;
+		double maxY = coordinate.y + delta;
+		return String.format(Locale.ROOT, "POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))",
+				minX, minY, maxX, minY, maxX, maxY, minX, maxY, minX, minY);
 	}
 
 	@Test

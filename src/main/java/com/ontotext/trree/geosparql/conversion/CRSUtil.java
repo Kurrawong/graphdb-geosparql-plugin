@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.conversion;
 
 import org.geotools.referencing.CRS;
 import org.opengis.referencing.FactoryException;
+import org.opengis.referencing.NoSuchAuthorityCodeException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.operation.MathTransform;
 
@@ -36,8 +37,14 @@ public class CRSUtil {
 	}
 
 	public static MathTransform findMathTransform(String sourceCRS, String targetCRS) throws FactoryException {
-		final CoordinateReferenceSystem src = CRS.decode(sourceCRS);
-		final CoordinateReferenceSystem dst = CRS.decode(targetCRS);
+		final CoordinateReferenceSystem src;
+		final CoordinateReferenceSystem dst;
+		try {
+			src = CRS.decode(sourceCRS);
+			dst = CRS.decode(targetCRS);
+		} catch (NoSuchAuthorityCodeException e) {
+			throw new FactoryException(e);
+		}
 
 		if (!src.equals(dst)) {
 			return CRS.findMathTransform(src, dst);

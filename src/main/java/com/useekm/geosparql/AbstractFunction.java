@@ -13,6 +13,7 @@
  */
 package com.useekm.geosparql;
 
+import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import com.useekm.types.GeoConvert;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.TopologyException;
@@ -53,7 +54,7 @@ public abstract class AbstractFunction implements Function {
 
     @Override public final Value evaluate(ValueFactory valueFactory, Value... args) throws ValueExprEvaluationException {
         try {
-            return eval(valueFactory, args);
+            return JenaFunctionEvaluator.evaluate(valueFactory, getURI(), args);
         } catch (TopologyException e) {
             //handle invalid geometries just like type errors
             LOG.debug("Raising filter evaluation error due to invalid input geometry", e);

@@ -1,168 +1,56 @@
 package com.ontotext.trree.geosparql;
 
-import com.useekm.geosparql.*;
+import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
+import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import org.apache.lucene.spatial.query.SpatialOperation;
 import org.eclipse.rdf4j.model.IRI;
-import org.locationtech.jts.geom.Geometry;
-
-import java.util.HashMap;
-import java.util.Map;
 
 import static com.useekm.indexing.GeoConstants.*;
 
 /**
- * Enum describing all GeoSPARQL functions/relations. All values support evaluation.
+ * GeoSPARQL property relations exposed by GraphDB.
  *
- * Each enum value is defined by three arguments:
- * - The class of the corresponding function to evaluate in order to test if the relation holds
- * - The IRI of the predicate to use in SPARQL
- * - The Lucene operation that is compatible (returns exact or broader matches) with this relation
- *
- * For each relation we also have as comments the DE-9IM intersection pattern for the corresponding
- * Lucene operation as well as the pattern of the relation if different from the Lucene one.
- * All uppercase letters and digits in the two patterns are used to determine if there is an exact
- * or broader match. The lowercase letters in the relation pattern are not used in the Lucene matching
- * and indicate that a broader match will be returned.
- *
+ * Lucene operations are conservative candidate lookups only. Jena decides exact truth.
  */
 public enum GeoSparqlFunction {
-    //////////////////////////////////////////////////////////////////////////////////////
-    ///////////////////////// Simple Features Topological Relations //////////////////////
-    //////////////////////////////////////////////////////////////////////////////////////
-    // Equals:      TFFFTFFFT
-	SF_EQUALS(Equals.class, GEO_SF_EQUALS, SpatialOperation.IsEqualTo),
+	// Simple Features
+	SF_EQUALS(GEO_SF_EQUALS, GEOF_SF_EQUALS, SpatialOperation.Intersects),
+	SF_DISJOINT(GEO_SF_DISJOINT, GEOF_SF_DISJOINT, null),
+	SF_INTERSECTS(GEO_SF_INTERSECTS, GEOF_SF_INTERSECTS, SpatialOperation.Intersects),
+	SF_TOUCHES(GEO_SF_TOUCHES, GEOF_SF_TOUCHES, SpatialOperation.Intersects),
+	SF_WITHIN(GEO_SF_WITHIN, GEOF_SF_WITHIN, SpatialOperation.Intersects),
+	SF_CONTAINS(GEO_SF_CONTAINS, GEOF_SF_CONTAINS, SpatialOperation.Intersects),
+	SF_OVERLAPS(GEO_SF_OVERLAPS, GEOF_SF_OVERLAPS, SpatialOperation.Intersects),
+	SF_CROSSES(GEO_SF_CROSSES, GEOF_SF_CROSSES, SpatialOperation.Intersects),
 
-    // Disjoint:    FF*FF****
-	SF_DISJOINT(Disjoint.class, GEO_SF_DISJOINT, SpatialOperation.IsDisjointTo),
+	// Egenhofer
+	EH_EQUALS(GEO_EH_EQUALS, GEOF_EH_EQUALS, SpatialOperation.Intersects),
+	EH_DISJOINT(GEO_EH_DISJOINT, GEOF_EH_DISJOINT, null),
+	EH_MEET(GEO_EH_MEET, GEOF_EH_MEET, SpatialOperation.Intersects),
+	EH_OVERLAP(GEO_EH_OVERLAP, GEOF_EH_OVERLAP, SpatialOperation.Intersects),
+	EH_COVERS(GEO_EH_COVERS, GEOF_EH_COVERS, SpatialOperation.Intersects),
+	EH_COVERED_BY(GEO_EH_COVERED_BY, GEOF_EH_COVERED_BY, SpatialOperation.Intersects),
+	EH_INSIDE(GEO_EH_INSIDE, GEOF_EH_INSIDE, SpatialOperation.Intersects),
+	EH_CONTAINS(GEO_EH_CONTAINS, GEOF_EH_CONTAINS, SpatialOperation.Intersects),
 
-    // Intersects:  T********
-    //              *T*******
-    //              ***T*****
-    //              ****T****
-	SF_INTERSECTS(Intersects.class, GEO_SF_INTERSECTS, SpatialOperation.Intersects),
+	// RCC8
+	RCC8_EQ(GEO_RCC8_EQ, GEOF_RCC8_EQ, SpatialOperation.Intersects),
+	RCC8_DC(GEO_RCC8_DC, GEOF_RCC8_DC, null),
+	RCC8_EC(GEO_RCC8_EC, GEOF_RCC8_EC, SpatialOperation.Intersects),
+	RCC8_PO(GEO_RCC8_PO, GEOF_RCC8_PO, SpatialOperation.Intersects),
+	RCC8_TPPI(GEO_RCC8_TPPI, GEOF_RCC8_TPPI, SpatialOperation.Intersects),
+	RCC8_TPP(GEO_RCC8_TPP, GEOF_RCC8_TPP, SpatialOperation.Intersects),
+	RCC8_NTPP(GEO_RCC8_NTPP, GEOF_RCC8_NTPP, SpatialOperation.Intersects),
+	RCC8_NTPPI(GEO_RCC8_NTPPI, GEOF_RCC8_NTPPI, SpatialOperation.Intersects);
 
-    // Intersects:  *T*******
-    //              ***T*****
-    //              ****T****
-    // Touches:     fT*******
-    //              f**T*****
-    //              f***T****
-	SF_TOUCHES(Touches.class, GEO_SF_TOUCHES, SpatialOperation.Intersects),
-
-    // Within:      T*F**F***
-	SF_WITHIN(Within.class, GEO_SF_WITHIN, SpatialOperation.IsWithin),
-
-    // Contains:    T*****FF*
-	SF_CONTAINS(Contains.class, GEO_SF_CONTAINS, SpatialOperation.Contains),
-
-    // Overlaps:    T*T***T** (for A/A, P/P)
-    //              1*T***T** (for L/L)
-	SF_OVERLAPS(Overlaps.class, GEO_SF_OVERLAPS, SpatialOperation.Overlaps),
-
-    // Intersects:  T********
-    // Crosses:     T*t***t** (for P/L, P/A, L/A)
-    //              0******** (for L/L)
-	SF_CROSSES(Crosses.class, GEO_SF_CROSSES, SpatialOperation.Intersects),
-
-
-    //////////////////////////////////////////////////////////////////////////////////////
-    //////////////////////////// Egenhofer Topological Relations /////////////////////////
-    //////////////////////////////////////////////////////////////////////////////////////
-    // Equals:      TFFFTFFFT
-    // EhEquals:    TFFFTFFFT
-	EH_EQUALS(EhEquals.class, GEO_EH_EQUALS, SpatialOperation.IsEqualTo),
-
-    // Disjoint:    FF*FF****
-    // EhDisjoint:  FF*FF****
-	EH_DISJOINT(EhDisjoint.class, GEO_EH_DISJOINT, SpatialOperation.IsDisjointTo),
-
-    // Intersects:  *T*******
-    //              ***T*****
-    //              ****T****
-    // EhMeet:      fT*******
-    //              f**T*****
-    //              f***T****
-	EH_MEET(EhMeet.class, GEO_EH_MEET, SpatialOperation.Intersects),
-
-    // Overlaps:    T*T***T**
-    // EhOverlap:   T*T***T**
-	EH_OVERLAP(EhOverlap.class, GEO_EH_OVERLAP, SpatialOperation.Overlaps),
-
-    // Contains:    T*****FF*
-    // EhCovers:    T*tft*FF*
-	EH_COVERS(EhCovers.class, GEO_EH_COVERS, SpatialOperation.Contains),
-
-    // Within:      T*F**F***
-    // EhCoveredBy: TfF*tFt**
-	EH_COVERED_BY(EhCoveredBy.class, GEO_EH_COVERED_BY, SpatialOperation.IsWithin),
-
-    // Within:      T*F**F***
-    // EhInside:    TfF*fFt**
-    EH_INSIDE(EhInside.class, GEO_EH_INSIDE, SpatialOperation.IsWithin),
-
-    // Contains:    T*****FF*
-    // EhContains:  T*tff*FF*
-	EH_CONTAINS(EhContains.class, GEO_EH_CONTAINS, SpatialOperation.Contains),
-
-    //////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////// RCC8 Topological Relations ///////////////////////////////
-    //////////////////////////////////////////////////////////////////////////////////////
-    // Equals:      TFFFTFFFT
-    // Rcc8eq:      TFFFTFFFT
-	RCC8_EQ(Rcc8eq.class, GEO_RCC8_EQ, SpatialOperation.IsEqualTo),
-
-    // Disjoint:    FF*FF****
-    // Rcc8dc:      FFtFFtttt
-	RCC8_DC(Rcc8dc.class, GEO_RCC8_DC, SpatialOperation.IsDisjointTo),
-
-    // Intersects:  ****T****
-    // Rcc8ec:      fftfTtttt
-	RCC8_EC(Rcc8ec.class, GEO_RCC8_EC, SpatialOperation.Intersects),
-
-    // Overlaps:    T*T***T**
-    // Rcc8po:      TtTtttTtt
-	RCC8_PO(Rcc8po.class, GEO_RCC8_PO, SpatialOperation.Overlaps),
-
-    // Contains:    T*****FF*
-    // Rcc8tppi:    TttfttFFt
-	RCC8_TPPI(Rcc8tppi.class, GEO_RCC8_TPPI, SpatialOperation.Contains),
-
-    // Within:      T*F**F***
-    // Rcc8tpp:     TfFttFttt
-	RCC8_TPP(Rcc8tpp.class, GEO_RCC8_TPP, SpatialOperation.IsWithin),
-
-    // Within:      T*F**F***
-    // Rcc8ntpp:    TfFtfFttt
-	RCC8_NTPP(Rcc8ntpp.class, GEO_RCC8_NTPP, SpatialOperation.IsWithin),
-
-    // Contains:    T*****FF*
-    // Rcc8ntppi:   TttfftFFt
-	RCC8_NTPPI(Rcc8ntppi.class, GEO_RCC8_NTPPI, SpatialOperation.Contains),
-
-	;
-
-	private final static Map<SpatialOperation, SpatialOperation> INVERSE_SPATIAL_OPERATIONS;
-	static {
-		INVERSE_SPATIAL_OPERATIONS = new HashMap<>();
-		INVERSE_SPATIAL_OPERATIONS.put(SpatialOperation.IsEqualTo, SpatialOperation.IsEqualTo);
-		INVERSE_SPATIAL_OPERATIONS.put(SpatialOperation.IsDisjointTo, SpatialOperation.IsDisjointTo);
-		INVERSE_SPATIAL_OPERATIONS.put(SpatialOperation.Intersects, SpatialOperation.Intersects);
-		INVERSE_SPATIAL_OPERATIONS.put(SpatialOperation.IsWithin, SpatialOperation.Contains);
-		INVERSE_SPATIAL_OPERATIONS.put(SpatialOperation.Contains, SpatialOperation.IsWithin);
-		INVERSE_SPATIAL_OPERATIONS.put(SpatialOperation.Overlaps, SpatialOperation.Overlaps);
-	}
-
-	private final AbstractBooleanBinaryFunction functionImplementation;
 	private final IRI predicateUri;
-	private SpatialOperation spatialOperation;
+	private final IRI functionUri;
+	private final SpatialOperation spatialOperation;
 
-	GeoSparqlFunction(Class<? extends AbstractBooleanBinaryFunction> functionClass, IRI predicateUri, SpatialOperation spatialOperation) {
-		try {
-			this.functionImplementation = functionClass.newInstance();
-		} catch (InstantiationException | IllegalAccessException e) {
-			throw new RuntimeException(e);
-		}
+	GeoSparqlFunction(IRI predicateUri, IRI functionUri, SpatialOperation spatialOperation) {
 		this.predicateUri = predicateUri;
+		this.functionUri = functionUri;
 		this.spatialOperation = spatialOperation;
 	}
 
@@ -175,11 +63,16 @@ public enum GeoSparqlFunction {
 	}
 
 	public SpatialOperation getInverseSpatialOperation() {
-		return INVERSE_SPATIAL_OPERATIONS.get(spatialOperation);
+		return spatialOperation;
 	}
 
-	public boolean evaluate(Geometry argument1, Geometry argument2) {
-		return functionImplementation.evaluate(argument1, argument2);
+	public boolean evaluate(ExactGeometry argument1, ExactGeometry argument2) {
+		try {
+			return JenaFunctionEvaluator.evaluateTopological(functionUri.stringValue(), argument1, argument2);
+		} catch (JenaGeoSparqlException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new JenaGeoSparqlException("Unable to evaluate GeoSPARQL relation " + predicateUri, e);
+		}
 	}
-
 }
