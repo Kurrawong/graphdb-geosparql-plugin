@@ -1,7 +1,6 @@
 package com.ontotext.trree.geosparql;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.ontotext.trree.geosparql.gml.GmlConverter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
@@ -10,9 +9,6 @@ import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
 import com.ontotext.trree.sdk.*;
 import com.useekm.indexing.GeoConstants;
-import com.useekm.types.GeoConvert;
-import com.useekm.types.exception.InvalidGeometryException;
-import org.locationtech.jts.geom.Geometry;
 import gnu.trove.TLongObjectHashMap;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -20,8 +16,6 @@ import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-
-import jakarta.xml.bind.JAXBException;
 
 /**
  * GeoSPARQL index/query plugin.
@@ -76,8 +70,6 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 
     private TLongObjectHashMap<GeoSparqlFunction> predicateIds2Function =
 			new TLongObjectHashMap<>(GeoSparqlFunction.values().length);
-
-	private GmlConverter gmlConverter;
 
 	private GeoSparqlUpdateListener updateListener;
 
@@ -224,10 +216,6 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         this.config = config;
     }
 
-    Geometry getGeometryFromLiteralId(long id, long geometryTypeId, Entities entities) {
-        return getGeometryFromString(entities.get(id).stringValue(), geometryTypeId);
-    }
-
     IndexGeometry getIndexGeometryFromLiteralId(long subject, long id, long geometryTypeId, Entities entities) {
         Value value = entities.get(id);
         if (!(value instanceof Literal)) {
@@ -255,21 +243,6 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
     }
 
-    Geometry getGeometryFromString(String literalValue, long geometryTypeId) {
-        try {
-            if (geometryTypeId == asWKT) {
-                return GeoConvert.wktToGeometry(literalValue);
-            } else if (geometryTypeId == asGML) {
-                return gmlConverter.gmlToGeometry(literalValue);
-            }
-        } catch (InvalidGeometryException e) {
-            // ignore and pretend value isn't there
-            getLogger().debug("Invalid geometry value: " + literalValue);
-        }
-
-        return null;
-    }
-
     private void initPluginFeatures(Entities entities) {
         JenaGeometryAdapter.initialize();
 
@@ -278,12 +251,6 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         for (GeoSparqlFunction function : GeoSparqlFunction.values()) {
             long predicateUriId = entities.put(function.getPredicateUri(), Entities.Scope.DEFAULT);
             predicateIds2Function.put(predicateUriId, function);
-        }
-
-        try {
-            this.gmlConverter = new GmlConverter();
-        } catch (JAXBException e) {
-            throw new PluginException("Unable to init GML converter.", e);
         }
 
         initializeGeoIndexer();
