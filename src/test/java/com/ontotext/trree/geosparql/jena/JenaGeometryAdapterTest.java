@@ -1,9 +1,11 @@
 package com.ontotext.trree.geosparql.jena;
 
 import com.ontotext.trree.geosparql.GeoSparqlFunction;
+import com.useekm.geosparql.UnitsOfMeasure;
 import com.useekm.indexing.GeoConstants;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
@@ -19,6 +21,10 @@ public class JenaGeometryAdapterTest {
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String RDF_XML_LITERAL = "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral";
 	private static final String GML_LEGACY_NAMESPACE = "http://www.opengis.net/gml";
+	private static final String PROJECTED_POINT_WKT = "<" + EPSG_32634 + "> POINT(799997.80 4589779.63)";
+	private static final double PROJECTED_POINT_CRS84_X = 24.5887755;
+	private static final double PROJECTED_POINT_CRS84_Y = 41.4035958;
+	private static final double CRS84_COORDINATE_TOLERANCE = 1e-6;
 
 	@Before
 	public void initializeAdapter() {
@@ -130,8 +136,7 @@ public class JenaGeometryAdapterTest {
 
 	@Test
 	public void projectedWktIsTransformedToCrs84IndexGeometry() {
-		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(
-				"<" + EPSG_32634 + "> POINT(799997.80 4589779.63)");
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
 
 		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
@@ -139,8 +144,37 @@ public class JenaGeometryAdapterTest {
 		assertEquals(EPSG_32634, source.explicitCrsUri().get());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
 		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, index.indexBuildMode());
-		assertTrue(coordinate.x >= -180 && coordinate.x <= 180);
-		assertTrue(coordinate.y >= -90 && coordinate.y <= 90);
+		assertProjectedPointCrs84Coordinate(coordinate);
+	}
+
+	@Test
+	public void projectedGmlIsTransformedToCrs84IndexGeometry() {
+		String gml = "<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName=\"" + EPSG_32634
+				+ "\"><gml:pos>799997.80 4589779.63</gml:pos></gml:Point>";
+		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
+
+		SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
+		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
+		Coordinate coordinate = index.indexGeometry().getCoordinate();
+
+		assertEquals(EPSG_32634, source.explicitCrsUri().get());
+		assertEquals(GeoConstants.GEO_GML_LITERAL, source.datatype());
+		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
+		assertProjectedPointCrs84Coordinate(coordinate);
+	}
+
+	@Test
+	public void exactEvaluationTransformsMixedCrsArguments() throws Exception {
+		Literal crs84Point = VALUE_FACTORY.createLiteral(
+				"POINT(" + PROJECTED_POINT_CRS84_X + " " + PROJECTED_POINT_CRS84_Y + ")",
+				GeoConstants.GEO_WKT_LITERAL);
+		Literal projectedPoint = VALUE_FACTORY.createLiteral(PROJECTED_POINT_WKT, GeoConstants.GEO_WKT_LITERAL);
+
+		Value result = JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_DISTANCE.stringValue(),
+				crs84Point, projectedPoint, UnitsOfMeasure.URI_METRE);
+
+		assertTrue(result instanceof Literal);
+		assertEquals(0d, ((Literal) result).doubleValue(), 0.2d);
 	}
 
 	@Test
@@ -155,6 +189,16 @@ public class JenaGeometryAdapterTest {
 	public void unsupportedCrsFailsAsControlledGeoSparqlError() {
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
 				() -> SourceGeometryLiteral.fromWkt("<http://example.com/crs/unknown> POINT(1 2)").asGeometryWrapper());
+
+		assertTrue(exception.getMessage().contains("Unsupported CRS")
+				|| exception.getMessage().contains("Invalid GeoSPARQL geometry literal"));
+	}
+
+	@Test
+	public void unsupportedCrsCannotProduceIndexGeometry() {
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> IndexGeometry.fromSourceGeometryLiteral(
+						SourceGeometryLiteral.fromWkt("<http://example.com/crs/unknown> POINT(1 2)")));
 
 		assertTrue(exception.getMessage().contains("Unsupported CRS")
 				|| exception.getMessage().contains("Invalid GeoSPARQL geometry literal"));
@@ -194,5 +238,10 @@ public class JenaGeometryAdapterTest {
 	private static String legacyGmlWithDoubleQuotedNamespaceAndCrs() {
 		return "<gml:Point xmlns:gml=\"" + GML_LEGACY_NAMESPACE + "\" srsName=\"" + CRS84
 				+ "\"><gml:pos>1 2</gml:pos></gml:Point>";
+	}
+
+	private static void assertProjectedPointCrs84Coordinate(Coordinate coordinate) {
+		assertEquals(PROJECTED_POINT_CRS84_X, coordinate.x, CRS84_COORDINATE_TOLERANCE);
+		assertEquals(PROJECTED_POINT_CRS84_Y, coordinate.y, CRS84_COORDINATE_TOLERANCE);
 	}
 }
