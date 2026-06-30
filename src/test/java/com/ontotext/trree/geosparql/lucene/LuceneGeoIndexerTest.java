@@ -8,8 +8,6 @@ import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
 import com.useekm.indexing.GeoConstants;
-import com.useekm.types.GeoConvert;
-import com.useekm.types.exception.InvalidGeometryException;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.StoredField;
@@ -110,7 +108,7 @@ public class LuceneGeoIndexerTest {
         return indexer;
     }
 
-    private void wkt2Geometry() throws IOException, InvalidGeometryException {
+    private void wkt2Geometry() throws IOException {
         final List<String> wktLines = IOUtils.readLines(
                 LuceneGeoIndexerTest.class.getResourceAsStream("/example_data.wkt"));
         for (String line : wktLines) {
