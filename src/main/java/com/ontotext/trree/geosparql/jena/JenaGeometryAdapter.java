@@ -19,29 +19,29 @@ public final class JenaGeometryAdapter {
 		GeometryDatatype.registerDatatypes();
 	}
 
-	public static ExactGeometry toExactGeometry(Literal literal) {
+	public static SourceGeometryLiteral toSourceGeometryLiteral(Literal literal) {
 		initialize();
-		return ExactGeometry.fromLiteral(literal);
+		return SourceGeometryLiteral.fromLiteral(literal);
 	}
 
-	public static ExactGeometry toExactGeometry(Literal literal, IRI fallbackDatatype) {
+	public static SourceGeometryLiteral toSourceGeometryLiteral(Literal literal, IRI fallbackDatatype) {
 		initialize();
-		return ExactGeometry.fromLiteral(literal, fallbackDatatype);
+		return SourceGeometryLiteral.fromLiteral(literal, fallbackDatatype);
 	}
 
-	public static ExactGeometry toExactGeometry(Value value, boolean acceptNoType) {
+	public static SourceGeometryLiteral toSourceGeometryLiteral(Value value, boolean acceptNoType) {
 		initialize();
-		return ExactGeometry.fromValue(value, acceptNoType);
+		return SourceGeometryLiteral.fromValue(value, acceptNoType);
 	}
 
-	public static IndexGeometry toIndexGeometry(ExactGeometry exactGeometry) {
+	public static IndexGeometry toIndexGeometry(SourceGeometryLiteral sourceGeometryLiteral) {
 		initialize();
-		return IndexGeometry.fromExactGeometry(exactGeometry);
+		return IndexGeometry.fromSourceGeometryLiteral(sourceGeometryLiteral);
 	}
 
 	public static Literal toRdf4jLiteral(ValueFactory valueFactory, org.apache.jena.geosparql.implementation.GeometryWrapper wrapper,
 										 IRI datatype) {
-		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(ExactGeometry.fromLiteral(
+		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(SourceGeometryLiteral.fromLiteral(
 				valueFactory.createLiteral(wrapper.getLexicalForm(), datatype)).jenaDatatype().stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
 	}

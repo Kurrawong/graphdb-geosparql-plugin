@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import org.apache.lucene.spatial.query.SpatialOperation;
@@ -66,7 +66,7 @@ public enum GeoSparqlFunction {
 		return spatialOperation;
 	}
 
-	public boolean evaluate(ExactGeometry argument1, ExactGeometry argument2) {
+	public boolean evaluate(SourceGeometryLiteral argument1, SourceGeometryLiteral argument2) {
 		try {
 			return JenaFunctionEvaluator.evaluateTopological(functionUri.stringValue(), argument1, argument2);
 		} catch (JenaGeoSparqlException e) {

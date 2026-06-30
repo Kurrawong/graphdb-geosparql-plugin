@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 /**
  * CRS-preserving geometry literal used for exact Jena evaluation.
  */
-public final class ExactGeometry {
+public final class SourceGeometryLiteral {
 	private static final Pattern GML_SRS_NAME =
 			Pattern.compile("\\bsrsName\\s*=\\s*['\"]([^'\"]+)['\"]");
 	private static final String RDF_XML_LITERAL = "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral";
@@ -36,7 +36,7 @@ public final class ExactGeometry {
 	private final String explicitCrsUri;
 	private transient GeometryWrapper geometryWrapper;
 
-	private ExactGeometry(String lexicalForm, IRI datatype, IRI jenaDatatype, String explicitCrsUri) {
+	private SourceGeometryLiteral(String lexicalForm, IRI datatype, IRI jenaDatatype, String explicitCrsUri) {
 		this.lexicalForm = lexicalForm;
 		this.jenaLexicalForm = toJenaLexicalForm(lexicalForm, jenaDatatype);
 		this.datatype = datatype;
@@ -44,18 +44,18 @@ public final class ExactGeometry {
 		this.explicitCrsUri = explicitCrsUri;
 	}
 
-	public static ExactGeometry fromValue(Value value, boolean acceptNoType) {
+	public static SourceGeometryLiteral fromValue(Value value, boolean acceptNoType) {
 		if (!(value instanceof Literal)) {
 			throw new JenaGeoSparqlException("Expected a geometry literal, found: " + value);
 		}
 		return fromLiteral((Literal) value, acceptNoType ? GeoConstants.GEO_WKT_LITERAL : null);
 	}
 
-	public static ExactGeometry fromLiteral(Literal literal) {
+	public static SourceGeometryLiteral fromLiteral(Literal literal) {
 		return fromLiteral(literal, null);
 	}
 
-	public static ExactGeometry fromLiteral(Literal literal, IRI fallbackDatatype) {
+	public static SourceGeometryLiteral fromLiteral(Literal literal, IRI fallbackDatatype) {
 		IRI datatype = literal.getDatatype();
 		if (shouldUseFallbackDatatype(datatype, fallbackDatatype)) {
 			datatype = fallbackDatatype;
@@ -64,11 +64,11 @@ public final class ExactGeometry {
 		IRI jenaDatatype = toJenaGeometryDatatype(datatype);
 		String lexicalForm = literal.stringValue();
 		String explicitCrsUri = extractExplicitCrs(lexicalForm, jenaDatatype);
-		return new ExactGeometry(lexicalForm, datatype, jenaDatatype, explicitCrsUri);
+		return new SourceGeometryLiteral(lexicalForm, datatype, jenaDatatype, explicitCrsUri);
 	}
 
-	public static ExactGeometry fromWkt(String lexicalForm) {
-		return new ExactGeometry(lexicalForm, GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_WKT_LITERAL,
+	public static SourceGeometryLiteral fromWkt(String lexicalForm) {
+		return new SourceGeometryLiteral(lexicalForm, GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_WKT_LITERAL,
 				extractWktCrs(lexicalForm));
 	}
 

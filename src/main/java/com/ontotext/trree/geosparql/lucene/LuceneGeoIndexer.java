@@ -57,7 +57,8 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
     private Logger logger;
 	private boolean legacyIndexDetected;
 
-	static final String LEGACY_INDEX_MESSAGE = "Existing GeoSPARQL Lucene index lacks schema v2 exact geometry metadata. "
+	static final String LEGACY_INDEX_MESSAGE = "Existing GeoSPARQL Lucene index lacks schema v2 "
+			+ "source geometry literal metadata. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
 			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
 
@@ -95,10 +96,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
         doc.add(geometryToField(geometry.indexGeometry()));
 		doc.add(new StoredField(IndexGeometry.FIELD_SCHEMA_VERSION, IndexGeometry.SCHEMA_VERSION));
-		doc.add(new StoredField(IndexGeometry.FIELD_EXACT_LEXICAL_FORM, geometry.exactGeometry().lexicalForm()));
-		doc.add(new StoredField(IndexGeometry.FIELD_EXACT_DATATYPE, geometry.exactGeometry().datatype().stringValue()));
-		geometry.exactGeometry().explicitCrsUri().ifPresent(crs ->
-				doc.add(new StoredField(IndexGeometry.FIELD_EXACT_CRS, crs)));
+		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM,
+				geometry.sourceGeometryLiteral().lexicalForm()));
+		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_DATATYPE,
+				geometry.sourceGeometryLiteral().datatype().stringValue()));
+		geometry.sourceGeometryLiteral().explicitCrsUri().ifPresent(crs ->
+				doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_CRS, crs)));
 		doc.add(new StoredField(IndexGeometry.FIELD_INDEX_CRS, geometry.indexCrs()));
 		doc.add(new StoredField(IndexGeometry.FIELD_INDEX_BUILD_MODE, geometry.indexBuildMode()));
 

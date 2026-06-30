@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.lucene.LuceneMultiSearchEntityGeometryIterator;
 import com.ontotext.trree.sdk.Entities;
@@ -26,7 +26,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private final Entities entities;
 
 	private Geometry knownGeometry;
-	private ExactGeometry knownExactGeometry;
+	private SourceGeometryLiteral knownSourceGeometryLiteral;
 	private EntityGeometryIterator iKnownEntities;
 	private EntityGeometryIterator iCandidateEntities;
 
@@ -95,7 +95,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 
 				// Fresh known Geometry. It will be reused until a match is found or no more candidate Geometries left
 				knownGeometry = iKnownEntities.nextGeometry();
-				knownExactGeometry = iKnownEntities.lastExactGeometry();
+				knownSourceGeometryLiteral = iKnownEntities.lastSourceGeometryLiteral();
 
 				if (searchIterator != null) {
 					// If we have a search iterator (either subject or object is unbound) we have to notify it
@@ -110,7 +110,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			}
 
 			Geometry candidateGeometry = iCandidateEntities.nextGeometry();
-			ExactGeometry candidateExactGeometry = iCandidateEntities.lastExactGeometry();
+			SourceGeometryLiteral candidateSourceGeometryLiteral = iCandidateEntities.lastSourceGeometryLiteral();
 
 			if (candidateGeometry != null) {
 				if (logger.isDebugEnabled()) {
@@ -119,8 +119,8 @@ class GeoSparqlRelationIterator extends StatementIterator {
 				}
 
 				result = trustLucene || (inverse ?
-						function.evaluate(candidateExactGeometry, knownExactGeometry) :
-						function.evaluate(knownExactGeometry, candidateExactGeometry));
+						function.evaluate(candidateSourceGeometryLiteral, knownSourceGeometryLiteral) :
+						function.evaluate(knownSourceGeometryLiteral, candidateSourceGeometryLiteral));
 			} else {
 				logger.debug(">>>>>>>> GeoSPARQL: No available candidate geometries matching the query!");
 				break;

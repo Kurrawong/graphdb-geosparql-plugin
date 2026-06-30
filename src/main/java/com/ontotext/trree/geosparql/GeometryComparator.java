@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.locationtech.jts.geom.Geometry;
 
 /**
@@ -14,6 +14,6 @@ class GeometryComparator {
     }
 
     boolean evaluate(Geometry g1, Geometry g2) {
-        return function.evaluate(ExactGeometry.fromWkt(g1.toText()), ExactGeometry.fromWkt(g2.toText()));
+        return function.evaluate(SourceGeometryLiteral.fromWkt(g1.toText()), SourceGeometryLiteral.fromWkt(g2.toText()));
     }
 }

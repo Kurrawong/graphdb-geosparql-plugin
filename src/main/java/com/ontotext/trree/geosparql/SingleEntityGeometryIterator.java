@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import org.locationtech.jts.geom.Geometry;
 
@@ -16,7 +16,7 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 	private final long entityId;
 	private final Iterator<IndexGeometry> iGeometries;
 	private Geometry geometry;
-	private ExactGeometry exactGeometry;
+	private SourceGeometryLiteral sourceGeometryLiteral;
 
 	public SingleEntityGeometryIterator(long entityId, List<IndexGeometry> geometries) {
 		this.entityId = entityId;
@@ -32,7 +32,8 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 	public SingleEntityGeometryIterator(long entityId, Geometry geometry) {
 		this.entityId = entityId;
 		this.iGeometries = geometry != null
-				? Collections.singletonList(IndexGeometry.fromExactGeometry(ExactGeometry.fromWkt(geometry.toText()))).iterator()
+				? Collections.singletonList(IndexGeometry.fromSourceGeometryLiteral(
+						SourceGeometryLiteral.fromWkt(geometry.toText()))).iterator()
 				: Collections.emptyIterator();
 	}
 
@@ -45,7 +46,7 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 	@Override
 	public Geometry nextGeometry() {
 		IndexGeometry next = iGeometries.next();
-		exactGeometry = next.exactGeometry();
+		sourceGeometryLiteral = next.sourceGeometryLiteral();
 		return geometry = next.indexGeometry();
 	}
 
@@ -55,8 +56,8 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 	}
 
 	@Override
-	public ExactGeometry lastExactGeometry() {
-		return exactGeometry;
+	public SourceGeometryLiteral lastSourceGeometryLiteral() {
+		return sourceGeometryLiteral;
 	}
 
 	@Override

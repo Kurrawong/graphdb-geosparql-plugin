@@ -60,7 +60,8 @@ public final class JenaFunctionEvaluator {
 		try {
 			if (isBinaryTopological(functionUri)) {
 				requireMinArgs(functionUri, args, 2);
-				return valueFactory.createLiteral(evaluateTopological(functionUri, exact(args[0]), exact(args[1])));
+				return valueFactory.createLiteral(
+						evaluateTopological(functionUri, sourceLiteral(args[0]), sourceLiteral(args[1])));
 			}
 			if (GeoConstants.GEOF_RELATE.stringValue().equals(functionUri)) {
 				requireMinArgs(functionUri, args, 3);
@@ -72,7 +73,7 @@ public final class JenaFunctionEvaluator {
 			}
 			if (GeoConstants.GEOF_BUFFER.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 2, 3);
-				ExactGeometry source = exact(args[0]);
+				SourceGeometryLiteral source = sourceLiteral(args[0]);
 				GeometryWrapper buffered = args.length == 3
 						? source.asGeometryWrapper().buffer(doubleArg(args[1]), unitUri(args[2]))
 						: source.asGeometryWrapper().buffer(doubleArg(args[1]),
@@ -149,12 +150,12 @@ public final class JenaFunctionEvaluator {
 		throw new ValueExprEvaluationException("Unsupported GeoSPARQL function: " + functionUri);
 	}
 
-	private static ExactGeometry exact(Value value) {
-		return JenaGeometryAdapter.toExactGeometry(value, true);
+	private static SourceGeometryLiteral sourceLiteral(Value value) {
+		return JenaGeometryAdapter.toSourceGeometryLiteral(value, true);
 	}
 
 	private static GeometryWrapper geometry(Value value) {
-		return exact(value).asGeometryWrapper();
+		return sourceLiteral(value).asGeometryWrapper();
 	}
 
 	private static boolean isBinaryTopological(String functionUri) {
@@ -163,10 +164,11 @@ public final class JenaFunctionEvaluator {
 				|| functionUri.startsWith(GeoConstants.NS_GEOF + "rcc8");
 	}
 
-	public static boolean evaluateTopological(String functionUri, ExactGeometry leftExact, ExactGeometry rightExact)
+	public static boolean evaluateTopological(String functionUri, SourceGeometryLiteral leftSource,
+											  SourceGeometryLiteral rightSource)
 			throws Exception {
-		GeometryWrapper left = leftExact.asGeometryWrapper();
-		GeometryWrapper right = rightExact.asGeometryWrapper();
+		GeometryWrapper left = leftSource.asGeometryWrapper();
+		GeometryWrapper right = rightSource.asGeometryWrapper();
 		if (left.isEmpty() || right.isEmpty()) {
 			return false;
 		}
@@ -300,14 +302,14 @@ public final class JenaFunctionEvaluator {
 	private static Literal unaryGeometry(ValueFactory valueFactory, String functionUri, Value[] args,
 										 UnaryGeometryOperation operation) throws Exception {
 		requireArgs(functionUri, args, 1);
-		ExactGeometry source = exact(args[0]);
+		SourceGeometryLiteral source = sourceLiteral(args[0]);
 		return geometryLiteral(valueFactory, operation.apply(source.asGeometryWrapper()), source.datatype());
 	}
 
 	private static Literal binaryGeometry(ValueFactory valueFactory, String functionUri, Value... args)
 			throws Exception {
 		requireArgs(functionUri, args, 2);
-		ExactGeometry source = exact(args[0]);
+		SourceGeometryLiteral source = sourceLiteral(args[0]);
 		GeometryWrapper left = source.asGeometryWrapper();
 		GeometryWrapper right = geometry(args[1]);
 		GeometryWrapper result;
@@ -326,7 +328,7 @@ public final class JenaFunctionEvaluator {
 	private static Literal nearestGeometry(ValueFactory valueFactory, String functionUri, Value... args)
 			throws Exception {
 		requireArgs(functionUri, args, 2);
-		ExactGeometry source = exact(args[0]);
+		SourceGeometryLiteral source = sourceLiteral(args[0]);
 		GeometryWrapper left = source.asGeometryWrapper();
 		GeometryWrapper right = left.checkTransformSRS(geometry(args[1]));
 		Coordinate[] points = DistanceOp.nearestPoints(left.getXYGeometry(), right.getXYGeometry());
@@ -357,7 +359,7 @@ public final class JenaFunctionEvaluator {
 
 	private static Literal simplify(ValueFactory valueFactory, String functionUri, Value... args) throws Exception {
 		requireArgs(functionUri, args, 2);
-		ExactGeometry source = exact(args[0]);
+		SourceGeometryLiteral source = sourceLiteral(args[0]);
 		GeometryWrapper wrapper = source.asGeometryWrapper();
 		double tolerance = doubleArg(args[1]);
 		Geometry simplified = GeoConstants.EXT_SIMPLIFY_PRESERVE_TOPOLOGY.stringValue().equals(functionUri)

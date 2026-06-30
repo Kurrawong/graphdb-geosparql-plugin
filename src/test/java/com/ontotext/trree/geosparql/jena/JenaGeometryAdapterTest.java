@@ -25,7 +25,7 @@ public class JenaGeometryAdapterTest {
 
 	@Test
 	public void wktWithoutExplicitCrsUsesCrs84AndPreservesLexicalForm() {
-		ExactGeometry geometry = ExactGeometry.fromWkt("POINT(1 2)");
+		SourceGeometryLiteral geometry = SourceGeometryLiteral.fromWkt("POINT(1 2)");
 
 		assertEquals("POINT(1 2)", geometry.lexicalForm());
 		assertEquals(GeoConstants.GEO_WKT_LITERAL, geometry.datatype());
@@ -36,7 +36,7 @@ public class JenaGeometryAdapterTest {
 
 	@Test
 	public void wktWithExplicitCrsPreservesStoredCrsMetadata() {
-		ExactGeometry geometry = ExactGeometry.fromWkt("<" + CRS84 + "> POINT(1 2)");
+		SourceGeometryLiteral geometry = SourceGeometryLiteral.fromWkt("<" + CRS84 + "> POINT(1 2)");
 
 		assertEquals(CRS84, geometry.explicitCrsUri().get());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
@@ -46,7 +46,8 @@ public class JenaGeometryAdapterTest {
 	public void plainStringLiteralCanUseWktFallbackDatatype() {
 		Literal literal = VALUE_FACTORY.createLiteral("POINT(3 4)", XMLSchema.STRING);
 
-		ExactGeometry geometry = JenaGeometryAdapter.toExactGeometry(literal, GeoConstants.GEO_WKT_LITERAL);
+		SourceGeometryLiteral geometry = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
+				GeoConstants.GEO_WKT_LITERAL);
 
 		assertEquals(GeoConstants.GEO_WKT_LITERAL, geometry.datatype());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
@@ -58,7 +59,7 @@ public class JenaGeometryAdapterTest {
 				+ "\"><gml:pos>1 2</gml:pos></gml:Point>";
 		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
 
-		ExactGeometry geometry = JenaGeometryAdapter.toExactGeometry(literal);
+		SourceGeometryLiteral geometry = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
 
 		assertEquals(CRS84, geometry.explicitCrsUri().get());
 		assertEquals(GeoConstants.GEO_GML_LITERAL, geometry.datatype());
@@ -67,12 +68,13 @@ public class JenaGeometryAdapterTest {
 
 	@Test
 	public void projectedWktIsTransformedToCrs84IndexGeometry() {
-		ExactGeometry exact = ExactGeometry.fromWkt("<" + EPSG_32634 + "> POINT(799997.80 4589779.63)");
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(
+				"<" + EPSG_32634 + "> POINT(799997.80 4589779.63)");
 
-		IndexGeometry index = IndexGeometry.fromExactGeometry(exact);
+		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
-		assertEquals(EPSG_32634, exact.explicitCrsUri().get());
+		assertEquals(EPSG_32634, source.explicitCrsUri().get());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
 		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, index.indexBuildMode());
 		assertTrue(coordinate.x >= -180 && coordinate.x <= 180);
@@ -82,7 +84,7 @@ public class JenaGeometryAdapterTest {
 	@Test
 	public void crs84CoordinatesOutsideDomainFail() {
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
-				() -> ExactGeometry.fromWkt("POINT(200 200)").asGeometryWrapper());
+				() -> SourceGeometryLiteral.fromWkt("POINT(200 200)").asGeometryWrapper());
 
 		assertTrue(exception.getMessage().contains("outside the CRS domain"));
 	}
@@ -90,7 +92,7 @@ public class JenaGeometryAdapterTest {
 	@Test
 	public void unsupportedCrsFailsAsControlledGeoSparqlError() {
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
-				() -> ExactGeometry.fromWkt("<http://example.com/crs/unknown> POINT(1 2)").asGeometryWrapper());
+				() -> SourceGeometryLiteral.fromWkt("<http://example.com/crs/unknown> POINT(1 2)").asGeometryWrapper());
 
 		assertTrue(exception.getMessage().contains("Unsupported CRS")
 				|| exception.getMessage().contains("Invalid GeoSPARQL geometry literal"));
@@ -102,15 +104,15 @@ public class JenaGeometryAdapterTest {
 				VALUE_FACTORY.createIRI("http://example.com/geometryLiteral"));
 
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
-				() -> JenaGeometryAdapter.toExactGeometry(literal));
+				() -> JenaGeometryAdapter.toSourceGeometryLiteral(literal));
 
 		assertTrue(exception.getMessage().contains("Unsupported GeoSPARQL geometry datatype"));
 	}
 
 	@Test
 	public void rcc8DisconnectedRequiresAreaTopology() throws Exception {
-		ExactGeometry left = ExactGeometry.fromWkt("POINT(1 1)");
-		ExactGeometry right = ExactGeometry.fromWkt("POINT(2 2)");
+		SourceGeometryLiteral left = SourceGeometryLiteral.fromWkt("POINT(1 1)");
+		SourceGeometryLiteral right = SourceGeometryLiteral.fromWkt("POINT(2 2)");
 
 		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(), left, right));
 		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_RCC8_DC.stringValue(), left, right));
@@ -119,8 +121,8 @@ public class JenaGeometryAdapterTest {
 
 	@Test
 	public void rcc8ExternallyConnectedRequiresAreaTopology() throws Exception {
-		ExactGeometry left = ExactGeometry.fromWkt("LINESTRING(0 0, 1 1)");
-		ExactGeometry right = ExactGeometry.fromWkt("LINESTRING(1 1, 2 2)");
+		SourceGeometryLiteral left = SourceGeometryLiteral.fromWkt("LINESTRING(0 0, 1 1)");
+		SourceGeometryLiteral right = SourceGeometryLiteral.fromWkt("LINESTRING(1 1, 2 2)");
 
 		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_TOUCHES.stringValue(), left, right));
 		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_RCC8_EC.stringValue(), left, right));

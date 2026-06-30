@@ -4,7 +4,7 @@ import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
 import com.useekm.indexing.GeoConstants;
@@ -114,7 +114,7 @@ public class LuceneGeoIndexerTest {
         final List<String> wktLines = IOUtils.readLines(
                 LuceneGeoIndexerTest.class.getResourceAsStream("/example_data.wkt"));
         for (String line : wktLines) {
-            geometries.add(IndexGeometry.fromExactGeometry(ExactGeometry.fromWkt(line)));
+            geometries.add(IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(line)));
         }
     }
 
@@ -143,8 +143,8 @@ public class LuceneGeoIndexerTest {
 
         assertEquals(IndexGeometry.SCHEMA_VERSION,
                 doc.getField(IndexGeometry.FIELD_SCHEMA_VERSION).numericValue().intValue());
-        assertNotNull(doc.get(IndexGeometry.FIELD_EXACT_LEXICAL_FORM));
-        assertEquals(GeoConstants.GEO_WKT_LITERAL.stringValue(), doc.get(IndexGeometry.FIELD_EXACT_DATATYPE));
+        assertNotNull(doc.get(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM));
+        assertEquals(GeoConstants.GEO_WKT_LITERAL.stringValue(), doc.get(IndexGeometry.FIELD_SOURCE_DATATYPE));
         assertEquals(IndexGeometry.INDEX_CRS, doc.get(IndexGeometry.FIELD_INDEX_CRS));
         assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, doc.get(IndexGeometry.FIELD_INDEX_BUILD_MODE));
     }
@@ -157,7 +157,7 @@ public class LuceneGeoIndexerTest {
         try {
             while (iterator.hasNextGeometry()) {
                 assertNotNull(iterator.nextGeometry());
-                assertNotNull(iterator.lastExactGeometry());
+                assertNotNull(iterator.lastSourceGeometryLiteral());
                 count++;
             }
         } finally {
@@ -177,7 +177,7 @@ public class LuceneGeoIndexerTest {
 
         PluginException exception = assertThrows(PluginException.class, () -> legacyIndexer.getGeometriesFor(0));
 
-        assertTrue(exception.getMessage().contains("schema v2 exact geometry metadata"));
+        assertTrue(exception.getMessage().contains("schema v2 source geometry literal metadata"));
         assertTrue(exception.getMessage().contains("force-reindex"));
     }
 

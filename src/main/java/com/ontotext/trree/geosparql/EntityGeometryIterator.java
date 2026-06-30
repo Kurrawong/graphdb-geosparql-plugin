@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.locationtech.jts.geom.Geometry;
 
 import java.io.Closeable;
@@ -31,11 +31,11 @@ public interface EntityGeometryIterator extends Closeable {
 	Geometry lastGeometry();
 
 	/**
-	 * Returns the exact geometry metadata for the geometry returned by the last call to nextGeometry().
+	 * Returns the source geometry literal for the geometry returned by the last call to nextGeometry().
 	 *
-	 * @return an exact geometry object or null if nextGeometry() hasn't been called yet.
+	 * @return a source geometry literal or null if nextGeometry() hasn't been called yet.
 	 */
-	ExactGeometry lastExactGeometry();
+	SourceGeometryLiteral lastSourceGeometryLiteral();
 
 	/**
 	 * Checks if there are more geometries.

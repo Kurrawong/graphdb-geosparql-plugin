@@ -2,7 +2,7 @@ package com.ontotext.trree.geosparql;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.ontotext.trree.geosparql.gml.GmlConverter;
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
@@ -247,11 +247,12 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
                     + ". If you want to skip invalid repository geometries, configure ignoreErrors = true and rebuild the index.",
                     e);
         }
-    }
+	}
 
-    IndexGeometry getQueryIndexGeometry(Literal literal, IRI fallbackDatatype) {
-        ExactGeometry exactGeometry = JenaGeometryAdapter.toExactGeometry(literal, fallbackDatatype);
-        return JenaGeometryAdapter.toIndexGeometry(exactGeometry);
+	IndexGeometry getQueryIndexGeometry(Literal literal, IRI fallbackDatatype) {
+        SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
+                fallbackDatatype);
+        return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
     }
 
     Geometry getGeometryFromString(String literalValue, long geometryTypeId) {

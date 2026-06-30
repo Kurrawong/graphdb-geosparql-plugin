@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.ExactGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.rio.RDFFormat;
@@ -53,8 +53,8 @@ public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 			"}";
 	@Test
 	public void shouldProperlyConvertAndIndexDifferentCRSThanDefault() throws Exception {
-		final IndexGeometry pointInCRS84 = IndexGeometry.fromExactGeometry(
-				ExactGeometry.fromWkt("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)"));
+		final IndexGeometry pointInCRS84 = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)"));
 		final String searchAreaInCRS84 = polygonAround(pointInCRS84.indexGeometry().getCoordinate(), 0.001);
 
 		importData("gdb3142.ttl", RDFFormat.TURTLE);

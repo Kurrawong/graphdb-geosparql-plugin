@@ -10,51 +10,52 @@ import org.locationtech.jts.geom.Geometry;
 public final class IndexGeometry {
 	public static final int SCHEMA_VERSION = 2;
 	public static final String FIELD_SCHEMA_VERSION = "geoSchemaVersion";
-	public static final String FIELD_EXACT_LEXICAL_FORM = "geoExactLexicalForm";
-	public static final String FIELD_EXACT_DATATYPE = "geoExactDatatype";
-	public static final String FIELD_EXACT_CRS = "geoExactCrs";
+	public static final String FIELD_SOURCE_LEXICAL_FORM = "geoExactLexicalForm";
+	public static final String FIELD_SOURCE_DATATYPE = "geoExactDatatype";
+	public static final String FIELD_SOURCE_CRS = "geoExactCrs";
 	public static final String FIELD_INDEX_CRS = "geoIndexCrs";
 	public static final String FIELD_INDEX_BUILD_MODE = "geoIndexBuildMode";
 
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
 	public static final String BUILD_MODE_TRANSFORMED_GEOMETRY = "transformed-geometry";
 
-	private final ExactGeometry exactGeometry;
+	private final SourceGeometryLiteral sourceGeometryLiteral;
 	private final Geometry indexGeometry;
 	private final String indexCrs;
 	private final String indexBuildMode;
 
-	private IndexGeometry(ExactGeometry exactGeometry, Geometry indexGeometry, String indexCrs, String indexBuildMode) {
-		this.exactGeometry = exactGeometry;
+	private IndexGeometry(SourceGeometryLiteral sourceGeometryLiteral, Geometry indexGeometry, String indexCrs,
+						  String indexBuildMode) {
+		this.sourceGeometryLiteral = sourceGeometryLiteral;
 		this.indexGeometry = indexGeometry;
 		this.indexCrs = indexCrs;
 		this.indexBuildMode = indexBuildMode;
 	}
 
-	public static IndexGeometry fromExactGeometry(ExactGeometry exactGeometry) {
+	public static IndexGeometry fromSourceGeometryLiteral(SourceGeometryLiteral sourceGeometryLiteral) {
 		try {
-			GeometryWrapper exactWrapper = exactGeometry.asGeometryWrapper();
-			GeometryWrapper indexWrapper = INDEX_CRS.equals(exactWrapper.getSrsURI())
-					? exactWrapper
-					: exactWrapper.transform(INDEX_CRS);
-			return new IndexGeometry(exactGeometry, indexWrapper.getXYGeometry().copy(), INDEX_CRS,
+			GeometryWrapper sourceWrapper = sourceGeometryLiteral.asGeometryWrapper();
+			GeometryWrapper indexWrapper = INDEX_CRS.equals(sourceWrapper.getSrsURI())
+					? sourceWrapper
+					: sourceWrapper.transform(INDEX_CRS);
+			return new IndexGeometry(sourceGeometryLiteral, indexWrapper.getXYGeometry().copy(), INDEX_CRS,
 					BUILD_MODE_TRANSFORMED_GEOMETRY);
 		} catch (JenaGeoSparqlException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new JenaGeoSparqlException("Unable to derive CRS84 index geometry from exact geometry. "
+			throw new JenaGeoSparqlException("Unable to derive CRS84 index geometry from source geometry literal. "
 					+ "Configure Apache SIS CRS data, for example SIS_DATA, if the CRS is supported.", e);
 		}
 	}
 
 	public static IndexGeometry fromStoredMetadata(Geometry indexGeometry, String lexicalForm, String datatype,
 												  String explicitCrsUri, String indexCrs, String indexBuildMode) {
-		ExactGeometry exactGeometry = ExactGeometry.fromLiteral(
+		SourceGeometryLiteral sourceGeometryLiteral = SourceGeometryLiteral.fromLiteral(
 				org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance()
 						.createLiteral(lexicalForm,
 								org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance().createIRI(datatype)));
-		if (explicitCrsUri != null && !exactGeometry.explicitCrsUri().orElse("").equals(explicitCrsUri)) {
-			throw new JenaGeoSparqlException("Lucene exact geometry CRS metadata does not match lexical form.");
+		if (explicitCrsUri != null && !sourceGeometryLiteral.explicitCrsUri().orElse("").equals(explicitCrsUri)) {
+			throw new JenaGeoSparqlException("Lucene source geometry literal CRS metadata does not match lexical form.");
 		}
 		if (!INDEX_CRS.equals(indexCrs)) {
 			throw new JenaGeoSparqlException("Unsupported GeoSPARQL Lucene index CRS: " + indexCrs);
@@ -62,11 +63,11 @@ public final class IndexGeometry {
 		if (!BUILD_MODE_TRANSFORMED_GEOMETRY.equals(indexBuildMode)) {
 			throw new JenaGeoSparqlException("Unsupported GeoSPARQL Lucene index build mode: " + indexBuildMode);
 		}
-		return new IndexGeometry(exactGeometry, indexGeometry, indexCrs, indexBuildMode);
+		return new IndexGeometry(sourceGeometryLiteral, indexGeometry, indexCrs, indexBuildMode);
 	}
 
-	public ExactGeometry exactGeometry() {
-		return exactGeometry;
+	public SourceGeometryLiteral sourceGeometryLiteral() {
+		return sourceGeometryLiteral;
 	}
 
 	public Geometry indexGeometry() {
