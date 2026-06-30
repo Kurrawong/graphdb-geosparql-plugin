@@ -4,6 +4,7 @@ import com.useekm.indexing.GeoConstants;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
+import org.apache.jena.geosparql.implementation.UnitsOfMeasure;
 import org.apache.jena.geosparql.implementation.intersection_patterns.EgenhoferIntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.RCC8IntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.SimpleFeaturesIntersectionPattern;
@@ -73,10 +74,11 @@ public final class JenaFunctionEvaluator {
 			if (GeoConstants.GEOF_BUFFER.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 2, 3);
 				SourceGeometryLiteral source = sourceLiteral(args[0]);
+				GeometryWrapper wrapper = source.asGeometryWrapper();
+				double radius = doubleArg(args[1]);
 				GeometryWrapper buffered = args.length == 3
-						? source.asGeometryWrapper().buffer(doubleArg(args[1]), unitUri(args[2]))
-						: source.asGeometryWrapper().buffer(doubleArg(args[1]),
-								source.asGeometryWrapper().getUnitsOfMeasure().getUnitURI());
+						? buffer(wrapper, radius, unitUri(args[2]))
+						: wrapper.buffer(radius, wrapper.getUnitsOfMeasure().getUnitURI());
 				return geometryLiteral(valueFactory, buffered, source.datatype());
 			}
 			if (GeoConstants.GEOF_CONVEX_HULL.stringValue().equals(functionUri)) {
@@ -291,7 +293,28 @@ public final class JenaFunctionEvaluator {
 		if (GeoSparqlUnits.URI_LIGHT_YEAR.equals(args[2])) {
 			return valueFactory.createLiteral(left.distance(right, Unit_URI.METRE_URL) / LIGHT_YEAR_IN_METRES);
 		}
+		if (isAngularDistanceUnit(args[2])) {
+			double radians = left.distance(right, Unit_URI.METRE_URL) / UnitsOfMeasure.EARTH_MEAN_RADIUS;
+			return valueFactory.createLiteral(GeoSparqlUnits.URI_DEGREE.equals(args[2])
+					? Math.toDegrees(radians)
+					: radians);
+		}
+		if (isRawCoordinateDistanceUnit(args[2])) {
+			return valueFactory.createLiteral(left.getXYGeometry().distance(left.checkTransformSRS(right).getXYGeometry()));
+		}
 		return valueFactory.createLiteral(left.distance(right, unitUri(args[2])));
+	}
+
+	private static GeometryWrapper buffer(GeometryWrapper wrapper, double radius, String unitUri) throws Exception {
+		return wrapper.buffer(radius, radius == 0.0 ? wrapper.getUnitsOfMeasure().getUnitURI() : unitUri);
+	}
+
+	private static boolean isAngularDistanceUnit(Value unit) {
+		return GeoSparqlUnits.URI_DEGREE.equals(unit) || GeoSparqlUnits.URI_RADIAN.equals(unit);
+	}
+
+	private static boolean isRawCoordinateDistanceUnit(Value unit) {
+		return GeoSparqlUnits.URI_GRID_SPACING.equals(unit) || GeoSparqlUnits.URI_UNITY.equals(unit);
 	}
 
 	private interface UnaryGeometryOperation {

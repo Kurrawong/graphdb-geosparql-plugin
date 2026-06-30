@@ -147,6 +147,41 @@ public class JenaBackedFunctionCoverageTest {
 		assertDoubleValue(distance, 1111950.7973436872, 1e-6);
 	}
 
+	@Test
+	public void documentedDistanceUnitsHaveDirectCoverage() throws Exception {
+		Literal left = wkt("POINT(0 0)");
+		Literal right = wkt("POINT(1 0)");
+
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_METRE),
+				111195.07973436874, 1e-6);
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_DEGREE),
+				1.0, 1e-9);
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_RADIAN),
+				0.017453292519943295, 1e-12);
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_GRID_SPACING),
+				1.0, 1e-12);
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_UNITY),
+				1.0, 1e-12);
+	}
+
+	@Test
+	public void bufferWithDocumentedUnitArgumentUsesRegisteredFunction() throws Exception {
+		assertWktLiteral(evaluate(GeoConstants.GEOF_BUFFER,
+				wkt("POINT(0 0)"), VF.createLiteral("0.0"), GeoSparqlUnits.URI_METRE),
+				"POLYGON EMPTY");
+	}
+
+	@Test
+	public void gmlDistanceWorksThroughRegisteredFunction() throws Exception {
+		Literal left = gml("<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\">"
+				+ "<gml:pos>0 0</gml:pos></gml:Point>");
+		Literal right = gml("<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\">"
+				+ "<gml:pos>1 0</gml:pos></gml:Point>");
+
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_METRE),
+				111195.07973436874, 1e-6);
+	}
+
 	@Test(expected = ValueExprEvaluationException.class)
 	public void relateInvalidPatternThrowsEvaluationException() throws Exception {
 		evaluate(GeoConstants.GEOF_RELATE, wkt("POINT(0 0)"), wkt("POINT(0 0)"), VF.createLiteral("wrong"));
@@ -263,6 +298,10 @@ public class JenaBackedFunctionCoverageTest {
 
 	private static Literal wkt(String lexical) {
 		return VF.createLiteral(lexical, GeoConstants.GEO_WKT_LITERAL);
+	}
+
+	private static Literal gml(String lexical) {
+		return VF.createLiteral(lexical, GeoConstants.GEO_GML_LITERAL);
 	}
 
 	private static Value evaluate(IRI functionUri, Value... args) throws ValueExprEvaluationException {
