@@ -1,7 +1,6 @@
 package com.ontotext.trree.geosparql.jena;
 
 import com.ontotext.trree.geosparql.GeoSparqlFunction;
-import com.useekm.geosparql.UnitsOfMeasure;
 import com.useekm.indexing.GeoConstants;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.Literal;
@@ -171,7 +170,7 @@ public class JenaGeometryAdapterTest {
 		Literal projectedPoint = VALUE_FACTORY.createLiteral(PROJECTED_POINT_WKT, GeoConstants.GEO_WKT_LITERAL);
 
 		Value result = JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_DISTANCE.stringValue(),
-				crs84Point, projectedPoint, UnitsOfMeasure.URI_METRE);
+				crs84Point, projectedPoint, GeoSparqlUnits.URI_METRE);
 
 		assertTrue(result instanceof Literal);
 		assertEquals(0d, ((Literal) result).doubleValue(), 0.2d);

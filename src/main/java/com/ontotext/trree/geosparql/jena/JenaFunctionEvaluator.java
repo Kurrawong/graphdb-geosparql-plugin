@@ -1,6 +1,5 @@
 package com.ontotext.trree.geosparql.jena;
 
-import com.useekm.geosparql.UnitsOfMeasure;
 import com.useekm.indexing.GeoConstants;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
@@ -31,7 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Direct Jena-backed evaluator for the RDF4J function wrappers in com.useekm.geosparql.
+ * Direct Jena-backed evaluator for RDF4J GeoSPARQL filter functions.
  */
 public final class JenaFunctionEvaluator {
 	private static final Map<String, String> EXTENSION_UNIT_TO_JENA = new HashMap<>();
@@ -39,16 +38,16 @@ public final class JenaFunctionEvaluator {
 	private static final HausdorffSimilarityMeasure HAUSDORFF_SIMILARITY = new HausdorffSimilarityMeasure();
 
 	static {
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_CENTIMETRE.stringValue(), Unit_URI.CENTIMETRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_KILOMETRE.stringValue(), Unit_URI.KILOMETRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_MILLIMETRE.stringValue(), Unit_URI.MILLIMETRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_METRE.stringValue(), Unit_URI.METRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_FOOT.stringValue(), Unit_URI.FOOT_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_US_SURVEY_FOOT.stringValue(), Unit_URI.US_SURVEY_FOOT_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_INCH.stringValue(), Unit_URI.INCH_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_MILE.stringValue(), Unit_URI.MILE_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_NAUTICAL_MILE.stringValue(), Unit_URI.NAUTICAL_MILE_URL);
-		EXTENSION_UNIT_TO_JENA.put(UnitsOfMeasure.URI_YARD.stringValue(), Unit_URI.YARD_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_CENTIMETRE.stringValue(), Unit_URI.CENTIMETRE_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_KILOMETRE.stringValue(), Unit_URI.KILOMETRE_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_MILLIMETRE.stringValue(), Unit_URI.MILLIMETRE_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_METRE.stringValue(), Unit_URI.METRE_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_FOOT.stringValue(), Unit_URI.FOOT_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_US_SURVEY_FOOT.stringValue(), Unit_URI.US_SURVEY_FOOT_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_INCH.stringValue(), Unit_URI.INCH_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_MILE.stringValue(), Unit_URI.MILE_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_NAUTICAL_MILE.stringValue(), Unit_URI.NAUTICAL_MILE_URL);
+		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_YARD.stringValue(), Unit_URI.YARD_URL);
 	}
 
 	private JenaFunctionEvaluator() {
@@ -289,7 +288,7 @@ public final class JenaFunctionEvaluator {
 		if (args.length == 2) {
 			return valueFactory.createLiteral(left.getXYGeometry().distance(left.checkTransformSRS(right).getXYGeometry()));
 		}
-		if (UnitsOfMeasure.URI_LIGHT_YEAR.equals(args[2])) {
+		if (GeoSparqlUnits.URI_LIGHT_YEAR.equals(args[2])) {
 			return valueFactory.createLiteral(left.distance(right, Unit_URI.METRE_URL) / LIGHT_YEAR_IN_METRES);
 		}
 		return valueFactory.createLiteral(left.distance(right, unitUri(args[2])));
