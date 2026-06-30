@@ -16,19 +16,11 @@ import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
 
 import java.util.Optional;
 import java.util.ServiceConfigurationError;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * CRS-preserving geometry literal used for exact Jena evaluation.
  */
 public final class SourceGeometryLiteral {
-	private static final Pattern GML_SRS_NAME =
-			Pattern.compile("\\bsrsName\\s*=\\s*['\"]([^'\"]+)['\"]");
-	private static final String RDF_XML_LITERAL = "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral";
-	private static final String GML_LEGACY_NAMESPACE = "http://www.opengis.net/gml";
-	private static final String GML_32_NAMESPACE = "http://www.opengis.net/gml/3.2";
-
 	private final String lexicalForm;
 	private final String jenaLexicalForm;
 	private final IRI datatype;
@@ -38,7 +30,7 @@ public final class SourceGeometryLiteral {
 
 	private SourceGeometryLiteral(String lexicalForm, IRI datatype, IRI jenaDatatype, String explicitCrsUri) {
 		this.lexicalForm = lexicalForm;
-		this.jenaLexicalForm = toJenaLexicalForm(lexicalForm, jenaDatatype);
+		this.jenaLexicalForm = GeometryLiteralCompatibility.toJenaLexicalForm(lexicalForm, jenaDatatype);
 		this.datatype = datatype;
 		this.jenaDatatype = jenaDatatype;
 		this.explicitCrsUri = explicitCrsUri;
@@ -56,20 +48,16 @@ public final class SourceGeometryLiteral {
 	}
 
 	public static SourceGeometryLiteral fromLiteral(Literal literal, IRI fallbackDatatype) {
-		IRI datatype = literal.getDatatype();
-		if (shouldUseFallbackDatatype(datatype, fallbackDatatype)) {
-			datatype = fallbackDatatype;
-		}
-
+		IRI datatype = GeometryLiteralCompatibility.datatypeOrFallback(literal.getDatatype(), fallbackDatatype);
 		IRI jenaDatatype = toJenaGeometryDatatype(datatype);
 		String lexicalForm = literal.stringValue();
-		String explicitCrsUri = extractExplicitCrs(lexicalForm, jenaDatatype);
+		String explicitCrsUri = GeometryLiteralCompatibility.extractExplicitCrs(lexicalForm, jenaDatatype);
 		return new SourceGeometryLiteral(lexicalForm, datatype, jenaDatatype, explicitCrsUri);
 	}
 
 	public static SourceGeometryLiteral fromWkt(String lexicalForm) {
 		return new SourceGeometryLiteral(lexicalForm, GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_WKT_LITERAL,
-				extractWktCrs(lexicalForm));
+				GeometryLiteralCompatibility.extractExplicitCrs(lexicalForm, GeoConstants.GEO_WKT_LITERAL));
 	}
 
 	public String lexicalForm() {
@@ -134,56 +122,6 @@ public final class SourceGeometryLiteral {
 			return GeoConstants.GEO_WKT_LITERAL;
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
-	}
-
-	private static boolean shouldUseFallbackDatatype(IRI datatype, IRI fallbackDatatype) {
-		if (fallbackDatatype == null) {
-			return false;
-		}
-		if (isPlainString(datatype)) {
-			return true;
-		}
-		return GeoConstants.GEO_GML_LITERAL.equals(fallbackDatatype)
-				&& datatype != null
-				&& RDF_XML_LITERAL.equals(datatype.stringValue());
-	}
-
-	private static boolean isPlainString(IRI datatype) {
-		return datatype == null || XMLSchema.STRING.equals(datatype);
-	}
-
-	private static String extractExplicitCrs(String lexicalForm, IRI jenaDatatype) {
-		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
-			Matcher matcher = GML_SRS_NAME.matcher(lexicalForm);
-			return matcher.find() ? matcher.group(1) : null;
-		}
-		return extractWktCrs(lexicalForm);
-	}
-
-	private static String extractWktCrs(String lexicalForm) {
-		int start = lexicalForm.indexOf('<');
-		if (start < 0) {
-			return null;
-		}
-		for (int i = 0; i < start; i++) {
-			if (lexicalForm.charAt(i) > 32) {
-				return null;
-			}
-		}
-		int end = lexicalForm.indexOf('>', start + 1);
-		if (end < 0) {
-			throw new JenaGeoSparqlException("CRS URI in WKT literal is incomplete: " + lexicalForm);
-		}
-		return lexicalForm.substring(start + 1, end);
-	}
-
-	private static String toJenaLexicalForm(String lexicalForm, IRI jenaDatatype) {
-		if (!GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
-			return lexicalForm;
-		}
-		return lexicalForm
-				.replace("=\"" + GML_LEGACY_NAMESPACE + "\"", "=\"" + GML_32_NAMESPACE + "\"")
-				.replace("='" + GML_LEGACY_NAMESPACE + "'", "='" + GML_32_NAMESPACE + "'");
 	}
 
 	public static IRI wktDatatype() {

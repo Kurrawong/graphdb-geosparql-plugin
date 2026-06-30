@@ -17,6 +17,8 @@ public class JenaGeometryAdapterTest {
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 	private static final String CRS84 = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
+	private static final String RDF_XML_LITERAL = "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral";
+	private static final String GML_LEGACY_NAMESPACE = "http://www.opengis.net/gml";
 
 	@Before
 	public void initializeAdapter() {
@@ -63,6 +65,66 @@ public class JenaGeometryAdapterTest {
 
 		assertEquals(CRS84, geometry.explicitCrsUri().get());
 		assertEquals(GeoConstants.GEO_GML_LITERAL, geometry.datatype());
+		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
+	}
+
+	@Test
+	public void xmlLiteralCanUseGmlFallbackDatatype() {
+		String gml = legacyGmlWithDoubleQuotedNamespaceAndCrs();
+		Literal literal = VALUE_FACTORY.createLiteral(gml, VALUE_FACTORY.createIRI(RDF_XML_LITERAL));
+
+		SourceGeometryLiteral geometry = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
+				GeoConstants.GEO_GML_LITERAL);
+
+		assertEquals(gml, geometry.lexicalForm());
+		assertEquals(GeoConstants.GEO_GML_LITERAL, geometry.datatype());
+		assertEquals(CRS84, geometry.explicitCrsUri().get());
+		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
+	}
+
+	@Test
+	public void xmlLiteralWithoutGmlFallbackIsRejected() {
+		Literal literal = VALUE_FACTORY.createLiteral(legacyGmlWithDoubleQuotedNamespaceAndCrs(),
+				VALUE_FACTORY.createIRI(RDF_XML_LITERAL));
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toSourceGeometryLiteral(literal));
+
+		assertTrue(exception.getMessage().contains("Unsupported GeoSPARQL geometry datatype"));
+	}
+
+	@Test
+	public void xmlLiteralCannotUseWktFallbackDatatype() {
+		Literal literal = VALUE_FACTORY.createLiteral(legacyGmlWithDoubleQuotedNamespaceAndCrs(),
+				VALUE_FACTORY.createIRI(RDF_XML_LITERAL));
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toSourceGeometryLiteral(literal, GeoConstants.GEO_WKT_LITERAL));
+
+		assertTrue(exception.getMessage().contains("Unsupported GeoSPARQL geometry datatype"));
+	}
+
+	@Test
+	public void legacyGmlNamespaceParsesAndPreservesSourceLexicalForm() {
+		String gml = legacyGmlWithDoubleQuotedNamespaceAndCrs();
+		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
+
+		SourceGeometryLiteral geometry = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
+
+		assertEquals(gml, geometry.lexicalForm());
+		assertTrue(geometry.lexicalForm().contains("xmlns:gml=\"" + GML_LEGACY_NAMESPACE + "\""));
+		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
+	}
+
+	@Test
+	public void legacyGmlNamespaceWithSingleQuotesParses() {
+		String gml = "<gml:Point xmlns:gml='" + GML_LEGACY_NAMESPACE
+				+ "'><gml:pos>1 2</gml:pos></gml:Point>";
+		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
+
+		SourceGeometryLiteral geometry = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
+
+		assertEquals(gml, geometry.lexicalForm());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
 	}
 
@@ -127,5 +189,10 @@ public class JenaGeometryAdapterTest {
 		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_TOUCHES.stringValue(), left, right));
 		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_RCC8_EC.stringValue(), left, right));
 		assertFalse(GeoSparqlFunction.RCC8_EC.evaluate(left, right));
+	}
+
+	private static String legacyGmlWithDoubleQuotedNamespaceAndCrs() {
+		return "<gml:Point xmlns:gml=\"" + GML_LEGACY_NAMESPACE + "\" srsName=\"" + CRS84
+				+ "\"><gml:pos>1 2</gml:pos></gml:Point>";
 	}
 }
