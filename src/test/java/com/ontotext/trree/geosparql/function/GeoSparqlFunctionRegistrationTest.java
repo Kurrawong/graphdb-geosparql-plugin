@@ -26,7 +26,7 @@ public class GeoSparqlFunctionRegistrationTest {
         FunctionRegistry registry = FunctionRegistry.getInstance();
         for (String uri : GeoSparqlFunctionRegistration.supportedFunctionUris()) {
             assertTrue("Expected registered function URI: " + uri, registry.has(uri));
-            assertTrue(registry.get(uri).get() instanceof JenaBackedRdf4jFunction);
+            assertTrue(registry.get(uri).get() instanceof GeoSparqlRdf4jFunction);
         }
     }
 

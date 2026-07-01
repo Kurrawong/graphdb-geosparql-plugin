@@ -7,10 +7,10 @@ import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.locationtech.jts.geom.TopologyException;
 
-final class JenaBackedRdf4jFunction implements Function {
+final class GeoSparqlRdf4jFunction implements Function {
     private final String uri;
 
-    JenaBackedRdf4jFunction(String uri) {
+    GeoSparqlRdf4jFunction(String uri) {
         this.uri = uri;
     }
 

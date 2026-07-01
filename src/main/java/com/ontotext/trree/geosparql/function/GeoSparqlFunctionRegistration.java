@@ -65,7 +65,7 @@ public final class GeoSparqlFunctionRegistration {
     public static void registerAll() {
         FunctionRegistry registry = FunctionRegistry.getInstance();
         for (String uri : SUPPORTED_FUNCTION_URIS) {
-            registry.add(new JenaBackedRdf4jFunction(uri));
+            registry.add(new GeoSparqlRdf4jFunction(uri));
         }
     }
 
