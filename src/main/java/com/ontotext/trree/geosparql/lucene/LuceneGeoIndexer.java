@@ -55,10 +55,9 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
     private IndexWriterConfig iwConfig;
 	private IndexWriter indexWriter;
     private Logger logger;
-	private boolean legacyIndexDetected;
+	private boolean schemaMismatchDetected;
 
-	static final String LEGACY_INDEX_MESSAGE = "Existing GeoSPARQL Lucene index lacks schema v2 "
-			+ "source geometry literal metadata. "
+	static final String SCHEMA_MISMATCH_MESSAGE = "Existing GeoSPARQL Lucene index does not match current schema v2. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
 			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
 
@@ -78,7 +77,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		this.directory = FSDirectory.open(indexDir);
 
 		initSettings();
-		legacyIndexDetected = detectLegacyIndex();
+		schemaMismatchDetected = detectSchemaMismatch();
 	}
 
 	private Document newGeoDocument(long id, IndexGeometry geometry) {
@@ -152,7 +151,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	@Override
 	public void freshIndex() throws Exception {
 		indexWriter.deleteAll();
-		legacyIndexDetected = false;
+		schemaMismatchDetected = false;
 	}
 
 	@Override
@@ -278,12 +277,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	private void assertCurrentSchema() {
-		if (legacyIndexDetected) {
-			throw new PluginException(LEGACY_INDEX_MESSAGE);
+		if (schemaMismatchDetected) {
+			throw new PluginException(SCHEMA_MISMATCH_MESSAGE);
 		}
 	}
 
-	private boolean detectLegacyIndex() {
+	private boolean detectSchemaMismatch() {
 		try {
 			if (!DirectoryReader.indexExists(directory)) {
 				return false;
@@ -291,10 +290,8 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			try (IndexReader reader = DirectoryReader.open(directory)) {
 				for (int i = 0; i < reader.maxDoc(); i++) {
 					Document doc = reader.document(i);
-					IndexableField schemaVersion = doc.getField(IndexGeometry.FIELD_SCHEMA_VERSION);
-					if (schemaVersion == null || schemaVersion.numericValue() == null
-							|| schemaVersion.numericValue().intValue() != IndexGeometry.SCHEMA_VERSION) {
-						return reader.numDocs() > 0;
+					if (!isCurrentSchemaDocument(doc)) {
+						return true;
 					}
 				}
 			}
@@ -304,5 +301,18 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		} catch (IOException e) {
 			throw new PluginException("Unable to inspect GeoSPARQL Lucene index schema.", e);
 		}
+	}
+
+	private boolean isCurrentSchemaDocument(Document doc) {
+		IndexableField schemaVersion = doc.getField(IndexGeometry.FIELD_SCHEMA_VERSION);
+		return schemaVersion != null
+				&& schemaVersion.numericValue() != null
+				&& schemaVersion.numericValue().intValue() == IndexGeometry.SCHEMA_VERSION
+				&& doc.get(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM) != null
+				&& doc.get(IndexGeometry.FIELD_SOURCE_DATATYPE) != null
+				&& doc.get(IndexGeometry.FIELD_SOURCE_CRS) != null
+				&& IndexGeometry.INDEX_CRS.equals(doc.get(IndexGeometry.FIELD_INDEX_CRS))
+				&& IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY.equals(
+						doc.get(IndexGeometry.FIELD_INDEX_BUILD_MODE));
 	}
 }

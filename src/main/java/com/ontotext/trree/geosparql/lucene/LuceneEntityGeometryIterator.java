@@ -3,12 +3,12 @@ package com.ontotext.trree.geosparql.lucene;
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
-import com.ontotext.trree.sdk.PluginException;
 import org.locationtech.jts.geom.Geometry;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.*;
 import org.apache.lucene.util.BytesRef;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 
 import java.io.IOException;
 
@@ -17,6 +17,7 @@ import java.io.IOException;
  */
 class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	private final static int PAGE_SIZE = 1000;
+	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 
 	private int page;
 	private TopDocs topDocs;
@@ -67,9 +68,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 			}
 
 			return geometry = LuceneGeoIndexer.fieldValueToGeometry(geoDatas[geoDatasIndex].bytes);
-		} catch (PluginException e) {
-			throw e;
-		} catch (Exception e) {
+		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
 	}
@@ -128,29 +127,9 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	}
 
 	private SourceGeometryLiteral sourceGeometryLiteralFromDocument(Document doc) {
-		IndexableField schemaVersion = doc.getField(IndexGeometry.FIELD_SCHEMA_VERSION);
-		if (schemaVersion == null || schemaVersion.numericValue() == null
-				|| schemaVersion.numericValue().intValue() != IndexGeometry.SCHEMA_VERSION) {
-			throw new PluginException(LuceneGeoIndexer.LEGACY_INDEX_MESSAGE);
-		}
 		String lexicalForm = doc.get(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM);
 		String datatype = doc.get(IndexGeometry.FIELD_SOURCE_DATATYPE);
-		if (lexicalForm == null || datatype == null) {
-			throw new PluginException("GeoSPARQL Lucene schema v2 document is missing source geometry literal metadata.");
-		}
-		SourceGeometryLiteral source = SourceGeometryLiteral.fromLiteral(
-				org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance()
-						.createLiteral(lexicalForm,
-								org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance().createIRI(datatype)));
-		String effectiveSourceCrs = doc.get(IndexGeometry.FIELD_SOURCE_CRS);
-		if (effectiveSourceCrs == null) {
-			throw new PluginException("GeoSPARQL Lucene schema v2 document is missing "
-					+ "effective source CRS metadata.");
-		}
-		if (!source.effectiveCrsUri().equals(effectiveSourceCrs)) {
-			throw new PluginException("GeoSPARQL Lucene schema v2 document has inconsistent "
-					+ "effective source CRS metadata.");
-		}
-		return source;
+		return SourceGeometryLiteral.fromLiteral(
+				VALUE_FACTORY.createLiteral(lexicalForm, VALUE_FACTORY.createIRI(datatype)));
 	}
 }

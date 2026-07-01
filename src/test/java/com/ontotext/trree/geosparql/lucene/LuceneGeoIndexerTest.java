@@ -170,33 +170,31 @@ public class LuceneGeoIndexerTest {
     }
 
     @Test
-    public void testLegacyIndexFailsFastWithActionableMessage() throws Exception {
-        Path legacyDataDir = tmpFolder.getRoot().toPath().resolve("legacy");
-        Files.createDirectories(legacyDataDir);
-        writeLegacyIndex(legacyDataDir);
+    public void testIndexWithoutSchemaV2MetadataRequiresReindex() throws Exception {
+        Path nonCurrentDataDir = tmpFolder.getRoot().toPath().resolve("non-current-schema");
+        Files.createDirectories(nonCurrentDataDir);
+        writeIndexWithoutSchemaV2Metadata(nonCurrentDataDir);
 
-        LuceneGeoIndexer legacyIndexer = createIndexer(legacyDataDir.toFile());
+        LuceneGeoIndexer indexer = createIndexer(nonCurrentDataDir.toFile());
 
-        PluginException exception = assertThrows(PluginException.class, () -> legacyIndexer.getGeometriesFor(0));
+        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
 
-        assertTrue(exception.getMessage().contains("schema v2 source geometry literal metadata"));
+        assertTrue(exception.getMessage().contains("current schema v2"));
         assertTrue(exception.getMessage().contains("force-reindex"));
     }
 
     @Test
-    public void testSchemaV2DocumentWithoutSourceCrsFailsFast() throws Exception {
-        Path missingSourceCrsDataDir = tmpFolder.getRoot().toPath().resolve("missing-source-crs");
-        Files.createDirectories(missingSourceCrsDataDir);
-        writeSchemaV2IndexWithoutSourceCrs(missingSourceCrsDataDir);
+    public void testIndexMissingRequiredSchemaV2FieldRequiresReindex() throws Exception {
+        Path malformedDataDir = tmpFolder.getRoot().toPath().resolve("malformed-schema-v2");
+        Files.createDirectories(malformedDataDir);
+        writeIndexMissingRequiredSchemaV2Field(malformedDataDir);
 
-        LuceneGeoIndexer indexer = createIndexer(missingSourceCrsDataDir.toFile());
+        LuceneGeoIndexer indexer = createIndexer(malformedDataDir.toFile());
 
-        try (EntityGeometryIterator iterator = indexer.getGeometriesFor(0)) {
-            PluginException exception = assertThrows(PluginException.class, iterator::nextGeometry);
+        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
 
-            assertTrue(exception.getMessage()
-                    .contains("schema v2 document is missing effective source CRS metadata"));
-        }
+        assertTrue(exception.getMessage().contains("current schema v2"));
+        assertTrue(exception.getMessage().contains("force-reindex"));
     }
 
     @Test
@@ -227,7 +225,7 @@ public class LuceneGeoIndexerTest {
         return indexReader.document(docs.doc).getField("id").numericValue().longValue();
     }
 
-    private void writeLegacyIndex(Path dataDir) throws Exception {
+    private void writeIndexWithoutSchemaV2Metadata(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
         try (FSDirectory dir = FSDirectory.open(indexDir);
@@ -240,7 +238,7 @@ public class LuceneGeoIndexerTest {
         }
     }
 
-    private void writeSchemaV2IndexWithoutSourceCrs(Path dataDir) throws Exception {
+    private void writeIndexMissingRequiredSchemaV2Field(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
         IndexGeometry geometry = geometries.get(0);
