@@ -14,6 +14,7 @@
 		<lucene.version>8.10.1</lucene.version>
 		<jts.version>1.17.0</jts.version>
 		<dependency.check.version>8.2.1</dependency.check.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
 		<internal.repo>https://maven.ontotext.com/content/repositories/owlim-releases</internal.repo>
 		<snapshots.repo>https://maven.ontotext.com/content/repositories/owlim-snapshots</snapshots.repo>
