@@ -7,7 +7,7 @@ import com.ontotext.trree.geosparql.GeoSparqlPlugin;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
-import com.useekm.indexing.GeoConstants;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.StoredField;

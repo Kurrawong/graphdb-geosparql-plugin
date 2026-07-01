@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.jena;
 
-import com.useekm.indexing.GeoConstants;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;

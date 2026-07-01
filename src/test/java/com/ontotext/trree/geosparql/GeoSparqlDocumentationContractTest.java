@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.useekm.indexing.GeoConstants;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.query.QueryLanguage;
 import org.junit.Test;

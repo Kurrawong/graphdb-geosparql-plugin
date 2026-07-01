@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.useekm.indexing.GeoConstants;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 
 import java.util.List;

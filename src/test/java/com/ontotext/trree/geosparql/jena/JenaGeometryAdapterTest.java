@@ -1,7 +1,7 @@
 package com.ontotext.trree.geosparql.jena;
 
 import com.ontotext.trree.geosparql.GeoSparqlFunction;
-import com.useekm.indexing.GeoConstants;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;

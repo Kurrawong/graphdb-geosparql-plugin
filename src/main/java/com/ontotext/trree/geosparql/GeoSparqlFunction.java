@@ -6,7 +6,7 @@ import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import org.apache.lucene.spatial.query.SpatialOperation;
 import org.eclipse.rdf4j.model.IRI;
 
-import static com.useekm.indexing.GeoConstants.*;
+import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
 
 /**
  * GeoSPARQL property relations exposed by GraphDB.

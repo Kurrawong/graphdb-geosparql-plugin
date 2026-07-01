@@ -6,7 +6,7 @@ import com.ontotext.trree.geosparql.lucene.LuceneMultiSearchEntityGeometryIterat
 import com.ontotext.trree.sdk.Entities;
 import com.ontotext.trree.sdk.PluginException;
 import com.ontotext.trree.sdk.StatementIterator;
-import com.useekm.indexing.GeoConstants;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.locationtech.jts.geom.Geometry;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
