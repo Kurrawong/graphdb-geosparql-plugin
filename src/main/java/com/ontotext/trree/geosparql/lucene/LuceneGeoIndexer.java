@@ -94,14 +94,14 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
             doc.add(f);
         }
 
-        doc.add(geometryToField(geometry.indexGeometry()));
+		doc.add(geometryToField(geometry.indexGeometry()));
 		doc.add(new StoredField(IndexGeometry.FIELD_SCHEMA_VERSION, IndexGeometry.SCHEMA_VERSION));
 		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM,
 				geometry.sourceGeometryLiteral().lexicalForm()));
 		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_DATATYPE,
 				geometry.sourceGeometryLiteral().datatype().stringValue()));
-		geometry.sourceGeometryLiteral().explicitCrsUri().ifPresent(crs ->
-				doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_CRS, crs)));
+		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_CRS,
+				geometry.sourceGeometryLiteral().effectiveCrsUri()));
 		doc.add(new StoredField(IndexGeometry.FIELD_INDEX_CRS, geometry.indexCrs()));
 		doc.add(new StoredField(IndexGeometry.FIELD_INDEX_BUILD_MODE, geometry.indexBuildMode()));
 

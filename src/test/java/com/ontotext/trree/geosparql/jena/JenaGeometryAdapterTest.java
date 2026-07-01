@@ -37,7 +37,7 @@ public class JenaGeometryAdapterTest {
 		assertEquals("POINT(1 2)", geometry.lexicalForm());
 		assertEquals(GeoConstants.GEO_WKT_LITERAL, geometry.datatype());
 		assertEquals(GeoConstants.GEO_WKT_LITERAL, geometry.jenaDatatype());
-		assertFalse(geometry.explicitCrsUri().isPresent());
+		assertEquals(CRS84, geometry.effectiveCrsUri());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
 	}
 
@@ -45,7 +45,7 @@ public class JenaGeometryAdapterTest {
 	public void wktWithExplicitCrsPreservesStoredCrsMetadata() {
 		SourceGeometryLiteral geometry = SourceGeometryLiteral.fromWkt("<" + CRS84 + "> POINT(1 2)");
 
-		assertEquals(CRS84, geometry.explicitCrsUri().get());
+		assertEquals(CRS84, geometry.effectiveCrsUri());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
 	}
 
@@ -68,7 +68,7 @@ public class JenaGeometryAdapterTest {
 
 		SourceGeometryLiteral geometry = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
 
-		assertEquals(CRS84, geometry.explicitCrsUri().get());
+		assertEquals(CRS84, geometry.effectiveCrsUri());
 		assertEquals(GeoConstants.GEO_GML_LITERAL, geometry.datatype());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
 	}
@@ -83,7 +83,7 @@ public class JenaGeometryAdapterTest {
 
 		assertEquals(gml, geometry.lexicalForm());
 		assertEquals(GeoConstants.GEO_GML_LITERAL, geometry.datatype());
-		assertEquals(CRS84, geometry.explicitCrsUri().get());
+		assertEquals(CRS84, geometry.effectiveCrsUri());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
 	}
 
@@ -140,7 +140,7 @@ public class JenaGeometryAdapterTest {
 		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
-		assertEquals(EPSG_32634, source.explicitCrsUri().get());
+		assertEquals(EPSG_32634, source.effectiveCrsUri());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
 		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, index.indexBuildMode());
 		assertProjectedPointCrs84Coordinate(coordinate);
@@ -156,7 +156,7 @@ public class JenaGeometryAdapterTest {
 		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
-		assertEquals(EPSG_32634, source.explicitCrsUri().get());
+		assertEquals(EPSG_32634, source.effectiveCrsUri());
 		assertEquals(GeoConstants.GEO_GML_LITERAL, source.datatype());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
 		assertProjectedPointCrs84Coordinate(coordinate);

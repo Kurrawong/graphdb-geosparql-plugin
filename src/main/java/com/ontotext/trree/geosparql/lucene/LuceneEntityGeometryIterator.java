@@ -67,6 +67,8 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 			}
 
 			return geometry = LuceneGeoIndexer.fieldValueToGeometry(geoDatas[geoDatasIndex].bytes);
+		} catch (PluginException e) {
+			throw e;
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
@@ -140,10 +142,14 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 				org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance()
 						.createLiteral(lexicalForm,
 								org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance().createIRI(datatype)));
-		String explicitCrs = doc.get(IndexGeometry.FIELD_SOURCE_CRS);
-		if (explicitCrs != null && !source.explicitCrsUri().orElse("").equals(explicitCrs)) {
+		String effectiveSourceCrs = doc.get(IndexGeometry.FIELD_SOURCE_CRS);
+		if (effectiveSourceCrs == null) {
+			throw new PluginException("GeoSPARQL Lucene schema v2 document is missing "
+					+ "effective source CRS metadata.");
+		}
+		if (!source.effectiveCrsUri().equals(effectiveSourceCrs)) {
 			throw new PluginException("GeoSPARQL Lucene schema v2 document has inconsistent "
-					+ "source geometry literal CRS metadata.");
+					+ "effective source CRS metadata.");
 		}
 		return source;
 	}

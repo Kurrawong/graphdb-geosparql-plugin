@@ -14,7 +14,6 @@ import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
 
-import java.util.Optional;
 import java.util.ServiceConfigurationError;
 
 /**
@@ -25,15 +24,13 @@ public final class SourceGeometryLiteral {
 	private final String jenaLexicalForm;
 	private final IRI datatype;
 	private final IRI jenaDatatype;
-	private final String explicitCrsUri;
 	private transient GeometryWrapper geometryWrapper;
 
-	private SourceGeometryLiteral(String lexicalForm, IRI datatype, IRI jenaDatatype, String explicitCrsUri) {
+	private SourceGeometryLiteral(String lexicalForm, IRI datatype, IRI jenaDatatype) {
 		this.lexicalForm = lexicalForm;
 		this.jenaLexicalForm = GeometryLiteralCompatibility.toJenaLexicalForm(lexicalForm, jenaDatatype);
 		this.datatype = datatype;
 		this.jenaDatatype = jenaDatatype;
-		this.explicitCrsUri = explicitCrsUri;
 	}
 
 	public static SourceGeometryLiteral fromValue(Value value, boolean acceptNoType) {
@@ -51,13 +48,11 @@ public final class SourceGeometryLiteral {
 		IRI datatype = GeometryLiteralCompatibility.datatypeOrFallback(literal.getDatatype(), fallbackDatatype);
 		IRI jenaDatatype = toJenaGeometryDatatype(datatype);
 		String lexicalForm = literal.stringValue();
-		String explicitCrsUri = GeometryLiteralCompatibility.extractExplicitCrs(lexicalForm, jenaDatatype);
-		return new SourceGeometryLiteral(lexicalForm, datatype, jenaDatatype, explicitCrsUri);
+		return new SourceGeometryLiteral(lexicalForm, datatype, jenaDatatype);
 	}
 
 	public static SourceGeometryLiteral fromWkt(String lexicalForm) {
-		return new SourceGeometryLiteral(lexicalForm, GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_WKT_LITERAL,
-				GeometryLiteralCompatibility.extractExplicitCrs(lexicalForm, GeoConstants.GEO_WKT_LITERAL));
+		return new SourceGeometryLiteral(lexicalForm, GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_WKT_LITERAL);
 	}
 
 	public String lexicalForm() {
@@ -72,8 +67,8 @@ public final class SourceGeometryLiteral {
 		return jenaDatatype;
 	}
 
-	public Optional<String> explicitCrsUri() {
-		return Optional.ofNullable(explicitCrsUri);
+	public String effectiveCrsUri() {
+		return asGeometryWrapper().getSrsURI();
 	}
 
 	public Node asJenaNode() {
