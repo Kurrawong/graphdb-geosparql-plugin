@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.jena;
 
-import com.ontotext.trree.geosparql.GeoSparqlFunction;
+import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.Literal;
@@ -221,7 +221,7 @@ public class JenaGeometryAdapterTest {
 
 		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(), left, right));
 		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_RCC8_DC.stringValue(), left, right));
-		assertFalse(GeoSparqlFunction.RCC8_DC.evaluate(left, right));
+		assertFalse(GeoSparqlPropertyRelation.RCC8_DC.evaluate(left, right));
 	}
 
 	@Test
@@ -231,7 +231,7 @@ public class JenaGeometryAdapterTest {
 
 		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_TOUCHES.stringValue(), left, right));
 		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_RCC8_EC.stringValue(), left, right));
-		assertFalse(GeoSparqlFunction.RCC8_EC.evaluate(left, right));
+		assertFalse(GeoSparqlPropertyRelation.RCC8_EC.evaluate(left, right));
 	}
 
 	private static String legacyGmlWithDoubleQuotedNamespaceAndCrs() {

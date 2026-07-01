@@ -18,7 +18,7 @@ import java.util.Optional;
 import java.util.ServiceConfigurationError;
 
 /**
- * CRS-preserving geometry literal used for exact Jena evaluation.
+ * CRS-preserving source geometry literal used for exact evaluation.
  */
 public final class SourceGeometryLiteral {
 	private final String lexicalForm;

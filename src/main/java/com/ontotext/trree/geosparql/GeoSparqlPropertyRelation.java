@@ -11,9 +11,9 @@ import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
 /**
  * GeoSPARQL property relations exposed by GraphDB.
  *
- * Lucene operations are conservative candidate lookups only. Jena decides exact truth.
+ * Lucene operations are conservative candidate lookups only. Jena performs exact predicate evaluation.
  */
-public enum GeoSparqlFunction {
+public enum GeoSparqlPropertyRelation {
 	// Simple Features
 	SF_EQUALS(GEO_SF_EQUALS, GEOF_SF_EQUALS, SpatialOperation.Intersects),
 	SF_DISJOINT(GEO_SF_DISJOINT, GEOF_SF_DISJOINT, null),
@@ -45,12 +45,12 @@ public enum GeoSparqlFunction {
 	RCC8_NTPPI(GEO_RCC8_NTPPI, GEOF_RCC8_NTPPI, SpatialOperation.Intersects);
 
 	private final IRI predicateUri;
-	private final IRI functionUri;
+	private final IRI filterFunctionUri;
 	private final SpatialOperation spatialOperation;
 
-	GeoSparqlFunction(IRI predicateUri, IRI functionUri, SpatialOperation spatialOperation) {
+	GeoSparqlPropertyRelation(IRI predicateUri, IRI filterFunctionUri, SpatialOperation spatialOperation) {
 		this.predicateUri = predicateUri;
-		this.functionUri = functionUri;
+		this.filterFunctionUri = filterFunctionUri;
 		this.spatialOperation = spatialOperation;
 	}
 
@@ -68,7 +68,7 @@ public enum GeoSparqlFunction {
 
 	public boolean evaluate(SourceGeometryLiteral argument1, SourceGeometryLiteral argument2) {
 		try {
-			return JenaFunctionEvaluator.evaluateTopological(functionUri.stringValue(), argument1, argument2);
+			return JenaFunctionEvaluator.evaluateTopological(filterFunctionUri.stringValue(), argument1, argument2);
 		} catch (JenaGeoSparqlException e) {
 			throw e;
 		} catch (Exception e) {

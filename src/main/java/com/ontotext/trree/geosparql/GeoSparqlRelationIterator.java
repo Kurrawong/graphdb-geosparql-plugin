@@ -16,13 +16,13 @@ import org.slf4j.Logger;
 import java.io.IOException;
 
 /**
- * The work horse of the implementation. It will use the indexer to get rough results
- * and then invoke the respective GeoSPARQL function to narrow down the exact matches.
+ * Evaluates GeoSPARQL property relations by using Lucene for candidate lookup
+ * and Jena for exact predicate evaluation.
  */
 class GeoSparqlRelationIterator extends StatementIterator {
 	private final GeoSparqlPlugin parent;
 	private final Logger logger;
-	private final GeoSparqlFunction function;
+	private final GeoSparqlPropertyRelation relation;
 	private final Entities entities;
 
 	private Geometry knownGeometry;
@@ -35,15 +35,13 @@ class GeoSparqlRelationIterator extends StatementIterator {
 
 	private LuceneMultiSearchEntityGeometryIterator searchIterator;
 
-	private boolean trustLucene;
-
 	private boolean inverse;
 
-	GeoSparqlRelationIterator(GeoSparqlPlugin parent, GeoSparqlFunction function,
+	GeoSparqlRelationIterator(GeoSparqlPlugin parent, GeoSparqlPropertyRelation relation,
 	                                 long subject, long predicate, long object, Entities entities) {
 		this.parent = parent;
 		this.logger = parent.getLogger();
-		this.function = function;
+		this.relation = relation;
 		this.subject = subject;
 		this.predicate = predicate;
 		this.object = object;
@@ -60,23 +58,24 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		}
 
 		if (iSubjectGeometries != null && iObjectGeometries != null) {
-			// Both subject and object have explicit geometries, don't use Lucene search but match directly
+			// Both subject and object have explicit geometry candidates, so evaluate directly
+			// without Lucene candidate lookup.
 			iKnownEntities = iObjectGeometries;
 			iCandidateEntities = iSubjectGeometries;
 
 			inverse = true;
 		} else if (iSubjectGeometries == null) {
-			// Subject is unknown and candidates will be provided by searching in Lucene with the object
+			// Subject is unbound; Lucene candidate lookup will use the bound object index geometry.
 			iKnownEntities = iObjectGeometries;
 			iCandidateEntities = searchIterator = new LuceneMultiSearchEntityGeometryIterator(parent.indexer,
-					function.getSpatialOperation());
+					relation.getSpatialOperation());
 
 			inverse = true;
 		} else {
-			// Object is unknown and candidates will be provided by searching in Lucene with the subject
+			// Object is unbound; Lucene candidate lookup will use the bound subject index geometry.
 			iKnownEntities = iSubjectGeometries;
 			iCandidateEntities = searchIterator = new LuceneMultiSearchEntityGeometryIterator(parent.indexer,
-					function.getInverseSpatialOperation());
+					relation.getInverseSpatialOperation());
 
 			inverse = false;
 		}
@@ -89,17 +88,18 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		while (true) {
 			if (knownGeometry == null || !iCandidateEntities.hasNextGeometry()) {
 				if (!iKnownEntities.hasNextGeometry()) {
-					// no more known entities, GeoSPARQLRelationIterator ends
+					// No more known entities; GeoSparqlRelationIterator ends.
 					break;
 				}
 
-				// Fresh known Geometry. It will be reused until a match is found or no more candidate Geometries left
+				// Fresh known index geometry. It is reused until a match is found or
+				// no candidate geometries remain.
 				knownGeometry = iKnownEntities.nextGeometry();
 				knownSourceGeometryLiteral = iKnownEntities.lastSourceGeometryLiteral();
 
 				if (searchIterator != null) {
-					// If we have a search iterator (either subject or object is unbound) we have to notify it
-					// about the new known geometry
+					// If either subject or object is unbound, candidate lookup starts
+					// from the new known geometry.
 					searchIterator.search(knownGeometry);
 				}
 
@@ -118,9 +118,9 @@ class GeoSparqlRelationIterator extends StatementIterator {
 							candidateGeometry);
 				}
 
-				result = trustLucene || (inverse ?
-						function.evaluate(candidateSourceGeometryLiteral, knownSourceGeometryLiteral) :
-						function.evaluate(knownSourceGeometryLiteral, candidateSourceGeometryLiteral));
+				result = inverse
+						? relation.evaluate(candidateSourceGeometryLiteral, knownSourceGeometryLiteral)
+						: relation.evaluate(knownSourceGeometryLiteral, candidateSourceGeometryLiteral);
 			} else {
 				logger.debug(">>>>>>>> GeoSPARQL: No available candidate geometries matching the query!");
 				break;
@@ -142,7 +142,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 					object = iCandidateEntities.getEntityForLastGeometry();
 				}
 
-				// found a pair of subject/object that satisfies the condition
+				// Found a subject/object pair that satisfies exact predicate evaluation.
 				break;
 			}
 		}

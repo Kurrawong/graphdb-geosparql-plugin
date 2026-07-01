@@ -69,8 +69,8 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 	GeoSparqlConfig.PrefixTree tmpPrefixTree;
     int tmpPrecision;
 
-    private TLongObjectHashMap<GeoSparqlFunction> predicateIds2Function =
-			new TLongObjectHashMap<>(GeoSparqlFunction.values().length);
+    private TLongObjectHashMap<GeoSparqlPropertyRelation> predicateIdsToRelation =
+			new TLongObjectHashMap<>(GeoSparqlPropertyRelation.values().length);
 
 	private GeoSparqlUpdateListener updateListener;
 
@@ -94,7 +94,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
     @Override
 	public double estimate(long subject, long predicate, long object, long context, PluginConnection pluginConnection,
                            RequestContext requestContext) {
-		if ((subject != 0 || object != 0) && predicateIds2Function.contains(predicate)) {
+		if ((subject != 0 || object != 0) && predicateIdsToRelation.contains(predicate)) {
             // GeoSPARQL query
             return 0.1;
         } else if (subject == contextId || predicate == enabledPredicateId || predicate == prefixTreePredicateId
@@ -124,12 +124,12 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
             return null;
         }
 
-        if (predicateIds2Function.contains(predicate)) {
+        if (predicateIdsToRelation.contains(predicate)) {
             if (subject == 0 && object == 0) {
                 return StatementIterator.EMPTY;
             }
 
-            return new GeoSparqlRelationIterator(this, predicateIds2Function.get(predicate), subject, predicate,
+            return new GeoSparqlRelationIterator(this, predicateIdsToRelation.get(predicate), subject, predicate,
                     object, pluginConnection.getEntities());
         }
 
@@ -249,9 +249,9 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 
         enableGeoSparqlPredicates(entities);
 
-        for (GeoSparqlFunction function : GeoSparqlFunction.values()) {
-            long predicateUriId = entities.put(function.getPredicateUri(), Entities.Scope.DEFAULT);
-            predicateIds2Function.put(predicateUriId, function);
+        for (GeoSparqlPropertyRelation relation : GeoSparqlPropertyRelation.values()) {
+            long predicateUriId = entities.put(relation.getPredicateUri(), Entities.Scope.DEFAULT);
+            predicateIdsToRelation.put(predicateUriId, relation);
         }
 
         initializeGeoIndexer();

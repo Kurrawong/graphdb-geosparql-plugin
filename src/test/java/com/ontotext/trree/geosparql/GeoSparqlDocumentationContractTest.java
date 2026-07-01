@@ -57,8 +57,8 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 				GeoConstants.GEO_RCC8_NTPP,
 				GeoConstants.GEO_RCC8_NTPPI);
 
-		Set<IRI> actual = Arrays.stream(GeoSparqlFunction.values())
-				.map(GeoSparqlFunction::getPredicateUri)
+		Set<IRI> actual = Arrays.stream(GeoSparqlPropertyRelation.values())
+				.map(GeoSparqlPropertyRelation::getPredicateUri)
 				.collect(Collectors.toSet());
 
 		assertEquals(expected, actual);

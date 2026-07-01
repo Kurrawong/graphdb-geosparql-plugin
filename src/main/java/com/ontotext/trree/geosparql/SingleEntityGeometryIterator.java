@@ -29,15 +29,6 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 				: Collections.emptyIterator();
 	}
 
-	public SingleEntityGeometryIterator(long entityId, Geometry geometry) {
-		this.entityId = entityId;
-		this.iGeometries = geometry != null
-				? Collections.singletonList(IndexGeometry.fromSourceGeometryLiteral(
-						SourceGeometryLiteral.fromWkt(geometry.toText()))).iterator()
-				: Collections.emptyIterator();
-	}
-
-
 	@Override
 	public long getEntityForLastGeometry() {
 		return entityId;
