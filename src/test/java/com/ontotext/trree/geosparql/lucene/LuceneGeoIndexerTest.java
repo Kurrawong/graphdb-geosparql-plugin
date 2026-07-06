@@ -22,6 +22,8 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.store.ByteBuffersDirectory;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.junit.After;
 import org.junit.Before;
@@ -171,6 +173,65 @@ public class LuceneGeoIndexerTest {
         }
 
         assertEquals(56, count);
+    }
+
+    @Test
+    public void fullScanCandidateLookupPagesPastLuceneTotalHitsLowerBound() throws Exception {
+        assertFullScanReturnsDocumentCount(2500);
+    }
+
+    @Test
+    public void fullScanCandidateLookupHandlesExactPageMultiple() throws Exception {
+        assertFullScanReturnsDocumentCount(2000);
+    }
+
+    private void assertFullScanReturnsDocumentCount(int documentCount) throws Exception {
+        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            for (long subject = 1; subject <= documentCount; subject++) {
+                writer.addDocument(currentSchemaDocument(subject, geometry));
+            }
+            writer.commit();
+
+            try (IndexReader reader = DirectoryReader.open(directory)) {
+                EntityGeometryIterator iterator = new LuceneEntityGeometryIterator(new IndexSearcher(reader),
+                        new MatchAllDocsQuery());
+
+                int count = 0;
+                try {
+                    while (iterator.hasNextGeometry()) {
+                        assertNotNull(iterator.nextGeometry());
+                        assertNotNull(iterator.lastSourceGeometryLiteral());
+                        count++;
+                    }
+                } finally {
+                    iterator.close();
+                }
+
+                assertEquals(documentCount, count);
+            }
+        }
+    }
+
+    private Document currentSchemaDocument(long entityId, IndexGeometry geometry) throws IOException {
+        Document doc = new Document();
+        doc.add(new LongPoint(LuceneGeoDocumentSchema.FIELD_ID, entityId));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_ID, entityId));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
+                serializeGeometry(geometry.indexGeometry())));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SCHEMA_VERSION,
+                LuceneGeoDocumentSchema.SCHEMA_VERSION));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_LEXICAL_FORM,
+                geometry.sourceGeometryLiteral().lexicalForm()));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_DATATYPE,
+                GeoConstants.GEO_WKT_LITERAL.stringValue()));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS,
+                geometry.sourceGeometryLiteral().effectiveCrsUri()));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_CRS, IndexGeometry.INDEX_CRS));
+        doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE,
+                IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY));
+        return doc;
     }
 
     @Test

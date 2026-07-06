@@ -15,10 +15,10 @@ import java.io.IOException;
 class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	private final static int PAGE_SIZE = 1000;
 
-	private int page;
 	private TopDocs topDocs;
 	private final IndexSearcher searcher;
-	private Query query;
+	private final Query query;
+	private boolean exhausted;
 
 	private int idx = -1;
 
@@ -30,12 +30,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 		this.searcher = searcher;
 		this.query = query;
 
-		// Get initial page
-		// Note that PAGE_SIZE is currently 1000 and Lucene will track total hits up to 1000+1 by default so it's ok
-		// to just use the searcher like this. If page size goes > 1000 or Lucene's total hits tracking default changes
-		// we'll need to use a TopDocsCollector.
 		topDocs = searcher.search(query, PAGE_SIZE);
-		page = 1;
 	}
 
 	@Override
@@ -50,14 +45,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 		}
 
 		try {
-			if (idx + 1 < topDocs.scoreDocs.length) {
-				// next doc
-				advanceLuceneDocument();
-			} else {
-				// next page
-				advanceLucenePage();
-			}
-
+			advanceLuceneDocument();
 			return geometry;
 		} catch (IOException e) {
 			throw new RuntimeException(e);
@@ -76,10 +64,10 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 
 	@Override
 	public boolean hasNextGeometry() {
-		return  // There are more documents in this page
-				idx + 1 < topDocs.scoreDocs.length
-				// Lucene has more pages
-				|| page * PAGE_SIZE < topDocs.totalHits.value;
+		if (idx + 1 < topDocs.scoreDocs.length) {
+			return true;
+		}
+		return loadNextPage();
 	}
 
 	@Override
@@ -91,16 +79,26 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 		searcher.getIndexReader().close();
 	}
 
-	private boolean advanceLucenePage() throws IOException {
-		if (page * PAGE_SIZE < topDocs.totalHits.value) {
-			// Still more results to collect
-			topDocs = searcher.searchAfter(topDocs.scoreDocs[topDocs.scoreDocs.length - 1], query, PAGE_SIZE);
-			page++;
-			idx = -1;
-			advanceLuceneDocument();
-			return true;
+	private boolean loadNextPage() {
+		if (exhausted) {
+			return false;
 		}
-		return false;
+		if (topDocs.scoreDocs.length == 0 || topDocs.scoreDocs.length < PAGE_SIZE) {
+			exhausted = true;
+			return false;
+		}
+		try {
+			ScoreDoc last = topDocs.scoreDocs[topDocs.scoreDocs.length - 1];
+			topDocs = searcher.searchAfter(last, query, PAGE_SIZE);
+			idx = -1;
+			if (topDocs.scoreDocs.length == 0) {
+				exhausted = true;
+				return false;
+			}
+			return true;
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	private void advanceLuceneDocument() throws IOException {
