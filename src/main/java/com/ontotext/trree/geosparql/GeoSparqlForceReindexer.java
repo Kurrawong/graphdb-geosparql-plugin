@@ -1,8 +1,6 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginConnection;
-import com.ontotext.trree.sdk.StatementIterator;
 
 /**
  * Utility class for reindexing all indexable data.
@@ -18,70 +16,10 @@ public class GeoSparqlForceReindexer {
 
 	public void reindex(PluginConnection pluginConnection) throws Exception {
 		indexer.freshIndex();
-		reindexGeometries(pluginConnection);
-		reindexFeatures(pluginConnection);
-	}
-
-	private void reindexGeometries(PluginConnection pluginConnection) {
-		class Processor {
-			String mapSubject(Long subject) {
-				return pluginConnection.getEntities().get(subject).stringValue();
-			}
-
-			void process(long predicate) {
-				StatementIterator geoSerItty = pluginConnection.getStatements().get(0, predicate, 0);
-				try {
-					while (geoSerItty.next()) {
-						IndexGeometry g = plugin.getIndexGeometryFromLiteralId(geoSerItty.subject, geoSerItty.object,
-								predicate, pluginConnection.getEntities());
-						if (g != null) {
-							indexer.indexGeometry(geoSerItty.subject, this::mapSubject, g);
-						}
-					}
-				} finally {
-					geoSerItty.close();
-				}
-			}
-		}
-
-		Processor p = new Processor();
-
-		p.process(plugin.asWKT);
-		p.process(plugin.asGML);
-	}
-
-	private void reindexFeatures(PluginConnection pluginConnection) {
-		class Processor {
-			String mapSubject(Long subject) {
-				return pluginConnection.getEntities().get(subject).stringValue();
-			}
-
-			void process(long feature, long subject, long predicate) {
-				StatementIterator geoSerItty = pluginConnection.getStatements().get(subject, predicate, 0);
-				try {
-					while (geoSerItty.next()) {
-						IndexGeometry g = plugin.getIndexGeometryFromLiteralId(subject, geoSerItty.object, predicate,
-								pluginConnection.getEntities());
-						if (g != null) {
-							indexer.indexGeometry(feature, this::mapSubject, g);
-						}
-					}
-				} finally {
-					geoSerItty.close();
-				}
-			}
-		}
-
-		Processor p = new Processor();
-
-		StatementIterator defGeoItty = pluginConnection.getStatements().get(0, plugin.hasDefaultGeometry, 0);
-		try {
-			while (defGeoItty.next()) {
-				p.process(defGeoItty.subject, defGeoItty.object, plugin.asWKT);
-				p.process(defGeoItty.subject, defGeoItty.object, plugin.asGML);
-			}
-		} finally {
-			defGeoItty.close();
-		}
+		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin, pluginConnection);
+		source.forEachGeometryResource((geometryResourceId, geometries) ->
+				indexer.indexGeometryList(geometryResourceId, source.subjectMapper(), geometries));
+		source.forEachFeature((featureId, geometries) ->
+				indexer.indexGeometryList(featureId, source.subjectMapper(), geometries));
 	}
 }

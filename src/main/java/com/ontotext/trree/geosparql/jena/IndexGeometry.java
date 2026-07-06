@@ -8,14 +8,6 @@ import org.locationtech.jts.geom.Geometry;
  * Derived geometry used only for Lucene candidate lookup.
  */
 public final class IndexGeometry {
-	public static final int SCHEMA_VERSION = 2;
-	public static final String FIELD_SCHEMA_VERSION = "geoSchemaVersion";
-	public static final String FIELD_SOURCE_LEXICAL_FORM = "geoExactLexicalForm";
-	public static final String FIELD_SOURCE_DATATYPE = "geoExactDatatype";
-	public static final String FIELD_SOURCE_CRS = "geoExactCrs";
-	public static final String FIELD_INDEX_CRS = "geoIndexCrs";
-	public static final String FIELD_INDEX_BUILD_MODE = "geoIndexBuildMode";
-
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
 	public static final String BUILD_MODE_TRANSFORMED_GEOMETRY = "transformed-geometry";
 

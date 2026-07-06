@@ -4,7 +4,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.ontotext.trree.geosparql.function.GeoSparqlFunctionRegistration;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
-import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
@@ -13,7 +12,6 @@ import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import gnu.trove.TLongObjectHashMap;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
-import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
@@ -217,32 +215,11 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         this.config = config;
     }
 
-    IndexGeometry getIndexGeometryFromLiteralId(long subject, long id, long geometryTypeId, Entities entities) {
-        Value value = entities.get(id);
-        if (!(value instanceof Literal)) {
-            return null;
-        }
-        IRI datatype = geometryTypeId == asGML ? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
-        try {
-            return getQueryIndexGeometry((Literal) value, datatype);
-        } catch (JenaGeoSparqlException e) {
-            String subjectText = entities.get(subject).stringValue();
-            if (config.isIgnoreErrors()) {
-                getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed: {}",
-                        subjectText, e.getMessage());
-                return null;
-            }
-            throw new PluginException("Could not index GeoSPARQL geometry for subject " + subjectText
-                    + ". If you want to skip invalid repository geometries, configure ignoreErrors = true and rebuild the index.",
-                    e);
-        }
+	IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
+		SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
+				fallbackDatatype);
+		return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
 	}
-
-	IndexGeometry getQueryIndexGeometry(Literal literal, IRI fallbackDatatype) {
-        SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
-                fallbackDatatype);
-        return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
-    }
 
     private void initPluginFeatures(Entities entities) {
         JenaGeometryAdapter.initialize();

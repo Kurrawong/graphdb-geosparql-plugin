@@ -1,14 +1,9 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
 import com.ontotext.trree.sdk.*;
 import gnu.trove.TLongHashSet;
 import gnu.trove.TLongProcedure;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Function;
 
 /**
  * Listener for incremental indexing of GeoSPARQL data.
@@ -95,94 +90,29 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 
 		final TLongHashSet processedFeatures = new TLongHashSet();
 
-		final Function<Long, String> subjectMapper = (subject) -> pluginConnection.getEntities().get(subject).stringValue();
+		RepositoryGeometrySource source = new RepositoryGeometrySource(parent, pluginConnection);
 
 		geometriesToUpdate.forEach(new TLongProcedure() {
-			final List<IndexGeometry> geometries = new ArrayList<IndexGeometry>();
-
-			void processGeometryWithPredicate(long value, long predicate) {
-				StatementIterator sit = pluginConnection.getStatements().get(value, predicate, 0);
-				try {
-					while (sit.next()) {
-						IndexGeometry geometry = parent.getIndexGeometryFromLiteralId(value, sit.object, predicate,
-								pluginConnection.getEntities());
-						if (geometry != null) {
-							geometries.add(geometry);
-						}
-					}
-				} finally {
-					sit.close();
-				}
-			}
-
 			@Override
 			public boolean execute(long value) {
-				{
-					// Index the geometry
-					processGeometryWithPredicate(value, asWKT);
-					processGeometryWithPredicate(value, asGML);
-					parent.indexer.indexGeometryList(value, subjectMapper, geometries);
-				}
-
-				{
-					// Add each feature and reuse the geometries we already identified
-					StatementIterator sit = pluginConnection.getStatements().get(0, hasDefaultGeometry, value);
-					try {
-						while (sit.next()) {
-							parent.indexer.indexGeometryList(sit.subject, subjectMapper, geometries);
-							processedFeatures.add(sit.subject);
-						}
-					} finally {
-						sit.close();
-					}
-				}
-
-				geometries.clear();
-
+				parent.indexer.indexGeometryList(value, source.subjectMapper(),
+						source.geometriesForGeometryResource(value));
+				source.forEachFeatureUsingGeometry(value, (featureId, geometries) -> {
+					parent.indexer.indexGeometryList(featureId, source.subjectMapper(), geometries);
+					processedFeatures.add(featureId);
+				});
 				return true;
 			}
 		});
 
 		featuresToUpdate.forEach(new TLongProcedure() {
-			final List<IndexGeometry> geometries = new ArrayList<IndexGeometry>();
-
-			void processGeometryWithPredicate(long value, long predicate) {
-				StatementIterator sit = pluginConnection.getStatements().get(value, predicate, 0);
-				try {
-					while (sit.next()) {
-						IndexGeometry geometry = parent.getIndexGeometryFromLiteralId(value, sit.object, predicate,
-								pluginConnection.getEntities());
-						if (geometry != null) {
-							geometries.add(geometry);
-						}
-					}
-				} finally {
-					sit.close();
-				}
-			}
-			void processFeatureWithPredicate(long value, long predicate) {
-				StatementIterator sit = pluginConnection.getStatements().get(value, hasDefaultGeometry, 0);
-				try {
-					while (sit.next()) {
-						processGeometryWithPredicate(sit.object, predicate);
-					}
-				} finally {
-					sit.close();
-				}
-			}
-
 			@Override
 			public boolean execute(long value) {
 
 				// unless we already processed that feature as part of the geometries update
 				if (!processedFeatures.contains(value)) {
-					processFeatureWithPredicate(value, asWKT);
-					processFeatureWithPredicate(value, asGML);
-					parent.indexer.indexGeometryList(value, subjectMapper, geometries);
+					parent.indexer.indexGeometryList(value, source.subjectMapper(), source.geometriesForFeature(value));
 				}
-
-				geometries.clear();
-
 				return true;
 			}
 		});

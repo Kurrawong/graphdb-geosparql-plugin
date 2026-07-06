@@ -38,7 +38,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private boolean inverse;
 
 	GeoSparqlRelationIterator(GeoSparqlPlugin parent, GeoSparqlPropertyRelation relation,
-	                                 long subject, long predicate, long object, Entities entities) {
+							   long subject, long predicate, long object, Entities entities) {
 		this.parent = parent;
 		this.logger = parent.getLogger();
 		this.relation = relation;
@@ -68,14 +68,14 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			// Subject is unbound; Lucene candidate lookup will use the bound object index geometry.
 			iKnownEntities = iObjectGeometries;
 			iCandidateEntities = searchIterator = new LuceneMultiSearchEntityGeometryIterator(parent.indexer,
-					relation.getSpatialOperation());
+					relation.getCandidateLookupPolicy());
 
 			inverse = true;
 		} else {
 			// Object is unbound; Lucene candidate lookup will use the bound subject index geometry.
 			iKnownEntities = iSubjectGeometries;
 			iCandidateEntities = searchIterator = new LuceneMultiSearchEntityGeometryIterator(parent.indexer,
-					relation.getInverseSpatialOperation());
+					relation.getInverseCandidateLookupPolicy());
 
 			inverse = false;
 		}
@@ -178,9 +178,9 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		EntityGeometryIterator iterator;
 		Value value = entities.get(entityId);
 		if (value instanceof Literal) {
-			IRI datatype = GeoConstants.GEO_GML_LITERAL.equals(((Literal)value).getDatatype())
+			IRI datatype = GeoConstants.GEO_GML_LITERAL.equals(((Literal) value).getDatatype())
 					? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
-			IndexGeometry indexGeometry = parent.getQueryIndexGeometry((Literal) value, datatype);
+			IndexGeometry indexGeometry = parent.getIndexGeometryFromLiteral((Literal) value, datatype);
 			iterator = new SingleEntityGeometryIterator(entityId, indexGeometry);
 		} else {
 			// the id refers to an IRI referring to a geometry/feature

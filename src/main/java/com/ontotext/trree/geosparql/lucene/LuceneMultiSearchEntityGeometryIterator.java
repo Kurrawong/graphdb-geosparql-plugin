@@ -1,28 +1,29 @@
 package com.ontotext.trree.geosparql.lucene;
 
+import com.ontotext.trree.geosparql.CandidateLookupPolicy;
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.locationtech.jts.geom.Geometry;
-import org.apache.lucene.spatial.query.SpatialOperation;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Takes an EntityGeometryIterator and looks up each geometry from it in Lucene with the provided SpatialOperation.
+ * Looks up each known index geometry in Lucene with the provided candidate lookup policy.
  */
 public class LuceneMultiSearchEntityGeometryIterator implements EntityGeometryIterator {
-    private GeoSparqlIndexer indexer;
-    private SpatialOperation spatialOperation;
-    private EntityGeometryIterator luceneIterator;
-    private List<EntityGeometryIterator> iteratorsToClose = new ArrayList<>();
+	private GeoSparqlIndexer indexer;
+	private CandidateLookupPolicy candidateLookupPolicy;
+	private EntityGeometryIterator luceneIterator;
+	private List<EntityGeometryIterator> iteratorsToClose = new ArrayList<>();
 
-    public LuceneMultiSearchEntityGeometryIterator(GeoSparqlIndexer indexer, SpatialOperation spatialOperation) {
-        this.indexer = indexer;
-        this.spatialOperation = spatialOperation;
-    }
+	public LuceneMultiSearchEntityGeometryIterator(GeoSparqlIndexer indexer,
+												  CandidateLookupPolicy candidateLookupPolicy) {
+		this.indexer = indexer;
+		this.candidateLookupPolicy = candidateLookupPolicy;
+	}
 
     @Override
     public long getEntityForLastGeometry() {
@@ -65,8 +66,8 @@ public class LuceneMultiSearchEntityGeometryIterator implements EntityGeometryIt
         }
     }
 
-    public void search(Geometry geometry) {
-        luceneIterator = indexer.getMatchingObjects(geometry, spatialOperation);
-        iteratorsToClose.add(luceneIterator);
-    }
+	public void search(Geometry geometry) {
+		luceneIterator = indexer.getMatchingObjects(geometry, candidateLookupPolicy);
+		iteratorsToClose.add(luceneIterator);
+	}
 }

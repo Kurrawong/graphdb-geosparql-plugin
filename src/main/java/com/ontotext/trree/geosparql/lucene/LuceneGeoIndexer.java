@@ -1,12 +1,13 @@
 package com.ontotext.trree.geosparql.lucene;
 
+import com.ontotext.trree.geosparql.CandidateLookupPolicy;
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
-import org.apache.lucene.document.*;
+import org.apache.lucene.document.Document;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.spatial.SpatialStrategy;
@@ -25,7 +26,7 @@ import org.locationtech.spatial4j.context.jts.JtsSpatialContext;
 import org.locationtech.spatial4j.shape.jts.JtsGeometry;
 import org.slf4j.Logger;
 
-import java.io.*;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Function;
@@ -34,15 +35,6 @@ import java.util.function.Function;
  * Lucene implementation of the GeoSPARQL indexer.
  */
 public class LuceneGeoIndexer implements GeoSparqlIndexer {
-
-	private final static FieldType GEO_DATA_FIELD_TYPE = new FieldType();
-
-	static {
-		GEO_DATA_FIELD_TYPE.setStored(true);
-		GEO_DATA_FIELD_TYPE.setIndexOptions(IndexOptions.NONE);
-		GEO_DATA_FIELD_TYPE.freeze();
-	}
-
 	private GeoSparqlPlugin parent;
 
 	private JtsSpatialContext ctx;
@@ -80,33 +72,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		schemaMismatchDetected = detectSchemaMismatch();
 	}
 
-	private Document newGeoDocument(long id, IndexGeometry geometry) {
-		final Document doc = new Document();
-		doc.add(new LongPoint("id", id));
-		doc.add(new StoredField("id", id));
-
-        JtsGeometry shape = new JtsGeometry(geometry.indexGeometry(), ctx, true, true);
-		// Adds an index to JtsGeometry class internally to compute spatial relations faster.
-        shape.index();
-
-        for (Field f : strategy.createIndexableFields(shape)) {
-            doc.add(f);
-        }
-
-		doc.add(geometryToField(geometry.indexGeometry()));
-		doc.add(new StoredField(IndexGeometry.FIELD_SCHEMA_VERSION, IndexGeometry.SCHEMA_VERSION));
-		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM,
-				geometry.sourceGeometryLiteral().lexicalForm()));
-		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_DATATYPE,
-				geometry.sourceGeometryLiteral().datatype().stringValue()));
-		doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_CRS,
-				geometry.sourceGeometryLiteral().effectiveCrsUri()));
-		doc.add(new StoredField(IndexGeometry.FIELD_INDEX_CRS, geometry.indexCrs()));
-		doc.add(new StoredField(IndexGeometry.FIELD_INDEX_BUILD_MODE, geometry.indexBuildMode()));
-
-		return doc;
-	}
-
 	@Override
 	public void initSettings() {
 		SpatialPrefixTree grid;
@@ -120,9 +85,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			throw new PluginException("Unexpected prefix tree type: " + prefixTree);
 		}
 
-		RecursivePrefixTreeStrategy rptStrategy = new RecursivePrefixTreeStrategy(grid, "geoData1");
-		SerializedDVStrategy sdvStrategy = new SerializedDVStrategy(ctx, "geoData2");
-		this.strategy = new CompositeSpatialStrategy("geoData", rptStrategy, sdvStrategy);
+		RecursivePrefixTreeStrategy rptStrategy = new RecursivePrefixTreeStrategy(grid,
+				LuceneGeoDocumentSchema.FIELD_SPATIAL_PREFIX);
+		SerializedDVStrategy sdvStrategy = new SerializedDVStrategy(ctx,
+				LuceneGeoDocumentSchema.FIELD_SPATIAL_DV);
+		this.strategy = new CompositeSpatialStrategy(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
+				rptStrategy, sdvStrategy);
 	}
 
 	@Override
@@ -158,10 +126,10 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	public void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<IndexGeometry> geometries) {
 		//logger.info("Indexing literal for {}; {}", parent.getEntities().get(subject), geometries.size());
 		try {
-			indexWriter.deleteDocuments(LongPoint.newExactQuery("id", subject));
+			indexWriter.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(subject));
 			if (!geometries.isEmpty()) {
 				for (IndexGeometry geometry : geometries) {
-					indexWriter.addDocument(newGeoDocument(subject, geometry));
+					indexWriter.addDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
 				}
 			}
 		} catch (Exception e) {
@@ -172,42 +140,28 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	@Override
 	public void indexGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
 		try {
-			indexWriter.addDocument(newGeoDocument(subject, geometry));
+			indexWriter.addDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
 		} catch (Exception e) {
 			handleCreateDocumentUnhandledException(subject, subjectMapper, e);
 		}
 	}
 
-	private EntityGeometryIterator getDisjointObjects(Geometry geometry) {
-		JtsGeometry shape = new JtsGeometry(geometry, ctx, true, true);
-		// Adds an index to JtsGeometry class internally to compute spatial relations faster.
-		shape.index();
-		final SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, shape);
-
-		Query query = new BooleanQuery.Builder()
-				.add(new MatchAllDocsQuery(), BooleanClause.Occur.MUST)
-				.add(strategy.makeQuery(args), BooleanClause.Occur.MUST_NOT).build();
-
-		return getIteratorForQuery(query);
-	}
-
 	@Override
-	public EntityGeometryIterator getMatchingObjects(Geometry geometry, SpatialOperation spatialOperation) {
+	public EntityGeometryIterator getMatchingObjects(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
 		assertCurrentSchema();
-		if (spatialOperation == null) {
+		if (candidateLookupPolicy == CandidateLookupPolicy.FULL_SCAN) {
 			return getGeometriesFor(0);
-		} else if (spatialOperation == SpatialOperation.IsDisjointTo) {
-			return getDisjointObjects(geometry);
-		} else {
+		} else if (candidateLookupPolicy == CandidateLookupPolicy.INTERSECTS) {
 			JtsGeometry shape = new JtsGeometry(geometry, ctx, true, true);
 			// Adds an index to JtsGeometry class internally to compute spatial relations faster.
 			shape.index();
-			final SpatialArgs args = new SpatialArgs(spatialOperation, shape);
+			final SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, shape);
 
 			Query query = strategy.makeQuery(args);
 
 			return getIteratorForQuery(query);
 		}
+		throw new PluginException("Unsupported GeoSPARQL candidate lookup policy: " + candidateLookupPolicy);
 	}
 
 	@Override
@@ -215,9 +169,9 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		assertCurrentSchema();
 		final Query query;
 		if (subject > 0) {
-			query = LongPoint.newExactQuery("id", subject);
+			query = LuceneGeoDocumentSchema.entityIdQuery(subject);
 		} else {
-			query = new MatchAllDocsQuery();
+			query = LuceneGeoDocumentSchema.allDocumentsQuery();
 		}
 
 		return getIteratorForQuery(query);
@@ -243,18 +197,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	}
 
-    private static Field geometryToField(Geometry geometry) {
-		try {
-			ByteArrayOutputStream bos = new ByteArrayOutputStream();
-			ObjectOutputStream oos = new ObjectOutputStream(bos);
-			oos.writeObject(geometry);
-			oos.close();
-			return new Field("geoData", bos.toByteArray(), GEO_DATA_FIELD_TYPE);
-		} catch (Exception e) {
-			throw new PluginException("Unable to create field from geometry.", e);
-		}
-	}
-
 	private void handleCreateDocumentUnhandledException(long subject, Function<Long, String> subjectMapper, Exception e) {
 		String subjectIri = subjectMapper.apply(subject);
 
@@ -263,16 +205,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		} else {
 			throw new PluginException("Could not create GeoDocument for subject " + subjectIri +
 					"\nIf you want to ignore this message and still build the index configure ignoreErrors = true (refer to documentation) and rebuild the index", e);
-		}
-	}
-
-	static Geometry fieldValueToGeometry(byte[] fieldValue) {
-		try {
-			ByteArrayInputStream bis = new ByteArrayInputStream(fieldValue);
-			ObjectInputStream ois = new ObjectInputStream(bis);
-			return (Geometry) ois.readObject();
-		} catch (Exception e) {
-			throw new PluginException("Unable to create geometry from field value.", e);
 		}
 	}
 
@@ -290,7 +222,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			try (IndexReader reader = DirectoryReader.open(directory)) {
 				for (int i = 0; i < reader.maxDoc(); i++) {
 					Document doc = reader.document(i);
-					if (!isCurrentSchemaDocument(doc)) {
+					if (!LuceneGeoDocumentSchema.isCurrentSchemaDocument(doc)) {
 						return true;
 					}
 				}
@@ -303,16 +235,4 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 	}
 
-	private boolean isCurrentSchemaDocument(Document doc) {
-		IndexableField schemaVersion = doc.getField(IndexGeometry.FIELD_SCHEMA_VERSION);
-		return schemaVersion != null
-				&& schemaVersion.numericValue() != null
-				&& schemaVersion.numericValue().intValue() == IndexGeometry.SCHEMA_VERSION
-				&& doc.get(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM) != null
-				&& doc.get(IndexGeometry.FIELD_SOURCE_DATATYPE) != null
-				&& doc.get(IndexGeometry.FIELD_SOURCE_CRS) != null
-				&& IndexGeometry.INDEX_CRS.equals(doc.get(IndexGeometry.FIELD_INDEX_CRS))
-				&& IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY.equals(
-						doc.get(IndexGeometry.FIELD_INDEX_BUILD_MODE));
-	}
 }

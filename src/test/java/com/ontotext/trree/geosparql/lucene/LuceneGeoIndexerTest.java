@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.test.TemporaryLocalFolder;
+import com.ontotext.trree.geosparql.CandidateLookupPolicy;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
@@ -142,18 +143,21 @@ public class LuceneGeoIndexerTest {
         TopDocs docs = indexSearcher.search(new MatchAllDocsQuery(), 1);
         Document doc = indexReader.document(docs.scoreDocs[0].doc);
 
-        assertEquals(IndexGeometry.SCHEMA_VERSION,
-                doc.getField(IndexGeometry.FIELD_SCHEMA_VERSION).numericValue().intValue());
-        assertNotNull(doc.get(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM));
-        assertEquals(GeoConstants.GEO_WKT_LITERAL.stringValue(), doc.get(IndexGeometry.FIELD_SOURCE_DATATYPE));
-        assertEquals(IndexGeometry.INDEX_CRS, doc.get(IndexGeometry.FIELD_SOURCE_CRS));
-        assertEquals(IndexGeometry.INDEX_CRS, doc.get(IndexGeometry.FIELD_INDEX_CRS));
-        assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, doc.get(IndexGeometry.FIELD_INDEX_BUILD_MODE));
+        assertEquals(LuceneGeoDocumentSchema.SCHEMA_VERSION,
+                doc.getField(LuceneGeoDocumentSchema.FIELD_SCHEMA_VERSION).numericValue().intValue());
+        assertNotNull(doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_LEXICAL_FORM));
+        assertEquals(GeoConstants.GEO_WKT_LITERAL.stringValue(),
+                doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_DATATYPE));
+        assertEquals(IndexGeometry.INDEX_CRS, doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS));
+        assertEquals(IndexGeometry.INDEX_CRS, doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_CRS));
+        assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY,
+                doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE));
     }
 
     @Test
-    public void testNullSpatialOperationScansAllDocuments() throws Exception {
-        EntityGeometryIterator iterator = luceneGeoIndexer.getMatchingObjects(geometries.get(0).indexGeometry(), null);
+    public void testFullScanCandidateLookupScansAllDocuments() throws Exception {
+        EntityGeometryIterator iterator = luceneGeoIndexer.getMatchingObjects(geometries.get(0).indexGeometry(),
+                CandidateLookupPolicy.FULL_SCAN);
 
         int count = 0;
         try {
@@ -212,28 +216,30 @@ public class LuceneGeoIndexerTest {
         try (FSDirectory dir = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(projectedDataDir));
              IndexReader reader = DirectoryReader.open(dir)) {
             Document doc = reader.document(0);
-            assertEquals(PROJECTED_POINT_WKT, doc.get(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM));
-            assertEquals(GeoConstants.GEO_WKT_LITERAL.stringValue(), doc.get(IndexGeometry.FIELD_SOURCE_DATATYPE));
-            assertEquals(EPSG_32634, doc.get(IndexGeometry.FIELD_SOURCE_CRS));
-            assertEquals(IndexGeometry.INDEX_CRS, doc.get(IndexGeometry.FIELD_INDEX_CRS));
+            assertEquals(PROJECTED_POINT_WKT, doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_LEXICAL_FORM));
+            assertEquals(GeoConstants.GEO_WKT_LITERAL.stringValue(),
+                    doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_DATATYPE));
+            assertEquals(EPSG_32634, doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS));
+            assertEquals(IndexGeometry.INDEX_CRS, doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_CRS));
             assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY,
-                    doc.get(IndexGeometry.FIELD_INDEX_BUILD_MODE));
+                    doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE));
         }
     }
 
     private long getDocId(ScoreDoc docs) throws IOException {
-        return indexReader.document(docs.doc).getField("id").numericValue().longValue();
+        return indexReader.document(docs.doc).getField(LuceneGeoDocumentSchema.FIELD_ID).numericValue().longValue();
     }
 
     private void writeIndexWithoutSchemaV2Metadata(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
         try (FSDirectory dir = FSDirectory.open(indexDir);
-             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+            IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
             Document doc = new Document();
-            doc.add(new LongPoint("id", 1L));
-            doc.add(new StoredField("id", 1L));
-            doc.add(new StoredField("geoData", serializeGeometry(geometries.get(0).indexGeometry())));
+            doc.add(new LongPoint(LuceneGeoDocumentSchema.FIELD_ID, 1L));
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_ID, 1L));
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
+                    serializeGeometry(geometries.get(0).indexGeometry())));
             writer.addDocument(doc);
         }
     }
@@ -243,18 +249,20 @@ public class LuceneGeoIndexerTest {
         Files.createDirectories(indexDir);
         IndexGeometry geometry = geometries.get(0);
         try (FSDirectory dir = FSDirectory.open(indexDir);
-             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+            IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
             Document doc = new Document();
-            doc.add(new LongPoint("id", 1L));
-            doc.add(new StoredField("id", 1L));
-            doc.add(new StoredField("geoData", serializeGeometry(geometry.indexGeometry())));
-            doc.add(new StoredField(IndexGeometry.FIELD_SCHEMA_VERSION, IndexGeometry.SCHEMA_VERSION));
-            doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM,
+            doc.add(new LongPoint(LuceneGeoDocumentSchema.FIELD_ID, 1L));
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_ID, 1L));
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
+                    serializeGeometry(geometry.indexGeometry())));
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SCHEMA_VERSION,
+                    LuceneGeoDocumentSchema.SCHEMA_VERSION));
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_LEXICAL_FORM,
                     geometry.sourceGeometryLiteral().lexicalForm()));
-            doc.add(new StoredField(IndexGeometry.FIELD_SOURCE_DATATYPE,
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_DATATYPE,
                     GeoConstants.GEO_WKT_LITERAL.stringValue()));
-            doc.add(new StoredField(IndexGeometry.FIELD_INDEX_CRS, IndexGeometry.INDEX_CRS));
-            doc.add(new StoredField(IndexGeometry.FIELD_INDEX_BUILD_MODE,
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_CRS, IndexGeometry.INDEX_CRS));
+            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE,
                     IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY));
             writer.addDocument(doc);
         }

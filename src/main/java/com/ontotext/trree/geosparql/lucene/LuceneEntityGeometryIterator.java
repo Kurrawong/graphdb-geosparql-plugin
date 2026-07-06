@@ -1,14 +1,11 @@
 package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
-import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.locationtech.jts.geom.Geometry;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.search.*;
-import org.apache.lucene.util.BytesRef;
-import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 
 import java.io.IOException;
 
@@ -17,7 +14,6 @@ import java.io.IOException;
  */
 class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	private final static int PAGE_SIZE = 1000;
-	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 
 	private int page;
 	private TopDocs topDocs;
@@ -25,8 +21,6 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	private Query query;
 
 	private int idx = -1;
-	private int geoDatasIndex = 0;
-	private BytesRef[] geoDatas;
 
 	private long entityId;
 	private Geometry geometry;
@@ -56,10 +50,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 		}
 
 		try {
-			if (geoDatas != null && geoDatasIndex + 1 < geoDatas.length) {
-				// next geometry
-				geoDatasIndex++;
-			} else if (idx + 1 < topDocs.scoreDocs.length) {
+			if (idx + 1 < topDocs.scoreDocs.length) {
 				// next doc
 				advanceLuceneDocument();
 			} else {
@@ -67,7 +58,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 				advanceLucenePage();
 			}
 
-			return geometry = LuceneGeoIndexer.fieldValueToGeometry(geoDatas[geoDatasIndex].bytes);
+			return geometry;
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
@@ -85,17 +76,14 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 
 	@Override
 	public boolean hasNextGeometry() {
-		return  // There are more geometries in this document
-				(geoDatas != null && geoDatasIndex + 1 < geoDatas.length)
-				// There are more documents in this page
-				|| idx + 1 < topDocs.scoreDocs.length
+		return  // There are more documents in this page
+				idx + 1 < topDocs.scoreDocs.length
 				// Lucene has more pages
 				|| page * PAGE_SIZE < topDocs.totalHits.value;
 	}
 
 	@Override
 	public void advanceToNextEntity() {
-		geoDatas = null;
 	}
 
 	@Override
@@ -117,19 +105,12 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 
 	private void advanceLuceneDocument() throws IOException {
 		idx++;
-		geoDatasIndex = 0;
 		ScoreDoc d = topDocs.scoreDocs[idx];
 		Document doc = searcher.doc(d.doc);
 
-		entityId = (Long) doc.getField("id").numericValue();
-		geoDatas = doc.getBinaryValues("geoData");
-		sourceGeometryLiteral = sourceGeometryLiteralFromDocument(doc);
-	}
-
-	private SourceGeometryLiteral sourceGeometryLiteralFromDocument(Document doc) {
-		String lexicalForm = doc.get(IndexGeometry.FIELD_SOURCE_LEXICAL_FORM);
-		String datatype = doc.get(IndexGeometry.FIELD_SOURCE_DATATYPE);
-		return SourceGeometryLiteral.fromLiteral(
-				VALUE_FACTORY.createLiteral(lexicalForm, VALUE_FACTORY.createIRI(datatype)));
+		IndexGeometry indexGeometry = LuceneGeoDocumentSchema.indexGeometry(doc);
+		entityId = LuceneGeoDocumentSchema.entityId(doc);
+		geometry = indexGeometry.indexGeometry();
+		sourceGeometryLiteral = indexGeometry.sourceGeometryLiteral();
 	}
 }

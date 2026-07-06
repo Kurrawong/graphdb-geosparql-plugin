@@ -1,7 +1,6 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
-import org.apache.lucene.spatial.query.SpatialOperation;
 import org.locationtech.jts.geom.Geometry;
 
 import java.util.List;
@@ -26,13 +25,13 @@ public interface GeoSparqlIndexer {
 
 	/**
 	 * Returns an iterator over entities/geometries that matches the provided geometry
-	 * using the provided spatial operation.
+	 * using the provided candidate lookup policy.
 	 *
 	 * @param geometry a geometry
-	 * @param spatialOperation the spatial operation to filter by
+	 * @param candidateLookupPolicy the candidate lookup policy
 	 * @return an iterator over entities/geometries
 	 */
-	EntityGeometryIterator getMatchingObjects(Geometry geometry, SpatialOperation spatialOperation);
+	EntityGeometryIterator getMatchingObjects(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy);
 
 	/**
 	 * Returns an iterator over all geometries for the provided entity
