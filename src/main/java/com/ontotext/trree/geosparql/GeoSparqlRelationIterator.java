@@ -14,6 +14,8 @@ import org.eclipse.rdf4j.model.Value;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Evaluates GeoSPARQL property relations by using Lucene for candidate lookup
@@ -34,6 +36,9 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private EntityGeometryIterator iObjectGeometries;
 
 	private LuceneMultiSearchEntityGeometryIterator searchIterator;
+	private final Set<EntityPair> emittedEntityPairs = new HashSet<>();
+	private boolean resetCandidateEntitiesForEachKnownGeometry;
+	private long candidateEntityId;
 
 	private boolean inverse;
 
@@ -62,6 +67,8 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			// without Lucene candidate lookup.
 			iKnownEntities = iObjectGeometries;
 			iCandidateEntities = iSubjectGeometries;
+			resetCandidateEntitiesForEachKnownGeometry = true;
+			candidateEntityId = subject;
 
 			inverse = true;
 		} else if (iSubjectGeometries == null) {
@@ -101,6 +108,8 @@ class GeoSparqlRelationIterator extends StatementIterator {
 					// If either subject or object is unbound, candidate lookup starts
 					// from the new known geometry.
 					searchIterator.search(knownGeometry);
+				} else if (resetCandidateEntitiesForEachKnownGeometry) {
+					resetCandidateEntities();
 				}
 
 				if (logger.isDebugEnabled()) {
@@ -118,16 +127,25 @@ class GeoSparqlRelationIterator extends StatementIterator {
 							candidateGeometry);
 				}
 
+				EntityPair entityPair = currentEntityPair();
+				if (emittedEntityPairs.contains(entityPair)) {
+					continue;
+				}
+
 				result = inverse
 						? relation.evaluate(candidateSourceGeometryLiteral, knownSourceGeometryLiteral)
 						: relation.evaluate(knownSourceGeometryLiteral, candidateSourceGeometryLiteral);
+
+				if (result) {
+					emittedEntityPairs.add(entityPair);
+				}
 			} else {
 				logger.debug(">>>>>>>> GeoSPARQL: No available candidate geometries matching the query!");
 				break;
 			}
 
 			if (result) {
-				// NB: Skips the remaining geometries for this lastEntity as we already found a match
+				// Best-effort skip after a match; emittedEntityPairs enforces result uniqueness.
 				iKnownEntities.advanceToNextEntity();
 
 				if (logger.isDebugEnabled()) {
@@ -153,17 +171,8 @@ class GeoSparqlRelationIterator extends StatementIterator {
 
 	@Override
 	public void close() {
-		try {
-			iKnownEntities.close();
-		} catch (IOException e) {
-			logger.warn("Unable to close entity-geometry iterator.", e);
-		}
-
-		try {
-			iCandidateEntities.close();
-		} catch (IOException e) {
-			logger.warn("Unable to close entity-geometry iterator.", e);
-		}
+		closeIterator(iKnownEntities);
+		closeIterator(iCandidateEntities);
 	}
 
 	/**
@@ -192,5 +201,59 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		}
 
 		return iterator;
+	}
+
+	private EntityPair currentEntityPair() {
+		if (inverse) {
+			return new EntityPair(iCandidateEntities.getEntityForLastGeometry(),
+					iKnownEntities.getEntityForLastGeometry());
+		}
+		return new EntityPair(iKnownEntities.getEntityForLastGeometry(),
+				iCandidateEntities.getEntityForLastGeometry());
+	}
+
+	private void resetCandidateEntities() {
+		closeIterator(iCandidateEntities);
+		iCandidateEntities = makeIteratorFromEntityId(candidateEntityId);
+	}
+
+	private void closeIterator(EntityGeometryIterator iterator) {
+		if (iterator == null) {
+			return;
+		}
+		try {
+			iterator.close();
+		} catch (IOException e) {
+			logger.warn("Unable to close entity-geometry iterator.", e);
+		}
+	}
+
+	private static final class EntityPair {
+		private final long subject;
+		private final long object;
+
+		private EntityPair(long subject, long object) {
+			this.subject = subject;
+			this.object = object;
+		}
+
+		@Override
+		public boolean equals(Object other) {
+			if (this == other) {
+				return true;
+			}
+			if (!(other instanceof EntityPair)) {
+				return false;
+			}
+			EntityPair that = (EntityPair) other;
+			return subject == that.subject && object == that.object;
+		}
+
+		@Override
+		public int hashCode() {
+			int result = Long.hashCode(subject);
+			result = 31 * result + Long.hashCode(object);
+			return result;
+		}
 	}
 }
