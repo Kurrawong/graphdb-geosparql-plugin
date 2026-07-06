@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.CandidateLookupPolicy;
 import com.ontotext.trree.geosparql.EntityGeometryIterator;
+import com.ontotext.trree.geosparql.EntityIdIterator;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
@@ -149,19 +150,13 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	@Override
 	public EntityGeometryIterator getMatchingObjects(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
 		assertCurrentSchema();
-		if (candidateLookupPolicy == CandidateLookupPolicy.FULL_SCAN) {
-			return getGeometriesFor(0);
-		} else if (candidateLookupPolicy == CandidateLookupPolicy.INTERSECTS) {
-			JtsGeometry shape = new JtsGeometry(geometry, ctx, true, true);
-			// Adds an index to JtsGeometry class internally to compute spatial relations faster.
-			shape.index();
-			final SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, shape);
+		return getIteratorForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
+	}
 
-			Query query = strategy.makeQuery(args);
-
-			return getIteratorForQuery(query);
-		}
-		throw new PluginException("Unsupported GeoSPARQL candidate lookup policy: " + candidateLookupPolicy);
+	@Override
+	public EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
+		assertCurrentSchema();
+		return getEntityIdsForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
 	}
 
 	@Override
@@ -180,7 +175,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	private EntityGeometryIterator getIteratorForQuery(Query query) {
 		IndexReader indexReader = null;
 		try {
-			indexReader = DirectoryReader.open(directory);
+			indexReader = openReader();
 			IndexSearcher indexSearcher = new IndexSearcher(indexReader);
 
 			return new LuceneEntityGeometryIterator(indexSearcher, query);
@@ -195,6 +190,42 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			throw new PluginException("Unable to execute Lucene query.", e);
 		}
 
+	}
+
+	private Query matchingObjectsQuery(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
+		if (candidateLookupPolicy == CandidateLookupPolicy.FULL_SCAN) {
+			return LuceneGeoDocumentSchema.allDocumentsQuery();
+		} else if (candidateLookupPolicy == CandidateLookupPolicy.INTERSECTS) {
+			JtsGeometry shape = new JtsGeometry(geometry, ctx, true, true);
+			// Adds an index to JtsGeometry class internally to compute spatial relations faster.
+			shape.index();
+			SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, shape);
+
+			return strategy.makeQuery(args);
+		}
+		throw new PluginException("Unsupported GeoSPARQL candidate lookup policy: " + candidateLookupPolicy);
+	}
+
+	private EntityIdIterator getEntityIdsForQuery(Query query) {
+		IndexReader indexReader = null;
+		try {
+			indexReader = openReader();
+			IndexSearcher indexSearcher = new IndexSearcher(indexReader);
+			return new LuceneEntityIdIterator(indexSearcher, query);
+		} catch (IOException e) {
+			if (indexReader != null) {
+				try {
+					indexReader.close();
+				} catch (IOException x) {
+					// ignore
+				}
+			}
+			throw new PluginException("Unable to execute Lucene query.", e);
+		}
+	}
+
+	IndexReader openReader() throws IOException {
+		return DirectoryReader.open(directory);
 	}
 
 	private void handleCreateDocumentUnhandledException(long subject, Function<Long, String> subjectMapper, Exception e) {
@@ -220,6 +251,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 				return false;
 			}
 			try (IndexReader reader = DirectoryReader.open(directory)) {
+				if (reader.numDocs() == 0) {
+					return false;
+				}
+				if (!LuceneGeoDocumentSchema.hasCurrentSchemaFieldInfo(reader)) {
+					return true;
+				}
 				for (int i = 0; i < reader.maxDoc(); i++) {
 					Document doc = reader.document(i);
 					if (!LuceneGeoDocumentSchema.isCurrentSchemaDocument(doc)) {
@@ -234,5 +271,4 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			throw new PluginException("Unable to inspect GeoSPARQL Lucene index schema.", e);
 		}
 	}
-
 }

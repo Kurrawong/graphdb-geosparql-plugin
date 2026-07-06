@@ -27,11 +27,20 @@ public interface GeoSparqlIndexer {
 	 * Returns an iterator over entities/geometries that matches the provided geometry
 	 * using the provided candidate lookup policy.
 	 *
-	 * @param geometry a geometry
+	 * @param geometry an index geometry
 	 * @param candidateLookupPolicy the candidate lookup policy
 	 * @return an iterator over entities/geometries
 	 */
 	EntityGeometryIterator getMatchingObjects(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy);
+
+	/**
+	 * Returns unique entity ids that match the provided index geometry with the provided candidate lookup policy.
+	 *
+	 * @param geometry an index geometry
+	 * @param candidateLookupPolicy the candidate lookup policy
+	 * @return an iterator over unique matching entity ids
+	 */
+	EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy);
 
 	/**
 	 * Returns an iterator over all geometries for the provided entity

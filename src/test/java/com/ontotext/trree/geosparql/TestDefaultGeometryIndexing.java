@@ -66,22 +66,45 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 
 	@Test
 	public void propertyRelationReturnsOneRowWhenObjectHasMultipleMatchingDefaultGeometries() throws Exception {
-		executeSparqlUpdateQuery(PREFIXES
-				+ "INSERT DATA {\n"
-				+ "  ex:container a geo:Feature ;\n"
-				+ "    geo:hasDefaultGeometry ex:containerGeom1, ex:containerGeom2 .\n"
-				+ "  ex:containerGeom1 a geo:Geometry ;\n"
-				+ "    geo:asWKT \"POLYGON((0 0,0 4,4 4,4 0,0 0))\"^^geo:wktLiteral .\n"
-				+ "  ex:containerGeom2 a geo:Geometry ;\n"
-				+ "    geo:asWKT \"POLYGON((0 0,0 5,5 5,5 0,0 0))\"^^geo:wktLiteral .\n"
-				+ "  ex:thing a geo:Feature ; geo:hasDefaultGeometry ex:thingGeom .\n"
-				+ "  ex:thingGeom a geo:Geometry ; geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral .\n"
-				+ "}");
+		insertObjectWithMultipleMatchingDefaultGeometries();
 		enablePlugin();
 
 		assertEquals(1, count("SELECT ?o WHERE {\n"
 				+ "  ex:thing geo:sfWithin ?o .\n"
 				+ "  FILTER(?o = ex:container)\n"
+				+ "}"));
+	}
+
+	@Test
+	public void subjectBoundLookupReturnsOneRowWhenMultipleSubjectGeometriesHitSameObject() throws Exception {
+		insertSubjectWithMultipleMatchingDefaultGeometries();
+		enablePlugin();
+
+		assertEquals(1, count("SELECT ?o WHERE {\n"
+				+ "  ex:thing geo:sfWithin ?o .\n"
+				+ "  FILTER(?o = ex:container)\n"
+				+ "}"));
+	}
+
+	@Test
+	public void objectBoundLookupReturnsOneRowWhenMultipleObjectGeometriesHitSameSubject() throws Exception {
+		insertObjectWithMultipleMatchingDefaultGeometries();
+		enablePlugin();
+
+		assertEquals(1, count("SELECT ?s WHERE {\n"
+				+ "  ?s geo:sfWithin ex:container .\n"
+				+ "  FILTER(?s = ex:thing)\n"
+				+ "}"));
+	}
+
+	@Test
+	public void objectBoundLookupReconsidersCandidateAfterEarlierBoundGeometryExactMiss() throws Exception {
+		insertObjectBoundCandidateWithEarlierExactMissAndLaterMatch();
+		enablePlugin();
+
+		assertEquals(1, count("SELECT ?s WHERE {\n"
+				+ "  ?s geo:sfWithin ex:container .\n"
+				+ "  FILTER(?s = ex:thing)\n"
 				+ "}"));
 	}
 
@@ -93,6 +116,37 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 		assertEquals(1, count("SELECT ?match WHERE {\n"
 				+ "  ex:thing geo:sfWithin ex:container .\n"
 				+ "  BIND(\"match\" AS ?match)\n"
+				+ "}"));
+	}
+
+	@Test
+	public void propertyRelationReturnsNoRowsWhenBothSidesAreBoundAndAllGeometryPairsFail() throws Exception {
+		insertBothSidesWithNoMatchingGeometryPairs();
+		enablePlugin();
+
+		assertEquals(0, count("SELECT ?match WHERE {\n"
+				+ "  ex:thing geo:sfWithin ex:container .\n"
+				+ "  BIND(\"match\" AS ?match)\n"
+				+ "}"));
+	}
+
+	@Test
+	public void fullScanRelationReturnsOneRowWhenMultipleGeometryDocumentsMatchSameEntityPair() throws Exception {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:container a geo:Feature ; geo:hasDefaultGeometry ex:containerGeom .\n"
+				+ "  ex:containerGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((0 0,0 4,4 4,4 0,0 0))\"^^geo:wktLiteral .\n"
+				+ "  ex:thing a geo:Feature ;\n"
+				+ "    geo:hasDefaultGeometry ex:outsideGeom1, ex:outsideGeom2 .\n"
+				+ "  ex:outsideGeom1 a geo:Geometry ; geo:asWKT \"POINT(10 10)\"^^geo:wktLiteral .\n"
+				+ "  ex:outsideGeom2 a geo:Geometry ; geo:asWKT \"POINT(11 11)\"^^geo:wktLiteral .\n"
+				+ "}");
+		enablePlugin();
+
+		assertEquals(1, count("SELECT ?s WHERE {\n"
+				+ "  ?s geo:sfDisjoint ex:container .\n"
+				+ "  FILTER(?s = ex:thing)\n"
 				+ "}"));
 	}
 
@@ -120,6 +174,36 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 				+ "}");
 	}
 
+	private void insertObjectWithMultipleMatchingDefaultGeometries() {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:container a geo:Feature ;\n"
+				+ "    geo:hasDefaultGeometry ex:containerGeom1, ex:containerGeom2 .\n"
+				+ "  ex:containerGeom1 a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((0 0,0 4,4 4,4 0,0 0))\"^^geo:wktLiteral .\n"
+				+ "  ex:containerGeom2 a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((0 0,0 5,5 5,5 0,0 0))\"^^geo:wktLiteral .\n"
+				+ "  ex:thing a geo:Feature ; geo:hasDefaultGeometry ex:thingGeom .\n"
+				+ "  ex:thingGeom a geo:Geometry ; geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral .\n"
+				+ "}");
+	}
+
+	private void insertObjectBoundCandidateWithEarlierExactMissAndLaterMatch() {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:container a geo:Feature ;\n"
+				+ "    geo:hasDefaultGeometry ex:containerMissGeom, ex:containerHitGeom .\n"
+				+ "  ex:containerMissGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((0 0,0 2,2 2,2 0,0 0))\"^^geo:wktLiteral .\n"
+				+ "  ex:containerHitGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((80 80,80 82,82 82,82 80,80 80))\"^^geo:wktLiteral .\n"
+				+ "  ex:thing a geo:Feature ;\n"
+				+ "    geo:hasDefaultGeometry ex:boundaryGeom, ex:insideHitGeom .\n"
+				+ "  ex:boundaryGeom a geo:Geometry ; geo:asWKT \"POINT(2 1)\"^^geo:wktLiteral .\n"
+				+ "  ex:insideHitGeom a geo:Geometry ; geo:asWKT \"POINT(81 81)\"^^geo:wktLiteral .\n"
+				+ "}");
+	}
+
 	private void insertBothSidesWithOnlyLaterGeometryPairMatching() {
 		executeSparqlUpdateQuery(PREFIXES
 				+ "INSERT DATA {\n"
@@ -133,6 +217,22 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 				+ "    geo:hasDefaultGeometry ex:outsideGeom, ex:insideGeom .\n"
 				+ "  ex:outsideGeom a geo:Geometry ; geo:asWKT \"POINT(8 8)\"^^geo:wktLiteral .\n"
 				+ "  ex:insideGeom a geo:Geometry ; geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral .\n"
+				+ "}");
+	}
+
+	private void insertBothSidesWithNoMatchingGeometryPairs() {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:container a geo:Feature ;\n"
+				+ "    geo:hasDefaultGeometry ex:containerMissGeom1, ex:containerMissGeom2 .\n"
+				+ "  ex:containerMissGeom1 a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((10 10,10 12,12 12,12 10,10 10))\"^^geo:wktLiteral .\n"
+				+ "  ex:containerMissGeom2 a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((20 20,20 22,22 22,22 20,20 20))\"^^geo:wktLiteral .\n"
+				+ "  ex:thing a geo:Feature ;\n"
+				+ "    geo:hasDefaultGeometry ex:outsideGeom1, ex:outsideGeom2 .\n"
+				+ "  ex:outsideGeom1 a geo:Geometry ; geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral .\n"
+				+ "  ex:outsideGeom2 a geo:Geometry ; geo:asWKT \"POINT(2 2)\"^^geo:wktLiteral .\n"
 				+ "}");
 	}
 

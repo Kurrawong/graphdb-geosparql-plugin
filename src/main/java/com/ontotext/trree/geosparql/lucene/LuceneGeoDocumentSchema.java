@@ -6,8 +6,13 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.LongPoint;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
+import org.apache.lucene.index.DocValuesType;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.IndexOptions;
+import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
@@ -53,6 +58,7 @@ final class LuceneGeoDocumentSchema {
 		Document doc = new Document();
 		doc.add(new LongPoint(FIELD_ID, entityId));
 		doc.add(new StoredField(FIELD_ID, entityId));
+		doc.add(new NumericDocValuesField(FIELD_ID, entityId));
 
 		JtsGeometry shape = new JtsGeometry(geometry.indexGeometry(), ctx, true, true);
 		shape.index();
@@ -108,6 +114,11 @@ final class LuceneGeoDocumentSchema {
 				&& doc.get(FIELD_SOURCE_CRS) != null
 				&& IndexGeometry.INDEX_CRS.equals(doc.get(FIELD_INDEX_CRS))
 				&& IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY.equals(doc.get(FIELD_INDEX_BUILD_MODE));
+	}
+
+	static boolean hasCurrentSchemaFieldInfo(IndexReader reader) {
+		FieldInfo entityIdField = FieldInfos.getMergedFieldInfos(reader).fieldInfo(FIELD_ID);
+		return entityIdField != null && entityIdField.getDocValuesType() == DocValuesType.NUMERIC;
 	}
 
 	static Query entityIdQuery(long entityId) {
