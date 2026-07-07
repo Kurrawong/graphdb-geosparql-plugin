@@ -8,7 +8,6 @@ import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
-import org.apache.lucene.document.Document;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.spatial.SpatialStrategy;
@@ -33,7 +32,27 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * Lucene implementation of the GeoSPARQL indexer.
+ * Lucene-backed GeoSPARQL candidate indexer.
+ *
+ * <p>The Lucene index stores derived index geometry for coarse candidate lookup
+ * and source geometry literal metadata for later CRS-aware exact evaluation.
+ *
+ * <p>During startup, the indexer performs only an index-level schema check. A
+ * non-empty index must have the schema v2 commit marker; missing or mismatched
+ * commit metadata causes query and update paths to fail with the force-reindex
+ * message. Because this check reads commit metadata rather than stored
+ * documents, startup remains independent of the number of indexed geometries.
+ *
+ * <p>Fresh indexes and empty indexes can accept v2 writes. Successful
+ * v2 writes schedule the schema marker to be written on commit. Document-level
+ * schema validation remains defensive: a marked index with malformed or mixed
+ * documents fails during document decoding rather than silently using invalid
+ * source geometry literal data.
+ *
+ * <p>During force reindex, writes are allowed after {@link #freshIndex()}, but
+ * reads remain gated by the previously committed schema state until commit
+ * succeeds. Rollback or failed commit restores that previous schema state, so an
+ * abandoned reindex cannot make this indexer trust an old non-current index.
  */
 public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	private GeoSparqlPlugin parent;
@@ -45,14 +64,15 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
     private Directory directory;
 
-    private IndexWriterConfig iwConfig;
+	private IndexWriterConfig iwConfig;
 	private IndexWriter indexWriter;
     private Logger logger;
 	private boolean schemaMismatchDetected;
+	private boolean schemaMarkerPending;
+	private boolean schemaRebuildInProgress;
+	private boolean schemaMismatchBeforeRebuild;
 
-	static final String SCHEMA_MISMATCH_MESSAGE = "Existing GeoSPARQL Lucene index does not match current schema v2. "
-			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
-			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
+	static final String SCHEMA_MISMATCH_MESSAGE = LuceneGeoDocumentSchema.SCHEMA_MISMATCH_MESSAGE;
 
 	public LuceneGeoIndexer(GeoSparqlPlugin parent) {
 		this.parent = parent;
@@ -109,28 +129,57 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public void commit() throws Exception {
-		indexWriter.close(); // also commits
+		boolean rebuildWasInProgress = schemaRebuildInProgress;
+		boolean committed = false;
+		try {
+			writeSchemaMarkerIfNeeded();
+			closeIndexWriter(); // also commits
+			committed = true;
+			if (rebuildWasInProgress) {
+				schemaMismatchDetected = false;
+			}
+		} finally {
+			if (!committed && schemaRebuildInProgress) {
+				schemaMismatchDetected = schemaMismatchBeforeRebuild;
+			}
+			schemaMarkerPending = false;
+			schemaRebuildInProgress = false;
+			schemaMismatchBeforeRebuild = false;
+		}
+	}
+
+	void closeIndexWriter() throws IOException {
+		indexWriter.close();
 	}
 
 	@Override
 	public void rollback() throws Exception {
-		indexWriter.rollback();
+		try {
+			indexWriter.rollback();
+		} finally {
+			restoreSchemaStateAfterUncommittedRebuild();
+			schemaMarkerPending = false;
+		}
 	}
 
 	@Override
 	public void freshIndex() throws Exception {
 		indexWriter.deleteAll();
-		schemaMismatchDetected = false;
+		schemaMismatchBeforeRebuild = schemaMismatchDetected;
+		schemaRebuildInProgress = true;
+		schemaMarkerPending = true;
 	}
 
 	@Override
 	public void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<IndexGeometry> geometries) {
 		//logger.info("Indexing literal for {}; {}", parent.getEntities().get(subject), geometries.size());
+		assertWritableCurrentSchema();
 		try {
 			indexWriter.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(subject));
 			if (!geometries.isEmpty()) {
 				for (IndexGeometry geometry : geometries) {
 					indexWriter.addDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
+					schemaMarkerPending = true;
 				}
 			}
 		} catch (Exception e) {
@@ -140,8 +189,10 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public void indexGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
+		assertWritableCurrentSchema();
 		try {
 			indexWriter.addDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
+			schemaMarkerPending = true;
 		} catch (Exception e) {
 			handleCreateDocumentUnhandledException(subject, subjectMapper, e);
 		}
@@ -149,19 +200,19 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public EntityGeometryIterator getMatchingObjects(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
-		assertCurrentSchema();
+		assertReadableCurrentSchema();
 		return getIteratorForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
 	}
 
 	@Override
 	public EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
-		assertCurrentSchema();
+		assertReadableCurrentSchema();
 		return getEntityIdsForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
 	}
 
 	@Override
 	public EntityGeometryIterator getGeometriesFor(long subject) {
-		assertCurrentSchema();
+		assertReadableCurrentSchema();
 		final Query query;
 		if (subject > 0) {
 			query = LuceneGeoDocumentSchema.entityIdQuery(subject);
@@ -239,10 +290,17 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 	}
 
-	private void assertCurrentSchema() {
+	private void assertReadableCurrentSchema() {
 		if (schemaMismatchDetected) {
 			throw new PluginException(SCHEMA_MISMATCH_MESSAGE);
 		}
+	}
+
+	private void assertWritableCurrentSchema() {
+		if (schemaRebuildInProgress) {
+			return;
+		}
+		assertReadableCurrentSchema();
 	}
 
 	private boolean detectSchemaMismatch() {
@@ -250,25 +308,32 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			if (!DirectoryReader.indexExists(directory)) {
 				return false;
 			}
-			try (IndexReader reader = DirectoryReader.open(directory)) {
+			try (DirectoryReader reader = DirectoryReader.open(directory)) {
 				if (reader.numDocs() == 0) {
 					return false;
 				}
-				if (!LuceneGeoDocumentSchema.hasCurrentSchemaFieldInfo(reader)) {
-					return true;
-				}
-				for (int i = 0; i < reader.maxDoc(); i++) {
-					Document doc = reader.document(i);
-					if (!LuceneGeoDocumentSchema.isCurrentSchemaDocument(doc)) {
-						return true;
-					}
-				}
+				return !LuceneGeoDocumentSchema.hasCurrentSchemaCommitData(reader.getIndexCommit().getUserData());
 			}
-			return false;
 		} catch (IndexNotFoundException e) {
 			return false;
 		} catch (IOException e) {
 			throw new PluginException("Unable to inspect GeoSPARQL Lucene index schema.", e);
+		}
+	}
+
+	private void writeSchemaMarkerIfNeeded() throws IOException {
+		if (!schemaMarkerPending) {
+			return;
+		}
+		indexWriter.setLiveCommitData(LuceneGeoDocumentSchema.currentSchemaCommitData(
+				indexWriter.getLiveCommitData()));
+	}
+
+	private void restoreSchemaStateAfterUncommittedRebuild() {
+		if (schemaRebuildInProgress) {
+			schemaMismatchDetected = schemaMismatchBeforeRebuild;
+			schemaRebuildInProgress = false;
+			schemaMismatchBeforeRebuild = false;
 		}
 	}
 }

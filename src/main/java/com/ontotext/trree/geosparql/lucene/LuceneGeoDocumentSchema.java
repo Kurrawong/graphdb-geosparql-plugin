@@ -8,11 +8,7 @@ import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
@@ -26,6 +22,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Lucene GeoSPARQL document schema v2.
@@ -42,6 +40,11 @@ final class LuceneGeoDocumentSchema {
 	static final String FIELD_SOURCE_CRS = "geoExactCrs";
 	static final String FIELD_INDEX_CRS = "geoIndexCrs";
 	static final String FIELD_INDEX_BUILD_MODE = "geoIndexBuildMode";
+	static final String COMMIT_SCHEMA_VERSION_KEY = "geosparql.luceneSchemaVersion";
+	static final String COMMIT_SCHEMA_VERSION_VALUE = Integer.toString(SCHEMA_VERSION);
+	static final String SCHEMA_MISMATCH_MESSAGE = "Existing GeoSPARQL Lucene index does not match current schema v2. "
+			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
+			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
 
 	private static final FieldType INDEX_GEOMETRY_FIELD_TYPE = new FieldType();
 
@@ -79,19 +82,21 @@ final class LuceneGeoDocumentSchema {
 	}
 
 	static IndexGeometry indexGeometry(Document doc) {
+		assertCurrentSchemaDocument(doc);
 		IndexableField field = doc.getField(FIELD_INDEX_GEOMETRY);
-		if (field == null || field.binaryValue() == null) {
-			throw new PluginException("GeoSPARQL Lucene document is missing index geometry.");
-		}
 		byte[] bytes = Arrays.copyOfRange(field.binaryValue().bytes, field.binaryValue().offset,
 				field.binaryValue().offset + field.binaryValue().length);
-		return IndexGeometry.fromStoredMetadata(
-				fieldValueToGeometry(bytes),
-				doc.get(FIELD_SOURCE_LEXICAL_FORM),
-				doc.get(FIELD_SOURCE_DATATYPE),
-				doc.get(FIELD_SOURCE_CRS),
-				doc.get(FIELD_INDEX_CRS),
-				doc.get(FIELD_INDEX_BUILD_MODE));
+		try {
+			return IndexGeometry.fromStoredMetadata(
+					fieldValueToGeometry(bytes),
+					doc.get(FIELD_SOURCE_LEXICAL_FORM),
+					doc.get(FIELD_SOURCE_DATATYPE),
+					doc.get(FIELD_SOURCE_CRS),
+					doc.get(FIELD_INDEX_CRS),
+					doc.get(FIELD_INDEX_BUILD_MODE));
+		} catch (RuntimeException e) {
+			throw new PluginException(SCHEMA_MISMATCH_MESSAGE, e);
+		}
 	}
 
 	static long entityId(Document doc) {
@@ -116,9 +121,26 @@ final class LuceneGeoDocumentSchema {
 				&& IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY.equals(doc.get(FIELD_INDEX_BUILD_MODE));
 	}
 
-	static boolean hasCurrentSchemaFieldInfo(IndexReader reader) {
-		FieldInfo entityIdField = FieldInfos.getMergedFieldInfos(reader).fieldInfo(FIELD_ID);
-		return entityIdField != null && entityIdField.getDocValuesType() == DocValuesType.NUMERIC;
+	static void assertCurrentSchemaDocument(Document doc) {
+		if (!isCurrentSchemaDocument(doc)) {
+			throw new PluginException(SCHEMA_MISMATCH_MESSAGE);
+		}
+	}
+
+	static boolean hasCurrentSchemaCommitData(Map<String, String> commitData) {
+		return COMMIT_SCHEMA_VERSION_VALUE.equals(commitData.get(COMMIT_SCHEMA_VERSION_KEY));
+	}
+
+	static Iterable<Map.Entry<String, String>> currentSchemaCommitData(
+			Iterable<Map.Entry<String, String>> existingCommitData) {
+		Map<String, String> commitData = new LinkedHashMap<>();
+		if (existingCommitData != null) {
+			for (Map.Entry<String, String> entry : existingCommitData) {
+				commitData.put(entry.getKey(), entry.getValue());
+			}
+		}
+		commitData.put(COMMIT_SCHEMA_VERSION_KEY, COMMIT_SCHEMA_VERSION_VALUE);
+		return commitData.entrySet();
 	}
 
 	static Query entityIdQuery(long entityId) {

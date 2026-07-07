@@ -5,7 +5,13 @@ import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.locationtech.jts.geom.Geometry;
 
 /**
- * Derived geometry used only for Lucene candidate lookup.
+ * Pair of the authoritative source geometry literal and the derived geometry
+ * used for Lucene candidate lookup.
+ *
+ * <p>The index geometry is transformed to CRS84 when necessary so it can be
+ * indexed by Lucene's spatial layer for coarse candidate lookup. It is not the
+ * geometry used for exact GeoSPARQL relation evaluation; exact evaluation uses
+ * the source geometry literal, including its datatype and effective source CRS.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
