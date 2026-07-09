@@ -81,6 +81,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 	public void initialize(InitReason reason, PluginConnection pluginConnection) {
         GeoSparqlUtils.migrateConfig(getDataDir().toPath(), getLogger());
         config = GeoSparqlUtils.readConfig(getDataDir().toPath());
+        CrsDataEnvironment.inspectSystem().log(getLogger());
 
         initControlPredicates(pluginConnection.getEntities());
 

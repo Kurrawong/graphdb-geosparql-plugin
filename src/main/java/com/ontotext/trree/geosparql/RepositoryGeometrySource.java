@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
+import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.Entities;
 import com.ontotext.trree.sdk.PluginConnection;
@@ -142,15 +143,62 @@ final class RepositoryGeometrySource {
 			return plugin.getIndexGeometryFromLiteral((Literal) value, datatype);
 		} catch (JenaGeoSparqlException e) {
 			String subjectText = entities.get(subject).stringValue();
+			String failureContext = indexingFailureContext((Literal) value, datatype, e);
 			if (plugin.getConfig().isIgnoreErrors()) {
-				plugin.getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed: {}",
-						subjectText, e.getMessage());
+				plugin.getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed. {}",
+						subjectText, failureContext);
 				return null;
 			}
 			throw new PluginException("Could not index GeoSPARQL geometry for subject " + subjectText
-					+ ". If you want to skip invalid repository geometries, configure ignoreErrors = true and rebuild the index.",
+					+ ". " + failureContext
+					+ ". Check that the geometry CRS URI is correct and that Apache SIS CRS data, such as SIS_DATA "
+					+ "and required grid files, is configured when the CRS is supported. To skip invalid or unsupported "
+					+ "repository geometries, configure ignoreErrors = true and rebuild the index.",
 					e);
 		}
+	}
+
+	private static String indexingFailureContext(Literal literal, IRI fallbackDatatype, JenaGeoSparqlException cause) {
+		StringBuilder context = new StringBuilder("Source geometry literal datatype: ");
+		context.append(literal.getDatatype());
+		if (!literal.getDatatype().equals(fallbackDatatype)) {
+			context.append("; predicate/fallback datatype: ").append(fallbackDatatype);
+		}
+		String crsUri = sourceGeometryCrs(literal, fallbackDatatype);
+		if (crsUri != null) {
+			context.append("; CRS: ").append(crsUri);
+		}
+		if (cause.getMessage() != null && !cause.getMessage().isBlank()) {
+			context.append("; cause: ").append(cause.getMessage());
+		}
+		return context.toString();
+	}
+
+	private static String sourceGeometryCrs(Literal literal, IRI fallbackDatatype) {
+		try {
+			return JenaGeometryAdapter.toSourceGeometryLiteral(literal, fallbackDatatype).effectiveCrsUri();
+		} catch (JenaGeoSparqlException e) {
+			if (GeoConstants.GEO_WKT_LITERAL.equals(fallbackDatatype)) {
+				String explicitCrs = explicitWktCrs(literal.stringValue());
+				if (explicitCrs != null) {
+					return explicitCrs;
+				}
+				return IndexGeometry.INDEX_CRS + " (implicit GeoSPARQL WKT default)";
+			}
+			return null;
+		}
+	}
+
+	private static String explicitWktCrs(String lexicalForm) {
+		String trimmed = lexicalForm.trim();
+		if (!trimmed.startsWith("<")) {
+			return null;
+		}
+		int end = trimmed.indexOf('>');
+		if (end <= 1) {
+			return null;
+		}
+		return trimmed.substring(1, end);
 	}
 }
 

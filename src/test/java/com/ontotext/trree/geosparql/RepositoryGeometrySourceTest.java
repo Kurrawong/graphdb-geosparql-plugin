@@ -102,6 +102,24 @@ public class RepositoryGeometrySourceTest {
 				() -> source.geometriesForGeometryResource(GEOMETRY_RESOURCE));
 
 		assertTrue(exception.getMessage().contains("Could not index GeoSPARQL geometry"));
+		assertTrue(exception.getMessage().contains("Source geometry literal datatype: "
+				+ GeoConstants.GEO_WKT_LITERAL));
+		assertTrue(exception.getMessage().contains("CRS: " + IndexGeometry.INDEX_CRS
+				+ " (implicit GeoSPARQL WKT default)"));
+		assertEquals(1, plugin.conversionCount);
+	}
+
+	@Test
+	public void unsupportedWktCrsFailureIncludesCrsContext() {
+		CountingGeoSparqlPlugin plugin = newPlugin(false);
+		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
+				validGeometryConnection("<http://example.com/crs/unknown> POINT(1 2)"));
+
+		PluginException exception = assertThrows(PluginException.class,
+				() -> source.geometriesForGeometryResource(GEOMETRY_RESOURCE));
+
+		assertTrue(exception.getMessage().contains("CRS: http://example.com/crs/unknown"));
+		assertTrue(exception.getMessage().contains("Apache SIS CRS data"));
 		assertEquals(1, plugin.conversionCount);
 	}
 
