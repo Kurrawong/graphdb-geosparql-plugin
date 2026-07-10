@@ -2,9 +2,10 @@ package com.ontotext.trree.geosparql;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.ontotext.trree.geosparql.function.GeoSparqlFunctionRegistration;
-import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
 import com.ontotext.trree.sdk.*;
@@ -12,6 +13,7 @@ import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import gnu.trove.TLongObjectHashMap;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
@@ -216,10 +218,105 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         this.config = config;
     }
 
+	/**
+	 * Creates the CRS84-derived index geometry and preserves the CRS-aware source geometry literal used for exact
+	 * evaluation.
+	 *
+	 * @param literal RDF geometry literal to convert
+	 * @param fallbackDatatype geometry datatype selected by the calling predicate when compatibility handling requires
+	 *                         a fallback
+	 * @return the source geometry literal together with its derived index geometry
+	 * @throws JenaGeoSparqlException if the datatype, lexical form, CRS, or CRS transformation is unsupported
+	 */
 	IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
 		SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
 				fallbackDatatype);
 		return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
+	}
+
+	/**
+	 * Resolves and converts a repository geometry literal while applying the configured repository-indexing error
+	 * policy.
+	 *
+	 * <p>The Geometry resource id supplies diagnostic context; the predicate id selects the WKT or GML fallback
+	 * datatype. Non-literal values are ignored. Conversion failures are also skipped with a warning when
+	 * {@code ignoreErrors=true}; otherwise they fail indexing with a contextual {@link PluginException}.
+	 *
+	 * @param geometryResourceId Geometry resource that owns the source geometry literal
+	 * @param literalId repository entity id expected to resolve to an RDF literal
+	 * @param predicateId repository entity id for {@code geo:asWKT} or {@code geo:asGML}
+	 * @param entities entity dictionary used to resolve repository ids
+	 * @return the converted index geometry, or {@code null} for a non-literal or a skipped conversion failure
+	 * @throws PluginException if conversion fails and invalid repository geometries are not configured to be skipped
+	 */
+	IndexGeometry getIndexGeometryFromLiteralId(long geometryResourceId, long literalId, long predicateId,
+			Entities entities) {
+		Value value = entities.get(literalId);
+		if (!(value instanceof Literal)) {
+			return null;
+		}
+		IRI datatype = predicateId == asGML ? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
+		try {
+			return getIndexGeometryFromLiteral((Literal) value, datatype);
+		} catch (JenaGeoSparqlException e) {
+			String subjectText = entities.get(geometryResourceId).stringValue();
+			String failureContext = indexingFailureContext((Literal) value, datatype, e);
+			if (config.isIgnoreErrors()) {
+				getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed. {}",
+						subjectText, failureContext);
+				return null;
+			}
+			throw new PluginException("Could not index GeoSPARQL geometry for subject " + subjectText
+					+ ". " + failureContext
+					+ ". Check that the geometry CRS URI is correct and that Apache SIS CRS data, such as SIS_DATA "
+					+ "and required grid files, is configured when the CRS is supported. To skip invalid or unsupported "
+					+ "repository geometries, configure ignoreErrors = true and rebuild the index.",
+					e);
+		}
+	}
+
+	private static String indexingFailureContext(Literal literal, IRI fallbackDatatype,
+			JenaGeoSparqlException cause) {
+		StringBuilder context = new StringBuilder("Source geometry literal datatype: ");
+		context.append(literal.getDatatype());
+		if (!literal.getDatatype().equals(fallbackDatatype)) {
+			context.append("; predicate/fallback datatype: ").append(fallbackDatatype);
+		}
+		String crsUri = sourceGeometryCrs(literal, fallbackDatatype);
+		if (crsUri != null) {
+			context.append("; CRS: ").append(crsUri);
+		}
+		if (cause.getMessage() != null && !cause.getMessage().isBlank()) {
+			context.append("; cause: ").append(cause.getMessage());
+		}
+		return context.toString();
+	}
+
+	private static String sourceGeometryCrs(Literal literal, IRI fallbackDatatype) {
+		try {
+			return JenaGeometryAdapter.toSourceGeometryLiteral(literal, fallbackDatatype).effectiveCrsUri();
+		} catch (JenaGeoSparqlException e) {
+			if (GeoConstants.GEO_WKT_LITERAL.equals(fallbackDatatype)) {
+				String explicitCrs = explicitWktCrs(literal.stringValue());
+				if (explicitCrs != null) {
+					return explicitCrs;
+				}
+				return IndexGeometry.INDEX_CRS + " (implicit GeoSPARQL WKT default)";
+			}
+			return null;
+		}
+	}
+
+	private static String explicitWktCrs(String lexicalForm) {
+		String trimmed = lexicalForm.trim();
+		if (!trimmed.startsWith("<")) {
+			return null;
+		}
+		int end = trimmed.indexOf('>');
+		if (end <= 1) {
+			return null;
+		}
+		return trimmed.substring(1, end);
 	}
 
     private void initPluginFeatures(Entities entities) {
@@ -281,11 +378,11 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         try {
             if (forced) {
                 getLogger().info(">>>>>>>> GeoSPARQL: Initializing force reindexing process...");
-                new GeoSparqlForceReindexer(indexer, this).reindex(pluginConnection);
+                new GeoSparqlFullIndexer(indexer, this).reindex(pluginConnection);
             } else {
                 getLogger().info(">>>>>>>> GeoSPARQL: Initializing indexing process...");
                 indexer.begin();
-                new GeoSparqlForceReindexer(indexer, this).reindex(pluginConnection);
+                new GeoSparqlFullIndexer(indexer, this).reindex(pluginConnection);
                 indexer.commit();
             }
             GeoSparqlUtils.saveConfig(config, getDataDir().toPath());

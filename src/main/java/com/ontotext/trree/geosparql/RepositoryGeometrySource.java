@@ -1,19 +1,9 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
-import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
-import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
-import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.Entities;
 import com.ontotext.trree.sdk.PluginConnection;
-import com.ontotext.trree.sdk.PluginException;
 import com.ontotext.trree.sdk.StatementIterator;
-import gnu.trove.TLongHashSet;
-import gnu.trove.TLongProcedure;
-import org.eclipse.rdf4j.model.IRI;
-import org.eclipse.rdf4j.model.Literal;
-import org.eclipse.rdf4j.model.Value;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -22,7 +12,12 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * Repository traversal for GeoSPARQL geometry resources and Features.
+ * Loads GeoSPARQL geometry resources and Feature default geometries for incremental transaction updates.
+ *
+ * <p>Decoded {@link IndexGeometry} lists are memoized for the lifetime of each instance so a changed Geometry shared
+ * by several Features is converted only once within an update. {@link GeoSparqlUpdateListener} creates an instance
+ * while committing an incremental transaction and discards it after the affected entities have been reindexed.
+ * Complete index builds use {@link GeoSparqlFullIndexer}, which traverses geometry statements without this cache.
  */
 final class RepositoryGeometrySource {
 	private final GeoSparqlPlugin plugin;
@@ -64,38 +59,6 @@ final class RepositoryGeometrySource {
 		return geometries;
 	}
 
-	void forEachGeometryResource(GeometryResourceConsumer consumer) {
-		TLongHashSet geometryResources = new TLongHashSet();
-		collectGeometryResources(plugin.asWKT, geometryResources);
-		collectGeometryResources(plugin.asGML, geometryResources);
-		geometryResources.forEach(new TLongProcedure() {
-			@Override
-			public boolean execute(long geometryResourceId) {
-				consumer.accept(geometryResourceId, geometriesForGeometryResource(geometryResourceId));
-				return true;
-			}
-		});
-	}
-
-	void forEachFeature(FeatureConsumer consumer) {
-		TLongHashSet features = new TLongHashSet();
-		StatementIterator iterator = pluginConnection.getStatements().get(0, plugin.hasDefaultGeometry, 0);
-		try {
-			while (iterator.next()) {
-				features.add(iterator.subject);
-			}
-		} finally {
-			iterator.close();
-		}
-		features.forEach(new TLongProcedure() {
-			@Override
-			public boolean execute(long featureId) {
-				consumer.accept(featureId, geometriesForFeature(featureId));
-				return true;
-			}
-		});
-	}
-
 	void forEachFeatureUsingGeometry(long geometryResourceId, FeatureConsumer consumer) {
 		StatementIterator iterator = pluginConnection.getStatements().get(0, plugin.hasDefaultGeometry,
 				geometryResourceId);
@@ -108,22 +71,12 @@ final class RepositoryGeometrySource {
 		}
 	}
 
-	private void collectGeometryResources(long predicate, TLongHashSet geometryResources) {
-		StatementIterator iterator = pluginConnection.getStatements().get(0, predicate, 0);
-		try {
-			while (iterator.next()) {
-				geometryResources.add(iterator.subject);
-			}
-		} finally {
-			iterator.close();
-		}
-	}
-
 	private void addGeometriesWithPredicate(long geometryResourceId, long predicate, List<IndexGeometry> geometries) {
 		StatementIterator iterator = pluginConnection.getStatements().get(geometryResourceId, predicate, 0);
 		try {
 			while (iterator.next()) {
-				IndexGeometry geometry = indexGeometryFromLiteralId(geometryResourceId, iterator.object, predicate);
+				IndexGeometry geometry = plugin.getIndexGeometryFromLiteralId(geometryResourceId, iterator.object,
+						predicate, entities);
 				if (geometry != null) {
 					geometries.add(geometry);
 				}
@@ -133,77 +86,6 @@ final class RepositoryGeometrySource {
 		}
 	}
 
-	private IndexGeometry indexGeometryFromLiteralId(long subject, long object, long geometryTypeId) {
-		Value value = entities.get(object);
-		if (!(value instanceof Literal)) {
-			return null;
-		}
-		IRI datatype = geometryTypeId == plugin.asGML ? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
-		try {
-			return plugin.getIndexGeometryFromLiteral((Literal) value, datatype);
-		} catch (JenaGeoSparqlException e) {
-			String subjectText = entities.get(subject).stringValue();
-			String failureContext = indexingFailureContext((Literal) value, datatype, e);
-			if (plugin.getConfig().isIgnoreErrors()) {
-				plugin.getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed. {}",
-						subjectText, failureContext);
-				return null;
-			}
-			throw new PluginException("Could not index GeoSPARQL geometry for subject " + subjectText
-					+ ". " + failureContext
-					+ ". Check that the geometry CRS URI is correct and that Apache SIS CRS data, such as SIS_DATA "
-					+ "and required grid files, is configured when the CRS is supported. To skip invalid or unsupported "
-					+ "repository geometries, configure ignoreErrors = true and rebuild the index.",
-					e);
-		}
-	}
-
-	private static String indexingFailureContext(Literal literal, IRI fallbackDatatype, JenaGeoSparqlException cause) {
-		StringBuilder context = new StringBuilder("Source geometry literal datatype: ");
-		context.append(literal.getDatatype());
-		if (!literal.getDatatype().equals(fallbackDatatype)) {
-			context.append("; predicate/fallback datatype: ").append(fallbackDatatype);
-		}
-		String crsUri = sourceGeometryCrs(literal, fallbackDatatype);
-		if (crsUri != null) {
-			context.append("; CRS: ").append(crsUri);
-		}
-		if (cause.getMessage() != null && !cause.getMessage().isBlank()) {
-			context.append("; cause: ").append(cause.getMessage());
-		}
-		return context.toString();
-	}
-
-	private static String sourceGeometryCrs(Literal literal, IRI fallbackDatatype) {
-		try {
-			return JenaGeometryAdapter.toSourceGeometryLiteral(literal, fallbackDatatype).effectiveCrsUri();
-		} catch (JenaGeoSparqlException e) {
-			if (GeoConstants.GEO_WKT_LITERAL.equals(fallbackDatatype)) {
-				String explicitCrs = explicitWktCrs(literal.stringValue());
-				if (explicitCrs != null) {
-					return explicitCrs;
-				}
-				return IndexGeometry.INDEX_CRS + " (implicit GeoSPARQL WKT default)";
-			}
-			return null;
-		}
-	}
-
-	private static String explicitWktCrs(String lexicalForm) {
-		String trimmed = lexicalForm.trim();
-		if (!trimmed.startsWith("<")) {
-			return null;
-		}
-		int end = trimmed.indexOf('>');
-		if (end <= 1) {
-			return null;
-		}
-		return trimmed.substring(1, end);
-	}
-}
-
-interface GeometryResourceConsumer {
-	void accept(long geometryResourceId, List<IndexGeometry> geometries);
 }
 
 interface FeatureConsumer {
