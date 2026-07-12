@@ -82,7 +82,7 @@ final class LuceneGeoDocumentSchema {
 		return doc;
 	}
 
-	static IndexGeometry indexGeometry(Document doc) {
+	static IndexGeometry indexGeometry(Document doc, SourceGeometryLiteralResolver sourceResolver) {
 		assertCurrentSchemaDocument(doc);
 		IndexableField field = doc.getField(FIELD_INDEX_GEOMETRY);
 		byte[] bytes = Arrays.copyOfRange(field.binaryValue().bytes, field.binaryValue().offset,
@@ -90,8 +90,10 @@ final class LuceneGeoDocumentSchema {
 		try {
 			return IndexGeometry.fromStoredMetadata(
 					fieldValueToGeometry(bytes),
-					doc.get(FIELD_SOURCE_LEXICAL_FORM),
-					doc.get(FIELD_SOURCE_DATATYPE),
+					sourceResolver.resolve(new StoredSourceGeometryIdentity(
+							doc.get(FIELD_SOURCE_LEXICAL_FORM),
+							doc.get(FIELD_SOURCE_DATATYPE),
+							doc.get(FIELD_SOURCE_CRS))),
 					doc.get(FIELD_SOURCE_CRS),
 					doc.get(FIELD_INDEX_CRS),
 					doc.get(FIELD_INDEX_BUILD_MODE));

@@ -56,6 +56,8 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -256,6 +258,161 @@ public class LuceneGeoIndexerTest {
             assertFalse(iterator.hasNextGeometry());
         } finally {
             iterator.close();
+        }
+    }
+
+    @Test
+    public void allEntityIdsReuseSourceGeometryLiteralAcrossCollectionComponents() throws Exception {
+        List<IndexGeometry> collection = IndexGeometry.fromSourceGeometryLiteralComponents(
+                SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION(POINT(0 0),LINESTRING(0 0,1 1))"));
+        Path dataDir = tmpFolder.getRoot().toPath().resolve("collection-source-reuse-entity-ids");
+        Files.createDirectories(dataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+        indexer.begin();
+        indexer.indexGeometryList(1L, subject -> "Subject " + subject, collection);
+        indexer.commit();
+
+        EntityIdIterator entities = indexer.getAllEntityIds();
+        try {
+            assertTrue(entities.hasNextEntityId());
+            assertEquals(1L, entities.nextEntityId());
+            EntityGeometryIterator components = entities.getGeometriesForLastEntity();
+            try {
+                assertTrue(components.hasNextGeometry());
+                components.nextGeometry();
+                SourceGeometryLiteral source = components.lastSourceGeometryLiteral();
+                assertTrue(components.hasNextGeometry());
+                components.nextGeometry();
+                assertSame(source, components.lastSourceGeometryLiteral());
+                assertFalse(components.hasNextGeometry());
+            } finally {
+                components.close();
+            }
+            assertFalse(entities.hasNextEntityId());
+        } finally {
+            entities.close();
+        }
+    }
+
+    @Test
+    public void entityGeometryLookupReusesSourceGeometryLiteralAcrossCollectionComponents() throws Exception {
+        List<IndexGeometry> collection = IndexGeometry.fromSourceGeometryLiteralComponents(
+                SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION(POINT(0 0),LINESTRING(0 0,1 1))"));
+        Path dataDir = tmpFolder.getRoot().toPath().resolve("collection-source-reuse-geometry-lookup");
+        Files.createDirectories(dataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+        indexer.begin();
+        indexer.indexGeometryList(1L, subject -> "Subject " + subject, collection);
+        indexer.commit();
+
+        EntityGeometryIterator components = indexer.getGeometriesFor(1L);
+        try {
+            assertTrue(components.hasNextGeometry());
+            components.nextGeometry();
+            SourceGeometryLiteral source = components.lastSourceGeometryLiteral();
+            assertTrue(components.hasNextGeometry());
+            components.nextGeometry();
+            assertSame(source, components.lastSourceGeometryLiteral());
+            assertFalse(components.hasNextGeometry());
+        } finally {
+            components.close();
+        }
+    }
+
+    @Test
+    public void entityTraversalRetainsDistinctSourceGeometryLiterals() throws Exception {
+        IndexGeometry first = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        IndexGeometry second = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(1 1)"));
+        Path dataDir = tmpFolder.getRoot().toPath().resolve("distinct-entity-sources");
+        Files.createDirectories(dataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+        indexer.begin();
+        indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(first, second));
+        indexer.commit();
+
+        EntityGeometryIterator geometries = indexer.getGeometriesFor(1L);
+        try {
+            assertTrue(geometries.hasNextGeometry());
+            geometries.nextGeometry();
+            SourceGeometryLiteral firstSource = geometries.lastSourceGeometryLiteral();
+            assertTrue(geometries.hasNextGeometry());
+            geometries.nextGeometry();
+            SourceGeometryLiteral secondSource = geometries.lastSourceGeometryLiteral();
+            assertNotSame(firstSource, secondSource);
+            assertEquals("POINT(0 0)", firstSource.lexicalForm());
+            assertEquals("POINT(1 1)", secondSource.lexicalForm());
+            assertFalse(geometries.hasNextGeometry());
+        } finally {
+            geometries.close();
+        }
+    }
+
+    @Test
+    public void cachedSourceDoesNotHideConflictingEffectiveCrsMetadata() throws Exception {
+        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(
+                SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(1L, geometry));
+            Document conflicting = currentSchemaDocument(1L, geometry);
+            conflicting.removeField(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS);
+            conflicting.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS, EPSG_32634));
+            writer.addDocument(conflicting);
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            EntityIdIterator iterator = new LuceneEntityIdIterator(new IndexSearcher(reader),
+                    new MatchAllDocsQuery());
+            try {
+                PluginException exception = assertThrows(PluginException.class, iterator::hasNextEntityId);
+                assertForceReindexMessage(exception);
+            } finally {
+                iterator.close();
+            }
+        }
+    }
+
+    @Test
+    public void entitySourceReuseSpansLucenePageBoundary() throws Exception {
+        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(
+                SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            for (int i = 0; i < 1001; i++) {
+                writer.addDocument(currentSchemaDocument(1L, geometry));
+            }
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            EntityIdIterator entities = new LuceneEntityIdIterator(new IndexSearcher(reader),
+                    new MatchAllDocsQuery());
+            try {
+                assertTrue(entities.hasNextEntityId());
+                assertEquals(1L, entities.nextEntityId());
+                EntityGeometryIterator components = entities.getGeometriesForLastEntity();
+                try {
+                    SourceGeometryLiteral source = null;
+                    int count = 0;
+                    while (components.hasNextGeometry()) {
+                        components.nextGeometry();
+                        if (source == null) {
+                            source = components.lastSourceGeometryLiteral();
+                        } else {
+                            assertSame(source, components.lastSourceGeometryLiteral());
+                        }
+                        count++;
+                    }
+                    assertEquals(1001, count);
+                } finally {
+                    components.close();
+                }
+                assertFalse(entities.hasNextEntityId());
+            } finally {
+                entities.close();
+            }
         }
     }
 

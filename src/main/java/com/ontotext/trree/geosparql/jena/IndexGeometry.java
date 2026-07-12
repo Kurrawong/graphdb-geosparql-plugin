@@ -90,12 +90,19 @@ public final class IndexGeometry {
 	}
 
 	public static IndexGeometry fromStoredMetadata(Geometry indexGeometry, String lexicalForm, String datatype,
-												  String effectiveSourceCrsUri, String indexCrs,
-												  String indexBuildMode) {
+											  String effectiveSourceCrsUri, String indexCrs,
+											  String indexBuildMode) {
 		SourceGeometryLiteral sourceGeometryLiteral = SourceGeometryLiteral.fromLiteral(
 				org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance()
 						.createLiteral(lexicalForm,
 								org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance().createIRI(datatype)));
+		return fromStoredMetadata(indexGeometry, sourceGeometryLiteral, effectiveSourceCrsUri, indexCrs,
+				indexBuildMode);
+	}
+
+	public static IndexGeometry fromStoredMetadata(Geometry indexGeometry,
+			SourceGeometryLiteral sourceGeometryLiteral, String effectiveSourceCrsUri, String indexCrs,
+			String indexBuildMode) {
 		if (effectiveSourceCrsUri == null) {
 			throw new JenaGeoSparqlException("Lucene source geometry literal CRS metadata is missing.");
 		}

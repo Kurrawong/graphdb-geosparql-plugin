@@ -27,6 +27,7 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 
 	private final IndexSearcher searcher;
 	private final Query query;
+	private final SourceGeometryLiteralResolver sourceResolver = new SourceGeometryLiteralResolver();
 
 	private TopDocs topDocs;
 	private int idx;
@@ -75,6 +76,7 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 
 	@Override
 	public void close() throws IOException {
+		sourceResolver.clear();
 		searcher.getIndexReader().close();
 	}
 
@@ -85,8 +87,9 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 				return false;
 			}
 			long entityId = LuceneGeoDocumentSchema.entityId(firstDocument);
+			sourceResolver.clear();
 			List<IndexGeometry> geometries = new ArrayList<>();
-			geometries.add(LuceneGeoDocumentSchema.indexGeometry(firstDocument));
+			geometries.add(LuceneGeoDocumentSchema.indexGeometry(firstDocument, sourceResolver));
 
 			while (true) {
 				Document document = nextDocument();
@@ -98,7 +101,7 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 					bufferedDocument = document;
 					return setNextEntity(entityId, geometries);
 				}
-				geometries.add(LuceneGeoDocumentSchema.indexGeometry(document));
+				geometries.add(LuceneGeoDocumentSchema.indexGeometry(document, sourceResolver));
 			}
 		} catch (IOException e) {
 			throw new PluginException("Unable to read Lucene entity id documents.", e);

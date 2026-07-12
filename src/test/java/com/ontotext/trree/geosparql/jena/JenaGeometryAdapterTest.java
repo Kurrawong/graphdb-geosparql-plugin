@@ -149,6 +149,18 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
+	public void storedMetadataFactoryRejectsConflictingEffectiveSourceCrs() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
+		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class, () ->
+				IndexGeometry.fromStoredMetadata(index.indexGeometry(), source, EPSG_32634,
+						IndexGeometry.INDEX_CRS, IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY));
+
+		assertTrue(exception.getMessage().contains("CRS metadata does not match"));
+	}
+
+	@Test
 	public void projectedGmlIsTransformedToCrs84IndexGeometry() {
 		String gml = "<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName=\"" + EPSG_32634
 				+ "\"><gml:pos>799997.80 4589779.63</gml:pos></gml:Point>";

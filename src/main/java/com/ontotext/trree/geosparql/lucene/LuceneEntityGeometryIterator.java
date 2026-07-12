@@ -18,7 +18,9 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	private TopDocs topDocs;
 	private final IndexSearcher searcher;
 	private final Query query;
+	private final SourceGeometryLiteralResolver sourceResolver = new SourceGeometryLiteralResolver();
 	private boolean exhausted;
+	private boolean hasEntityId;
 
 	private int idx = -1;
 
@@ -82,6 +84,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 
 	@Override
 	public void close() throws IOException {
+		sourceResolver.clear();
 		searcher.getIndexReader().close();
 	}
 
@@ -112,8 +115,13 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 		ScoreDoc d = topDocs.scoreDocs[idx];
 		Document doc = searcher.doc(d.doc);
 
-		indexGeometry = LuceneGeoDocumentSchema.indexGeometry(doc);
-		entityId = LuceneGeoDocumentSchema.entityId(doc);
+		long documentEntityId = LuceneGeoDocumentSchema.entityId(doc);
+		if (!hasEntityId || documentEntityId != entityId) {
+			sourceResolver.clear();
+		}
+		entityId = documentEntityId;
+		hasEntityId = true;
+		indexGeometry = LuceneGeoDocumentSchema.indexGeometry(doc, sourceResolver);
 		geometry = indexGeometry.indexGeometry();
 		sourceGeometryLiteral = indexGeometry.sourceGeometryLiteral();
 	}
