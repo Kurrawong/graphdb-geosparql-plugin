@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -69,10 +70,38 @@ public class GeoSparqlRelationIteratorTest {
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
 		plugin.indexer = new ScriptedGeoSparqlIndexer(singletonList(polygon), singletonList(polygon),
 				singletonList(emptyCollection), singletonList(emptyCollection),
-				new SingleCandidateEntityIdIterator(SUBJECT, singletonList(emptyCollection)));
+				candidateIterator(SUBJECT, singletonList(emptyCollection)));
 
 		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
 				GeoSparqlPropertyRelation.SF_DISJOINT, 0, PREDICATE, OBJECT, entities);
+		try {
+			assertTrue(iterator.next());
+			assertEquals(SUBJECT, iterator.subject);
+			assertEquals(OBJECT, iterator.object);
+			assertFalse(iterator.next());
+		} finally {
+			iterator.close();
+		}
+	}
+
+	@Test
+	public void subjectBoundLookupChecksEveryDistinctCandidateSourceAndEmitsPairOnce() throws Exception {
+		IndexGeometry boundPoint = indexGeometry("POINT(11 11)");
+		IndexGeometry missPolygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
+		IndexGeometry hitPolygon = indexGeometry("POLYGON((10 10,10 12,12 12,12 10,10 10))");
+
+		FakeEntities entities = new FakeEntities();
+		entities.add(SUBJECT, SimpleValueFactory.getInstance().createLiteral(
+				"POINT(11 11)", GeoConstants.GEO_WKT_LITERAL));
+		entities.add(OBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/container"));
+
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
+		plugin.indexer = new ScriptedGeoSparqlIndexer(OBJECT, singletonList(boundPoint), singletonList(boundPoint),
+				List.of(missPolygon, hitPolygon), List.of(missPolygon, hitPolygon));
+
+		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_WITHIN, SUBJECT, PREDICATE, 0, entities);
 		try {
 			assertTrue(iterator.next());
 			assertEquals(SUBJECT, iterator.subject);
@@ -113,7 +142,7 @@ public class GeoSparqlRelationIteratorTest {
 	}
 
 	private static IndexGeometry indexGeometry(String wkt) {
-		return IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(wkt));
+		return TestIndexGeometries.exactlyOne(wkt);
 	}
 
 	private static final class ScriptedGeoSparqlIndexer implements GeoSparqlIndexer {
@@ -121,7 +150,8 @@ public class GeoSparqlRelationIteratorTest {
 		private final List<IndexGeometry> objectHitGeometries;
 		private final List<IndexGeometry> firstCandidateGeometries;
 		private final List<IndexGeometry> secondCandidateGeometries;
-		private final EntityIdIterator allCandidates;
+		private final CloseableIterator<CandidateEntity> allCandidates;
+		private final long candidateEntityId;
 		private int lookupCount;
 
 		private ScriptedGeoSparqlIndexer(List<IndexGeometry> objectMissGeometries,
@@ -129,42 +159,63 @@ public class GeoSparqlRelationIteratorTest {
 										 List<IndexGeometry> firstCandidateGeometries,
 										 List<IndexGeometry> secondCandidateGeometries) {
 			this(objectMissGeometries, objectHitGeometries, firstCandidateGeometries,
-					secondCandidateGeometries, new EmptyEntityIdIterator());
+					secondCandidateGeometries, emptyIterator(), SUBJECT);
+		}
+
+		private ScriptedGeoSparqlIndexer(long candidateEntityId,
+				List<IndexGeometry> objectMissGeometries,
+				List<IndexGeometry> objectHitGeometries,
+				List<IndexGeometry> firstCandidateGeometries,
+				List<IndexGeometry> secondCandidateGeometries) {
+			this(objectMissGeometries, objectHitGeometries, firstCandidateGeometries,
+					secondCandidateGeometries, emptyIterator(), candidateEntityId);
 		}
 
 		private ScriptedGeoSparqlIndexer(List<IndexGeometry> objectMissGeometries,
 										 List<IndexGeometry> objectHitGeometries,
 										 List<IndexGeometry> firstCandidateGeometries,
 										 List<IndexGeometry> secondCandidateGeometries,
-										 EntityIdIterator allCandidates) {
+										 CloseableIterator<CandidateEntity> allCandidates) {
+			this(objectMissGeometries, objectHitGeometries, firstCandidateGeometries,
+					secondCandidateGeometries, allCandidates, SUBJECT);
+		}
+
+		private ScriptedGeoSparqlIndexer(List<IndexGeometry> objectMissGeometries,
+										 List<IndexGeometry> objectHitGeometries,
+										 List<IndexGeometry> firstCandidateGeometries,
+										 List<IndexGeometry> secondCandidateGeometries,
+										 CloseableIterator<CandidateEntity> allCandidates,
+										 long candidateEntityId) {
 			this.objectMissGeometries = objectMissGeometries;
 			this.objectHitGeometries = objectHitGeometries;
 			this.firstCandidateGeometries = firstCandidateGeometries;
 			this.secondCandidateGeometries = secondCandidateGeometries;
 			this.allCandidates = allCandidates;
+			this.candidateEntityId = candidateEntityId;
 		}
 
 		@Override
-		public EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
+		public CloseableIterator<CandidateEntity> getMatchingEntities(Geometry geometry,
+				CandidateLookupPolicy candidateLookupPolicy) {
 			lookupCount++;
 			if (lookupCount == 1) {
-				return new SingleCandidateEntityIdIterator(SUBJECT, firstCandidateGeometries);
+				return candidateIterator(candidateEntityId, firstCandidateGeometries);
 			}
 			if (lookupCount == 2) {
-				return new SingleCandidateEntityIdIterator(SUBJECT, secondCandidateGeometries);
+				return candidateIterator(candidateEntityId, secondCandidateGeometries);
 			}
-			return new EmptyEntityIdIterator();
+			return emptyIterator();
 		}
 
 		@Override
-		public EntityIdIterator getAllEntityIds() {
+		public CloseableIterator<CandidateEntity> getAllEntities() {
 			return allCandidates;
 		}
 
 		@Override
-		public EntityGeometryIterator getGeometriesFor(long subject) {
+		public CloseableIterator<IndexGeometry> getGeometriesFor(long subject) {
 			if (subject == OBJECT) {
-				return new SingleEntityGeometryIterator(subject, List.of(
+				return iterator(List.of(
 						objectMissGeometries.get(0),
 						objectHitGeometries.get(0)));
 			}
@@ -178,12 +229,6 @@ public class GeoSparqlRelationIteratorTest {
 		@Override
 		public void indexGeometryList(long subject, Function<Long, String> subjectMapper,
 									  List<IndexGeometry> geometries) {
-		}
-
-		@Override
-		public EntityGeometryIterator getMatchingObjects(Geometry geometry,
-														 CandidateLookupPolicy candidateLookupPolicy) {
-			throw new UnsupportedOperationException();
 		}
 
 		@Override
@@ -211,64 +256,32 @@ public class GeoSparqlRelationIteratorTest {
 		}
 	}
 
-	private static final class SingleCandidateEntityIdIterator implements EntityIdIterator {
-		private final long entityId;
-		private final List<IndexGeometry> geometries;
-		private boolean consumed;
-		private boolean lastReady;
-
-		private SingleCandidateEntityIdIterator(long entityId, List<IndexGeometry> geometries) {
-			this.entityId = entityId;
-			this.geometries = geometries;
-		}
-
-		@Override
-		public boolean hasNextEntityId() {
-			return !consumed;
-		}
-
-		@Override
-		public long nextEntityId() {
-			if (consumed) {
-				return 0;
-			}
-			consumed = true;
-			lastReady = true;
-			return entityId;
-		}
-
-		@Override
-		public EntityGeometryIterator getGeometriesForLastEntity() {
-			if (!lastReady) {
-				throw new IllegalStateException();
-			}
-			return new SingleEntityGeometryIterator(entityId, geometries);
-		}
-
-		@Override
-		public void close() throws IOException {
-		}
+	private static CloseableIterator<CandidateEntity> candidateIterator(long entityId,
+			List<IndexGeometry> geometries) {
+		return iterator(List.of(new CandidateEntity(entityId, geometries)));
 	}
 
-	private static final class EmptyEntityIdIterator implements EntityIdIterator {
-		@Override
-		public boolean hasNextEntityId() {
-			return false;
-		}
+	private static <T> CloseableIterator<T> emptyIterator() {
+		return iterator(List.of());
+	}
 
-		@Override
-		public long nextEntityId() {
-			return 0;
-		}
+	private static <T> CloseableIterator<T> iterator(List<T> values) {
+		Iterator<T> iterator = values.iterator();
+		return new CloseableIterator<T>() {
+			@Override
+			public boolean hasNext() {
+				return iterator.hasNext();
+			}
 
-		@Override
-		public EntityGeometryIterator getGeometriesForLastEntity() {
-			throw new IllegalStateException();
-		}
+			@Override
+			public T next() {
+				return iterator.next();
+			}
 
-		@Override
-		public void close() throws IOException {
-		}
+			@Override
+			public void close() throws IOException {
+			}
+		};
 	}
 
 	private static final class FakeEntities implements Entities {

@@ -10,7 +10,11 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import java.util.List;
 
 /**
- * Thin RDF4J-to-Jena geometry adapter.
+ * Central RDF4J-to-Jena conversion entry point for geometry values.
+ *
+ * <p>The adapter initializes Jena's geometry registries, preserves RDF literal datatype and lexical form in
+ * {@link SourceGeometryLiteral}, and derives the component-aware CRS84 {@link IndexGeometry} values used by Lucene.
+ * Exact relation semantics remain in the Jena evaluator rather than this conversion layer.
  */
 public final class JenaGeometryAdapter {
 	private JenaGeometryAdapter() {
@@ -34,11 +38,6 @@ public final class JenaGeometryAdapter {
 	public static SourceGeometryLiteral toSourceGeometryLiteral(Value value, boolean acceptNoType) {
 		initialize();
 		return SourceGeometryLiteral.fromValue(value, acceptNoType);
-	}
-
-	public static IndexGeometry toIndexGeometry(SourceGeometryLiteral sourceGeometryLiteral) {
-		initialize();
-		return IndexGeometry.fromSourceGeometryLiteral(sourceGeometryLiteral);
 	}
 
 	public static List<IndexGeometry> toIndexGeometries(SourceGeometryLiteral sourceGeometryLiteral) {

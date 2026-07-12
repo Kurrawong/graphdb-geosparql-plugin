@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql.jena;
 
+import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
@@ -139,7 +140,7 @@ public class JenaGeometryAdapterTest {
 	public void projectedWktIsTransformedToCrs84IndexGeometry() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
 
-		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
+		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
@@ -151,7 +152,7 @@ public class JenaGeometryAdapterTest {
 	@Test
 	public void storedMetadataFactoryRejectsConflictingEffectiveSourceCrs() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
-		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
+		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
 
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class, () ->
 				IndexGeometry.fromStoredMetadata(index.indexGeometry(), source, EPSG_32634,
@@ -167,7 +168,7 @@ public class JenaGeometryAdapterTest {
 		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
 
 		SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
-		IndexGeometry index = IndexGeometry.fromSourceGeometryLiteral(source);
+		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
@@ -393,7 +394,7 @@ public class JenaGeometryAdapterTest {
 	@Test
 	public void unsupportedCrsCannotProduceIndexGeometry() {
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
-				() -> IndexGeometry.fromSourceGeometryLiteral(
+				() -> TestIndexGeometries.exactlyOne(
 						SourceGeometryLiteral.fromWkt("<http://example.com/crs/unknown> POINT(1 2)")));
 
 		assertTrue(exception.getMessage().contains("Unsupported CRS")

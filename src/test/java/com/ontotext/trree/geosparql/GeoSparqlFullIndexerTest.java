@@ -142,24 +142,18 @@ public class GeoSparqlFullIndexerTest {
 		}
 
 		@Override
-		public EntityGeometryIterator getMatchingObjects(org.locationtech.jts.geom.Geometry geometry,
+		public CloseableIterator<CandidateEntity> getMatchingEntities(org.locationtech.jts.geom.Geometry geometry,
 				CandidateLookupPolicy candidateLookupPolicy) {
 			return null;
 		}
 
 		@Override
-		public EntityIdIterator getMatchingEntityIds(org.locationtech.jts.geom.Geometry geometry,
-				CandidateLookupPolicy candidateLookupPolicy) {
+		public CloseableIterator<CandidateEntity> getAllEntities() {
 			return null;
 		}
 
 		@Override
-		public EntityIdIterator getAllEntityIds() {
-			return null;
-		}
-
-		@Override
-		public EntityGeometryIterator getGeometriesFor(long subject) {
+		public CloseableIterator<IndexGeometry> getGeometriesFor(long subject) {
 			return null;
 		}
 

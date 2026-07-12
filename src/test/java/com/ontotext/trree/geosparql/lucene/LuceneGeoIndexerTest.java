@@ -2,10 +2,11 @@ package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.trree.geosparql.CandidateLookupPolicy;
+import com.ontotext.trree.geosparql.CandidateEntity;
+import com.ontotext.trree.geosparql.CloseableIterator;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
-import com.ontotext.trree.geosparql.EntityGeometryIterator;
-import com.ontotext.trree.geosparql.EntityIdIterator;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
+import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
@@ -50,6 +51,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Map;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -153,7 +155,7 @@ public class LuceneGeoIndexerTest {
         final List<String> wktLines = IOUtils.readLines(
                 LuceneGeoIndexerTest.class.getResourceAsStream("/example_data.wkt"));
         for (String line : wktLines) {
-            geometries.add(IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(line)));
+            geometries.add(TestIndexGeometries.exactlyOne(SourceGeometryLiteral.fromWkt(line)));
         }
     }
 
@@ -195,14 +197,14 @@ public class LuceneGeoIndexerTest {
 
     @Test
     public void testFullScanCandidateLookupScansAllDocuments() throws Exception {
-        EntityGeometryIterator iterator = luceneGeoIndexer.getMatchingObjects(geometries.get(0).indexGeometry(),
-                CandidateLookupPolicy.FULL_SCAN);
+        CloseableIterator<IndexGeometry> iterator = luceneGeoIndexer.getGeometriesFor(0);
 
         int count = 0;
         try {
-            while (iterator.hasNextGeometry()) {
-                assertNotNull(iterator.nextGeometry());
-                assertNotNull(iterator.lastSourceGeometryLiteral());
+            while (iterator.hasNext()) {
+                IndexGeometry geometry = iterator.next();
+                assertNotNull(geometry.indexGeometry());
+                assertNotNull(geometry.sourceGeometryLiteral());
                 count++;
             }
         } finally {
@@ -214,7 +216,7 @@ public class LuceneGeoIndexerTest {
 
     @Test
     public void matchingEntityIdsDeduplicateMultipleMatchingGeometryDocumentsForOneEntity() throws Exception {
-        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
         Path entityCandidateDataDir = tmpFolder.getRoot().toPath().resolve("entity-candidates");
         Files.createDirectories(entityCandidateDataDir);
 
@@ -223,7 +225,7 @@ public class LuceneGeoIndexerTest {
         entityCandidateIndexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(geometry, geometry));
         entityCandidateIndexer.commit();
 
-        EntityIdIterator iterator = entityCandidateIndexer.getMatchingEntityIds(geometry.indexGeometry(),
+        CloseableIterator<CandidateEntity> iterator = entityCandidateIndexer.getMatchingEntities(geometry.indexGeometry(),
                 CandidateLookupPolicy.INTERSECTS);
 
         assertArrayEquals(new long[]{1L}, collectEntityIds(iterator));
@@ -244,18 +246,19 @@ public class LuceneGeoIndexerTest {
         indexer.indexGeometryList(2L, subject -> "Subject " + subject, List.of(emptySentinel));
         indexer.commit();
 
-        assertArrayEquals(new long[]{1L}, collectEntityIds(indexer.getMatchingEntityIds(
+        assertArrayEquals(new long[]{1L}, collectEntityIds(indexer.getMatchingEntities(
                 collection.get(0).indexGeometry(), CandidateLookupPolicy.INTERSECTS)));
-        assertArrayEquals(new long[]{1L, 2L}, collectEntityIds(indexer.getAllEntityIds()));
+        assertArrayEquals(new long[]{1L, 2L}, collectEntityIds(indexer.getAllEntities()));
 
-        EntityGeometryIterator iterator = indexer.getGeometriesFor(2L);
+        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(2L);
         try {
-            assertTrue(iterator.hasNextGeometry());
-            assertTrue(iterator.nextGeometry().isEmpty());
+            assertTrue(iterator.hasNext());
+            IndexGeometry sentinel = iterator.next();
+            assertTrue(sentinel.indexGeometry().isEmpty());
             assertEquals(IndexGeometry.BUILD_MODE_EMPTY_SENTINEL,
-                    iterator.lastIndexGeometry().indexBuildMode());
-            assertFalse(iterator.lastIndexGeometry().isSpatialCandidate());
-            assertFalse(iterator.hasNextGeometry());
+                    sentinel.indexBuildMode());
+            assertFalse(sentinel.isSpatialCandidate());
+            assertFalse(iterator.hasNext());
         } finally {
             iterator.close();
         }
@@ -273,23 +276,15 @@ public class LuceneGeoIndexerTest {
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, collection);
         indexer.commit();
 
-        EntityIdIterator entities = indexer.getAllEntityIds();
+        CloseableIterator<CandidateEntity> entities = indexer.getAllEntities();
         try {
-            assertTrue(entities.hasNextEntityId());
-            assertEquals(1L, entities.nextEntityId());
-            EntityGeometryIterator components = entities.getGeometriesForLastEntity();
-            try {
-                assertTrue(components.hasNextGeometry());
-                components.nextGeometry();
-                SourceGeometryLiteral source = components.lastSourceGeometryLiteral();
-                assertTrue(components.hasNextGeometry());
-                components.nextGeometry();
-                assertSame(source, components.lastSourceGeometryLiteral());
-                assertFalse(components.hasNextGeometry());
-            } finally {
-                components.close();
-            }
-            assertFalse(entities.hasNextEntityId());
+            assertTrue(entities.hasNext());
+            CandidateEntity candidate = entities.next();
+            assertEquals(1L, candidate.entityId());
+            assertEquals(2, candidate.matchingGeometries().size());
+            SourceGeometryLiteral source = candidate.matchingGeometries().get(0).sourceGeometryLiteral();
+            assertSame(source, candidate.matchingGeometries().get(1).sourceGeometryLiteral());
+            assertFalse(entities.hasNext());
         } finally {
             entities.close();
         }
@@ -307,15 +302,13 @@ public class LuceneGeoIndexerTest {
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, collection);
         indexer.commit();
 
-        EntityGeometryIterator components = indexer.getGeometriesFor(1L);
+        CloseableIterator<IndexGeometry> components = indexer.getGeometriesFor(1L);
         try {
-            assertTrue(components.hasNextGeometry());
-            components.nextGeometry();
-            SourceGeometryLiteral source = components.lastSourceGeometryLiteral();
-            assertTrue(components.hasNextGeometry());
-            components.nextGeometry();
-            assertSame(source, components.lastSourceGeometryLiteral());
-            assertFalse(components.hasNextGeometry());
+            assertTrue(components.hasNext());
+            SourceGeometryLiteral source = components.next().sourceGeometryLiteral();
+            assertTrue(components.hasNext());
+            assertSame(source, components.next().sourceGeometryLiteral());
+            assertFalse(components.hasNext());
         } finally {
             components.close();
         }
@@ -323,8 +316,8 @@ public class LuceneGeoIndexerTest {
 
     @Test
     public void entityTraversalRetainsDistinctSourceGeometryLiterals() throws Exception {
-        IndexGeometry first = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
-        IndexGeometry second = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(1 1)"));
+        IndexGeometry first = TestIndexGeometries.exactlyOne("POINT(0 0)");
+        IndexGeometry second = TestIndexGeometries.exactlyOne("POINT(1 1)");
         Path dataDir = tmpFolder.getRoot().toPath().resolve("distinct-entity-sources");
         Files.createDirectories(dataDir);
 
@@ -333,26 +326,47 @@ public class LuceneGeoIndexerTest {
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(first, second));
         indexer.commit();
 
-        EntityGeometryIterator geometries = indexer.getGeometriesFor(1L);
+        CloseableIterator<IndexGeometry> geometries = indexer.getGeometriesFor(1L);
         try {
-            assertTrue(geometries.hasNextGeometry());
-            geometries.nextGeometry();
-            SourceGeometryLiteral firstSource = geometries.lastSourceGeometryLiteral();
-            assertTrue(geometries.hasNextGeometry());
-            geometries.nextGeometry();
-            SourceGeometryLiteral secondSource = geometries.lastSourceGeometryLiteral();
+            assertTrue(geometries.hasNext());
+            SourceGeometryLiteral firstSource = geometries.next().sourceGeometryLiteral();
+            assertTrue(geometries.hasNext());
+            SourceGeometryLiteral secondSource = geometries.next().sourceGeometryLiteral();
             assertNotSame(firstSource, secondSource);
             assertEquals("POINT(0 0)", firstSource.lexicalForm());
             assertEquals("POINT(1 1)", secondSource.lexicalForm());
-            assertFalse(geometries.hasNextGeometry());
+            assertFalse(geometries.hasNext());
         } finally {
             geometries.close();
         }
     }
 
     @Test
+    public void indexGeometryIteratorDiscardsSourceReuseAtEntityBoundary() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(1L, geometry));
+            writer.addDocument(currentSchemaDocument(2L, geometry));
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            LuceneIndexGeometryIterator iterator = new LuceneIndexGeometryIterator(new IndexSearcher(reader),
+                    new MatchAllDocsQuery());
+            try {
+                SourceGeometryLiteral first = iterator.next().sourceGeometryLiteral();
+                SourceGeometryLiteral second = iterator.next().sourceGeometryLiteral();
+                assertNotSame(first, second);
+                assertFalse(iterator.hasNext());
+            } finally {
+                iterator.close();
+            }
+        }
+    }
+
+    @Test
     public void cachedSourceDoesNotHideConflictingEffectiveCrsMetadata() throws Exception {
-        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne(
                 SourceGeometryLiteral.fromWkt("POINT(0 0)"));
         try (Directory directory = new ByteBuffersDirectory();
              IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
@@ -364,10 +378,10 @@ public class LuceneGeoIndexerTest {
             writer.commit();
 
             IndexReader reader = DirectoryReader.open(directory);
-            EntityIdIterator iterator = new LuceneEntityIdIterator(new IndexSearcher(reader),
+            CloseableIterator<CandidateEntity> iterator = new LuceneCandidateEntityIterator(new IndexSearcher(reader),
                     new MatchAllDocsQuery());
             try {
-                PluginException exception = assertThrows(PluginException.class, iterator::hasNextEntityId);
+                PluginException exception = assertThrows(PluginException.class, iterator::hasNext);
                 assertForceReindexMessage(exception);
             } finally {
                 iterator.close();
@@ -377,7 +391,7 @@ public class LuceneGeoIndexerTest {
 
     @Test
     public void entitySourceReuseSpansLucenePageBoundary() throws Exception {
-        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne(
                 SourceGeometryLiteral.fromWkt("POINT(0 0)"));
         try (Directory directory = new ByteBuffersDirectory();
              IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
@@ -387,29 +401,22 @@ public class LuceneGeoIndexerTest {
             writer.commit();
 
             IndexReader reader = DirectoryReader.open(directory);
-            EntityIdIterator entities = new LuceneEntityIdIterator(new IndexSearcher(reader),
+            CloseableIterator<CandidateEntity> entities = new LuceneCandidateEntityIterator(new IndexSearcher(reader),
                     new MatchAllDocsQuery());
             try {
-                assertTrue(entities.hasNextEntityId());
-                assertEquals(1L, entities.nextEntityId());
-                EntityGeometryIterator components = entities.getGeometriesForLastEntity();
-                try {
-                    SourceGeometryLiteral source = null;
-                    int count = 0;
-                    while (components.hasNextGeometry()) {
-                        components.nextGeometry();
-                        if (source == null) {
-                            source = components.lastSourceGeometryLiteral();
-                        } else {
-                            assertSame(source, components.lastSourceGeometryLiteral());
-                        }
-                        count++;
+                assertTrue(entities.hasNext());
+                CandidateEntity candidate = entities.next();
+                assertEquals(1L, candidate.entityId());
+                SourceGeometryLiteral source = null;
+                for (IndexGeometry component : candidate.matchingGeometries()) {
+                    if (source == null) {
+                        source = component.sourceGeometryLiteral();
+                    } else {
+                        assertSame(source, component.sourceGeometryLiteral());
                     }
-                    assertEquals(1001, count);
-                } finally {
-                    components.close();
                 }
-                assertFalse(entities.hasNextEntityId());
+                assertEquals(1001, candidate.matchingGeometries().size());
+                assertFalse(entities.hasNext());
             } finally {
                 entities.close();
             }
@@ -418,7 +425,7 @@ public class LuceneGeoIndexerTest {
 
     @Test
     public void candidateEntityGeometryLookupUsesCandidateReader() throws Exception {
-        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
         Path entityCandidateDataDir = tmpFolder.getRoot().toPath().resolve("candidate-entity-geometries");
         Files.createDirectories(entityCandidateDataDir);
 
@@ -429,14 +436,15 @@ public class LuceneGeoIndexerTest {
         }
         entityCandidateIndexer.commit();
 
-        EntityIdIterator iterator = entityCandidateIndexer.getMatchingEntityIds(geometry.indexGeometry(),
+        CloseableIterator<CandidateEntity> iterator = entityCandidateIndexer.getMatchingEntities(geometry.indexGeometry(),
                 CandidateLookupPolicy.FULL_SCAN);
 
         try {
             for (int expectedEntityId = 1; expectedEntityId <= 3; expectedEntityId++) {
-                assertTrue(iterator.hasNextEntityId());
-                assertEquals(expectedEntityId, iterator.nextEntityId());
-                assertEntityGeometryCount(1, iterator.getGeometriesForLastEntity());
+                assertTrue(iterator.hasNext());
+                CandidateEntity candidate = iterator.next();
+                assertEquals(expectedEntityId, candidate.entityId());
+                assertEquals(1, candidate.matchingGeometries().size());
             }
             assertEquals(1, entityCandidateIndexer.openReaderCount());
         } finally {
@@ -446,7 +454,7 @@ public class LuceneGeoIndexerTest {
 
     @Test
     public void candidateEntityGeometryLookupDoesNotRunEntitySearchPerCandidate() throws Exception {
-        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
         try (Directory directory = new ByteBuffersDirectory();
              IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
             writer.addDocument(currentSchemaDocument(1L, geometry));
@@ -456,13 +464,15 @@ public class LuceneGeoIndexerTest {
 
             try (IndexReader reader = DirectoryReader.open(directory)) {
                 CountingIndexSearcher searcher = new CountingIndexSearcher(reader);
-                EntityIdIterator iterator = new LuceneEntityIdIterator(searcher, new MatchAllDocsQuery());
+                CloseableIterator<CandidateEntity> iterator = new LuceneCandidateEntityIterator(searcher,
+                        new MatchAllDocsQuery());
 
                 try {
                     for (int expectedEntityId = 1; expectedEntityId <= 3; expectedEntityId++) {
-                        assertTrue(iterator.hasNextEntityId());
-                        assertEquals(expectedEntityId, iterator.nextEntityId());
-                        assertEntityGeometryCount(1, iterator.getGeometriesForLastEntity());
+                        assertTrue(iterator.hasNext());
+                        CandidateEntity candidate = iterator.next();
+                        assertEquals(expectedEntityId, candidate.entityId());
+                        assertEquals(1, candidate.matchingGeometries().size());
                     }
                     assertEquals(1, searcher.searchCount());
                 } finally {
@@ -474,11 +484,11 @@ public class LuceneGeoIndexerTest {
 
     @Test
     public void candidateEntityGeometryLookupGroupsInterleavedDocumentsByEntity() throws Exception {
-        IndexGeometry firstEntityGeometry1 = IndexGeometry.fromSourceGeometryLiteral(
+        IndexGeometry firstEntityGeometry1 = TestIndexGeometries.exactlyOne(
                 SourceGeometryLiteral.fromWkt("POINT(0 0)"));
-        IndexGeometry secondEntityGeometry = IndexGeometry.fromSourceGeometryLiteral(
+        IndexGeometry secondEntityGeometry = TestIndexGeometries.exactlyOne(
                 SourceGeometryLiteral.fromWkt("POINT(1 1)"));
-        IndexGeometry firstEntityGeometry2 = IndexGeometry.fromSourceGeometryLiteral(
+        IndexGeometry firstEntityGeometry2 = TestIndexGeometries.exactlyOne(
                 SourceGeometryLiteral.fromWkt("POINT(2 2)"));
 
         try (Directory directory = new ByteBuffersDirectory();
@@ -489,17 +499,19 @@ public class LuceneGeoIndexerTest {
             writer.commit();
 
             try (IndexReader reader = DirectoryReader.open(directory)) {
-                EntityIdIterator iterator = new LuceneEntityIdIterator(new IndexSearcher(reader),
+                CloseableIterator<CandidateEntity> iterator = new LuceneCandidateEntityIterator(new IndexSearcher(reader),
                         new MatchAllDocsQuery());
 
                 try {
-                    assertTrue(iterator.hasNextEntityId());
-                    assertEquals(1L, iterator.nextEntityId());
-                    assertEntityGeometryCount(2, iterator.getGeometriesForLastEntity());
+                    assertTrue(iterator.hasNext());
+                    CandidateEntity first = iterator.next();
+                    assertEquals(1L, first.entityId());
+                    assertEquals(2, first.matchingGeometries().size());
 
-                    assertTrue(iterator.hasNextEntityId());
-                    assertEquals(2L, iterator.nextEntityId());
-                    assertEntityGeometryCount(1, iterator.getGeometriesForLastEntity());
+                    assertTrue(iterator.hasNext());
+                    CandidateEntity second = iterator.next();
+                    assertEquals(2L, second.entityId());
+                    assertEquals(1, second.matchingGeometries().size());
                 } finally {
                     iterator.close();
                 }
@@ -527,8 +539,64 @@ public class LuceneGeoIndexerTest {
         assertFullScanReturnsDocumentCount(2000);
     }
 
+    @Test
+    public void indexGeometryIteratorReturnsValuesWithoutPriorHasNextAndThrowsWhenExhausted() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(1L, geometry));
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            LuceneIndexGeometryIterator iterator = new LuceneIndexGeometryIterator(new IndexSearcher(reader),
+                    new MatchAllDocsQuery());
+            try {
+                assertTrue(iterator.hasNext());
+                assertTrue(iterator.hasNext());
+                assertEquals("POINT(0 0)", iterator.next().sourceGeometryLiteral().lexicalForm());
+                assertFalse(iterator.hasNext());
+                assertThrows(NoSuchElementException.class, iterator::next);
+            } finally {
+                iterator.close();
+                iterator.close();
+            }
+            assertEquals(0, reader.getRefCount());
+        }
+    }
+
+    @Test
+    public void candidateEntityIteratorGroupsValuesAcrossPageBoundary() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            for (int i = 0; i < 1001; i++) {
+                writer.addDocument(currentSchemaDocument(1L, geometry));
+            }
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            LuceneCandidateEntityIterator iterator = new LuceneCandidateEntityIterator(new IndexSearcher(reader),
+                    new MatchAllDocsQuery());
+            try {
+                CandidateEntity candidate = iterator.next();
+                assertEquals(1L, candidate.entityId());
+                assertEquals(1001, candidate.matchingGeometries().size());
+                SourceGeometryLiteral source = candidate.matchingGeometries().get(0).sourceGeometryLiteral();
+                for (IndexGeometry matchingGeometry : candidate.matchingGeometries()) {
+                    assertSame(source, matchingGeometry.sourceGeometryLiteral());
+                }
+                assertFalse(iterator.hasNext());
+                assertThrows(NoSuchElementException.class, iterator::next);
+            } finally {
+                iterator.close();
+                iterator.close();
+            }
+            assertEquals(0, reader.getRefCount());
+        }
+    }
+
     private void assertFullScanReturnsDocumentCount(int documentCount) throws Exception {
-        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
         try (Directory directory = new ByteBuffersDirectory();
              IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
             for (long subject = 1; subject <= documentCount; subject++) {
@@ -537,14 +605,15 @@ public class LuceneGeoIndexerTest {
             writer.commit();
 
             try (IndexReader reader = DirectoryReader.open(directory)) {
-                EntityGeometryIterator iterator = new LuceneEntityGeometryIterator(new IndexSearcher(reader),
+                CloseableIterator<IndexGeometry> iterator = new LuceneIndexGeometryIterator(new IndexSearcher(reader),
                         new MatchAllDocsQuery());
 
                 int count = 0;
                 try {
-                    while (iterator.hasNextGeometry()) {
-                        assertNotNull(iterator.nextGeometry());
-                        assertNotNull(iterator.lastSourceGeometryLiteral());
+                    while (iterator.hasNext()) {
+                        IndexGeometry indexGeometry = iterator.next();
+                        assertNotNull(indexGeometry.indexGeometry());
+                        assertNotNull(indexGeometry.sourceGeometryLiteral());
                         count++;
                     }
                 } finally {
@@ -557,7 +626,7 @@ public class LuceneGeoIndexerTest {
     }
 
     private void assertFullScanReturnsEntityIdCount(int documentCount) throws Exception {
-        IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
+        IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
         try (Directory directory = new ByteBuffersDirectory();
              IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
             for (long subject = 1; subject <= documentCount; subject++) {
@@ -566,13 +635,13 @@ public class LuceneGeoIndexerTest {
             writer.commit();
 
             try (IndexReader reader = DirectoryReader.open(directory)) {
-                EntityIdIterator iterator = new LuceneEntityIdIterator(new IndexSearcher(reader),
+                CloseableIterator<CandidateEntity> iterator = new LuceneCandidateEntityIterator(new IndexSearcher(reader),
                         new MatchAllDocsQuery());
 
                 int count = 0;
                 try {
-                    while (iterator.hasNextEntityId()) {
-                        assertEquals(count + 1, iterator.nextEntityId());
+                    while (iterator.hasNext()) {
+                        assertEquals(count + 1, iterator.next().entityId());
                         count++;
                     }
                 } finally {
@@ -584,17 +653,17 @@ public class LuceneGeoIndexerTest {
         }
     }
 
-    private long[] collectEntityIds(EntityIdIterator iterator) throws IOException {
+    private long[] collectEntityIds(CloseableIterator<CandidateEntity> iterator) throws IOException {
         try {
             long[] ids = new long[16];
             int size = 0;
-            while (iterator.hasNextEntityId()) {
+            while (iterator.hasNext()) {
                 if (size == ids.length) {
                     long[] expanded = new long[ids.length * 2];
                     System.arraycopy(ids, 0, expanded, 0, ids.length);
                     ids = expanded;
                 }
-                ids[size++] = iterator.nextEntityId();
+                ids[size++] = iterator.next().entityId();
             }
 
             long[] result = new long[size];
@@ -605,12 +674,13 @@ public class LuceneGeoIndexerTest {
         }
     }
 
-    private void assertEntityGeometryCount(int expected, EntityGeometryIterator iterator) throws IOException {
+    private void assertEntityGeometryCount(int expected, CloseableIterator<IndexGeometry> iterator) throws IOException {
         try {
             int count = 0;
-            while (iterator.hasNextGeometry()) {
-                assertNotNull(iterator.nextGeometry());
-                assertNotNull(iterator.lastSourceGeometryLiteral());
+            while (iterator.hasNext()) {
+                IndexGeometry geometry = iterator.next();
+                assertNotNull(geometry.indexGeometry());
+                assertNotNull(geometry.sourceGeometryLiteral());
                 count++;
             }
             assertEquals(expected, count);
@@ -722,10 +792,10 @@ public class LuceneGeoIndexerTest {
         writeMarkedIndexMissingRequiredSchemaV2Field(malformedDataDir);
 
         LuceneGeoIndexer indexer = createIndexer(malformedDataDir.toFile());
-        EntityGeometryIterator iterator = indexer.getGeometriesFor(0);
+        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(0);
 
         try {
-            PluginException exception = assertThrows(PluginException.class, () -> iterator.nextGeometry());
+            PluginException exception = assertThrows(PluginException.class, iterator::next);
 
             assertForceReindexMessage(exception);
         } finally {
@@ -753,12 +823,13 @@ public class LuceneGeoIndexerTest {
         writeMarkedCurrentSchemaIndex(markedDataDir);
 
         LuceneGeoIndexer indexer = createIndexer(markedDataDir.toFile());
-        EntityGeometryIterator iterator = indexer.getGeometriesFor(0);
+        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(0);
 
         try {
-            assertTrue(iterator.hasNextGeometry());
-            assertNotNull(iterator.nextGeometry());
-            assertNotNull(iterator.lastSourceGeometryLiteral());
+            assertTrue(iterator.hasNext());
+            IndexGeometry geometry = iterator.next();
+            assertNotNull(geometry.indexGeometry());
+            assertNotNull(geometry.sourceGeometryLiteral());
         } finally {
             iterator.close();
         }
@@ -882,11 +953,12 @@ public class LuceneGeoIndexerTest {
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(geometries.get(0)));
         indexer.commit();
 
-        EntityGeometryIterator iterator = indexer.getGeometriesFor(0);
+        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(0);
         try {
-            assertTrue(iterator.hasNextGeometry());
-            assertNotNull(iterator.nextGeometry());
-            assertNotNull(iterator.lastSourceGeometryLiteral());
+            assertTrue(iterator.hasNext());
+            IndexGeometry geometry = iterator.next();
+            assertNotNull(geometry.indexGeometry());
+            assertNotNull(geometry.sourceGeometryLiteral());
         } finally {
             iterator.close();
         }
@@ -905,7 +977,7 @@ public class LuceneGeoIndexerTest {
 
         LuceneGeoIndexer projectedIndexer = createIndexer(projectedDataDir.toFile());
         projectedIndexer.begin();
-        IndexGeometry projectedGeometry = IndexGeometry.fromSourceGeometryLiteral(
+        IndexGeometry projectedGeometry = TestIndexGeometries.exactlyOne(
                 SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT));
         projectedIndexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(projectedGeometry));
         projectedIndexer.commit();

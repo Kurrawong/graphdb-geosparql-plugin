@@ -21,7 +21,11 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import java.util.List;
 
 /**
- * GeoSPARQL index/query plugin.
+ * GraphDB plugin entry point for GeoSPARQL indexing and query evaluation.
+ *
+ * <p>The plugin coordinates configuration, repository geometry discovery, Lucene candidate indexing, property
+ * relation iteration, and Jena-backed function registration. Geometry literal conversion preserves the source
+ * geometry literal used for exact evaluation while deriving one or more CRS84 index geometries for Lucene.
  */
 public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, UpdateInterpreter,
         ParallelTransactionListener, StatementListener {
@@ -220,67 +224,10 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         this.config = config;
     }
 
-	/**
-	 * Creates the CRS84-derived index geometry and preserves the CRS-aware source geometry literal used for exact
-	 * evaluation.
-	 *
-	 * @param literal RDF geometry literal to convert
-	 * @param fallbackDatatype geometry datatype selected by the calling predicate when compatibility handling requires
-	 *                         a fallback
-	 * @return the source geometry literal together with its derived index geometry
-	 * @throws JenaGeoSparqlException if the datatype, lexical form, CRS, or CRS transformation is unsupported
-	 */
-	IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
-		SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
-				fallbackDatatype);
-		return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
-	}
-
 	List<IndexGeometry> getIndexGeometriesFromLiteral(Literal literal, IRI fallbackDatatype) {
 		SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
 				fallbackDatatype);
 		return JenaGeometryAdapter.toIndexGeometries(sourceGeometryLiteral);
-	}
-
-	/**
-	 * Resolves and converts a repository geometry literal while applying the configured repository-indexing error
-	 * policy.
-	 *
-	 * <p>The Geometry resource id supplies diagnostic context; the predicate id selects the WKT or GML fallback
-	 * datatype. Non-literal values are ignored. Conversion failures are also skipped with a warning when
-	 * {@code ignoreErrors=true}; otherwise they fail indexing with a contextual {@link PluginException}.
-	 *
-	 * @param geometryResourceId Geometry resource that owns the source geometry literal
-	 * @param literalId repository entity id expected to resolve to an RDF literal
-	 * @param predicateId repository entity id for {@code geo:asWKT} or {@code geo:asGML}
-	 * @param entities entity dictionary used to resolve repository ids
-	 * @return the converted index geometry, or {@code null} for a non-literal or a skipped conversion failure
-	 * @throws PluginException if conversion fails and invalid repository geometries are not configured to be skipped
-	 */
-	IndexGeometry getIndexGeometryFromLiteralId(long geometryResourceId, long literalId, long predicateId,
-			Entities entities) {
-		Value value = entities.get(literalId);
-		if (!(value instanceof Literal)) {
-			return null;
-		}
-		IRI datatype = predicateId == asGML ? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
-		try {
-			return getIndexGeometryFromLiteral((Literal) value, datatype);
-		} catch (JenaGeoSparqlException e) {
-			String subjectText = entities.get(geometryResourceId).stringValue();
-			String failureContext = indexingFailureContext((Literal) value, datatype, e);
-			if (config.isIgnoreErrors()) {
-				getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed. {}",
-						subjectText, failureContext);
-				return null;
-			}
-			throw new PluginException("Could not index GeoSPARQL geometry for subject " + subjectText
-					+ ". " + failureContext
-					+ ". Check that the geometry CRS URI is correct and that Apache SIS CRS data, such as SIS_DATA "
-					+ "and required grid files, is configured when the CRS is supported. To skip invalid or unsupported "
-					+ "repository geometries, configure ignoreErrors = true and rebuild the index.",
-					e);
-		}
 	}
 
 	List<IndexGeometry> getIndexGeometriesFromLiteralId(long geometryResourceId, long literalId, long predicateId,

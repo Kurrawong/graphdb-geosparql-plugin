@@ -53,7 +53,7 @@ public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 			"}";
 	@Test
 	public void shouldProperlyConvertAndIndexDifferentCRSThanDefault() throws Exception {
-		final IndexGeometry pointInCRS84 = IndexGeometry.fromSourceGeometryLiteral(
+		final IndexGeometry pointInCRS84 = TestIndexGeometries.exactlyOne(
 				SourceGeometryLiteral.fromWkt("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)"));
 		final String searchAreaInCRS84 = polygonAround(pointInCRS84.indexGeometry().getCoordinate(), 0.001);
 

@@ -7,7 +7,11 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * GeoSPARQL indexer interface.
+ * Plugin-internal seam between GraphDB repository handling and GeoSPARQL candidate indexing.
+ *
+ * <p>Writes store derived index geometries. Reads return those values for coarse candidate lookup while preserving
+ * their source geometry literal snapshots for the later exact-evaluation step. Public visibility supports the Lucene
+ * adapter in a sibling package.
  */
 public interface GeoSparqlIndexer {
 	/**
@@ -24,34 +28,26 @@ public interface GeoSparqlIndexer {
 	void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<IndexGeometry> geometries);
 
 	/**
-	 * Returns an iterator over entities/geometries that matches the provided geometry
-	 * using the provided candidate lookup policy.
+	 * Returns immutable entity groups whose Lucene documents match the candidate lookup.
 	 *
 	 * @param geometry an index geometry
 	 * @param candidateLookupPolicy the candidate lookup policy
-	 * @return an iterator over entities/geometries
+	 * @return a closeable iterator over grouped matching entities
 	 */
-	EntityGeometryIterator getMatchingObjects(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy);
+	CloseableIterator<CandidateEntity> getMatchingEntities(Geometry geometry,
+			CandidateLookupPolicy candidateLookupPolicy);
+
+	/** Returns every indexed entity, including entities represented only by non-spatial empty sentinels. */
+	CloseableIterator<CandidateEntity> getAllEntities();
 
 	/**
-	 * Returns unique entity ids that match the provided index geometry with the provided candidate lookup policy.
-	 *
-	 * @param geometry an index geometry
-	 * @param candidateLookupPolicy the candidate lookup policy
-	 * @return an iterator over unique matching entity ids
-	 */
-	EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy);
-
-	/** Returns every indexed entity id, including entities represented only by non-spatial sentinel documents. */
-	EntityIdIterator getAllEntityIds();
-
-	/**
-	 * Returns an iterator over all geometries for the provided entity
+	 * Streams all stored index geometries for one entity. A non-positive id selects every stored document for internal
+	 * schema and lifecycle reads.
 	 *
 	 * @param subject subject id of the entity
-	 * @return an iterator over entities/geometries
+	 * @return a closeable iterator over index geometries
 	 */
-	EntityGeometryIterator getGeometriesFor(long subject);
+	CloseableIterator<IndexGeometry> getGeometriesFor(long subject);
 
 	void initSettings();
 

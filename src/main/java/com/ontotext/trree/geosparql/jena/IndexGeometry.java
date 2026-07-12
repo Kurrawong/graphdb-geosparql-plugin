@@ -10,13 +10,15 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Pair of the authoritative source geometry literal and the derived geometry
- * used for Lucene candidate lookup.
+ * Associates a source geometry literal representation with one derived Lucene index geometry.
  *
  * <p>The index geometry is transformed to CRS84 when necessary so it can be
  * indexed by Lucene's spatial layer for coarse candidate lookup. It is not the
  * geometry used for exact GeoSPARQL relation evaluation; exact evaluation uses
  * the source geometry literal, including its datatype and effective source CRS.
+ *
+ * <p>A generic geometry collection produces one instance per non-empty indexable component. An empty collection
+ * produces a non-spatial sentinel that retains the entity and source metadata for full scans.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
@@ -35,15 +37,6 @@ public final class IndexGeometry {
 		this.indexGeometry = indexGeometry;
 		this.indexCrs = indexCrs;
 		this.indexBuildMode = indexBuildMode;
-	}
-
-	public static IndexGeometry fromSourceGeometryLiteral(SourceGeometryLiteral sourceGeometryLiteral) {
-		List<IndexGeometry> geometries = fromSourceGeometryLiteralComponents(sourceGeometryLiteral);
-		if (geometries.size() != 1) {
-			throw new JenaGeoSparqlException("Source geometry literal produces " + geometries.size()
-					+ " component index geometries; use fromSourceGeometryLiteralComponents().");
-		}
-		return geometries.get(0);
 	}
 
 	public static List<IndexGeometry> fromSourceGeometryLiteralComponents(

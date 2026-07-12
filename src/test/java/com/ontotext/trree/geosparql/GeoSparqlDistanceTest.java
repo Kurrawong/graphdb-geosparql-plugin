@@ -13,10 +13,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-/**
- * Created by avataar on 09.04.2015..
- */
-public class EntityGeometryIteratorTest {
+public class GeoSparqlDistanceTest {
 	@Test
 	public void distanceInMetresUsesJenaEvaluator() throws ValueExprEvaluationException {
 		ValueFactory valueFactory = SimpleValueFactory.getInstance();
@@ -28,6 +25,7 @@ public class EntityGeometryIteratorTest {
 
 		assertTrue(result instanceof Literal);
 		assertEquals(1111950.7973436872, ((Literal) result).doubleValue(), 1e-6);
-		assertEquals(valueFactory.createIRI("http://www.w3.org/2001/XMLSchema#double"), ((Literal) result).getDatatype());
+		assertEquals(valueFactory.createIRI("http://www.w3.org/2001/XMLSchema#double"),
+				((Literal) result).getDatatype());
 	}
 }

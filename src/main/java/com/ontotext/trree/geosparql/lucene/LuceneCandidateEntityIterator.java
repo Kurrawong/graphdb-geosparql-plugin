@@ -1,8 +1,7 @@
 package com.ontotext.trree.geosparql.lucene;
 
-import com.ontotext.trree.geosparql.EntityGeometryIterator;
-import com.ontotext.trree.geosparql.EntityIdIterator;
-import com.ontotext.trree.geosparql.SingleEntityGeometryIterator;
+import com.ontotext.trree.geosparql.CandidateEntity;
+import com.ontotext.trree.geosparql.CloseableIterator;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
 import org.apache.lucene.document.Document;
@@ -16,11 +15,17 @@ import org.apache.lucene.search.TopDocs;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
- * Page-backed iterator over unique entity ids matching a Lucene query.
+ * Groups Lucene documents matched by a candidate query into one {@link CandidateEntity} per entity id.
+ *
+ * <p>Numeric entity-id sorting keeps all matching documents for an entity contiguous across {@code searchAfter}
+ * pages. The source geometry resolver is shared across the current group, so documents derived from the same source
+ * geometry literal reuse one validated source snapshot. This iterator owns the searcher's reader and releases it on
+ * {@link #close()}.
  */
-class LuceneEntityIdIterator implements EntityIdIterator {
+class LuceneCandidateEntityIterator implements CloseableIterator<CandidateEntity> {
 	private static final int PAGE_SIZE = 1000;
 	private static final Sort ENTITY_ID_SORT = new Sort(new SortField(LuceneGeoDocumentSchema.FIELD_ID,
 			SortField.Type.LONG));
@@ -28,63 +33,54 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 	private final IndexSearcher searcher;
 	private final Query query;
 	private final SourceGeometryLiteralResolver sourceResolver = new SourceGeometryLiteralResolver();
-
 	private TopDocs topDocs;
 	private int idx;
 	private boolean exhausted;
-	private boolean nextReady;
-	private long nextEntityId;
-	private List<IndexGeometry> nextGeometries;
-	private long lastEntityId;
-	private List<IndexGeometry> lastGeometries;
-	private boolean hasLastEntityId;
+	private CandidateEntity next;
 	private Document bufferedDocument;
+	private boolean closed;
 
-	LuceneEntityIdIterator(IndexSearcher searcher, Query query) {
+	LuceneCandidateEntityIterator(IndexSearcher searcher, Query query) {
 		this.searcher = searcher;
 		this.query = query;
 	}
 
 	@Override
-	public boolean hasNextEntityId() {
-		if (nextReady) {
+	public boolean hasNext() {
+		if (next != null) {
 			return true;
 		}
-		return loadNextUniqueEntityId();
+		next = loadNextCandidateEntity();
+		return next != null;
 	}
 
 	@Override
-	public long nextEntityId() {
-		if (!hasNextEntityId()) {
-			return 0;
+	public CandidateEntity next() {
+		if (!hasNext()) {
+			throw new NoSuchElementException("No more Lucene candidate entities.");
 		}
-		nextReady = false;
-		lastEntityId = nextEntityId;
-		lastGeometries = nextGeometries;
-		nextGeometries = null;
-		hasLastEntityId = true;
-		return lastEntityId;
-	}
-
-	@Override
-	public EntityGeometryIterator getGeometriesForLastEntity() {
-		if (!hasLastEntityId) {
-			throw new PluginException("No Lucene candidate entity id has been returned yet.");
-		}
-		return new SingleEntityGeometryIterator(lastEntityId, lastGeometries);
+		CandidateEntity result = next;
+		next = null;
+		return result;
 	}
 
 	@Override
 	public void close() throws IOException {
+		if (closed) {
+			return;
+		}
+		closed = true;
+		next = null;
+		bufferedDocument = null;
 		sourceResolver.clear();
 		searcher.getIndexReader().close();
 	}
 
-	private boolean loadNextUniqueEntityId() {
+	private CandidateEntity loadNextCandidateEntity() {
 		try {
 			Document firstDocument = nextDocument();
 			if (firstDocument == null) {
-				return false;
+				return null;
 			}
 			long entityId = LuceneGeoDocumentSchema.entityId(firstDocument);
 			sourceResolver.clear();
@@ -94,17 +90,17 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 			while (true) {
 				Document document = nextDocument();
 				if (document == null) {
-					return setNextEntity(entityId, geometries);
+					return new CandidateEntity(entityId, geometries);
 				}
 				long documentEntityId = LuceneGeoDocumentSchema.entityId(document);
 				if (documentEntityId != entityId) {
 					bufferedDocument = document;
-					return setNextEntity(entityId, geometries);
+					return new CandidateEntity(entityId, geometries);
 				}
 				geometries.add(LuceneGeoDocumentSchema.indexGeometry(document, sourceResolver));
 			}
 		} catch (IOException e) {
-			throw new PluginException("Unable to read Lucene entity id documents.", e);
+			throw new PluginException("Unable to read Lucene candidate entity documents.", e);
 		}
 	}
 
@@ -113,7 +109,7 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 			topDocs = searcher.search(query, PAGE_SIZE, ENTITY_ID_SORT);
 			idx = 0;
 		} catch (IOException e) {
-			throw new PluginException("Unable to execute Lucene entity id query.", e);
+			throw new PluginException("Unable to execute Lucene candidate entity query.", e);
 		}
 	}
 
@@ -135,7 +131,7 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 			}
 			return true;
 		} catch (IOException e) {
-			throw new PluginException("Unable to page Lucene entity id query.", e);
+			throw new PluginException("Unable to page Lucene candidate entity query.", e);
 		}
 	}
 
@@ -153,14 +149,6 @@ class LuceneEntityIdIterator implements EntityIdIterator {
 				return null;
 			}
 		}
-		ScoreDoc scoreDoc = topDocs.scoreDocs[idx++];
-		return searcher.doc(scoreDoc.doc);
-	}
-
-	private boolean setNextEntity(long entityId, List<IndexGeometry> geometries) {
-		nextEntityId = entityId;
-		nextGeometries = geometries;
-		nextReady = true;
-		return true;
+		return searcher.doc(topDocs.scoreDocs[idx++].doc);
 	}
 }

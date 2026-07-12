@@ -1,8 +1,8 @@
 package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.CandidateLookupPolicy;
-import com.ontotext.trree.geosparql.EntityGeometryIterator;
-import com.ontotext.trree.geosparql.EntityIdIterator;
+import com.ontotext.trree.geosparql.CandidateEntity;
+import com.ontotext.trree.geosparql.CloseableIterator;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
@@ -35,6 +35,10 @@ import java.util.function.Function;
  *
  * <p>The Lucene index stores derived index geometry for coarse candidate lookup
  * and source geometry literal metadata for later CRS-aware exact evaluation.
+ * Collection indexing stores one Lucene document per derived component index geometry. Candidate queries group the
+ * matching documents by entity, while direct entity reads stream individual {@link IndexGeometry} values. Returned
+ * iterators own their Lucene readers and are closed by their callers. Reconstructed source geometry literal snapshots
+ * are reused only within the current entity traversal.
  *
  * <p>During startup, the indexer performs only an index-level schema check. A
  * non-empty index must have the schema v2 commit marker; missing or mismatched
@@ -200,25 +204,20 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	@Override
-	public EntityGeometryIterator getMatchingObjects(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
+	public CloseableIterator<CandidateEntity> getMatchingEntities(Geometry geometry,
+			CandidateLookupPolicy candidateLookupPolicy) {
 		assertReadableCurrentSchema();
-		return getIteratorForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
+		return getCandidateEntitiesForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
 	}
 
 	@Override
-	public EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
+	public CloseableIterator<CandidateEntity> getAllEntities() {
 		assertReadableCurrentSchema();
-		return getEntityIdsForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
+		return getCandidateEntitiesForQuery(LuceneGeoDocumentSchema.allDocumentsQuery());
 	}
 
 	@Override
-	public EntityIdIterator getAllEntityIds() {
-		assertReadableCurrentSchema();
-		return getEntityIdsForQuery(LuceneGeoDocumentSchema.allDocumentsQuery());
-	}
-
-	@Override
-	public EntityGeometryIterator getGeometriesFor(long subject) {
+	public CloseableIterator<IndexGeometry> getGeometriesFor(long subject) {
 		assertReadableCurrentSchema();
 		final Query query;
 		if (subject > 0) {
@@ -227,16 +226,16 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			query = LuceneGeoDocumentSchema.allDocumentsQuery();
 		}
 
-		return getIteratorForQuery(query);
+		return getIndexGeometriesForQuery(query);
 	}
 
-	private EntityGeometryIterator getIteratorForQuery(Query query) {
+	private CloseableIterator<IndexGeometry> getIndexGeometriesForQuery(Query query) {
 		IndexReader indexReader = null;
 		try {
 			indexReader = openReader();
 			IndexSearcher indexSearcher = new IndexSearcher(indexReader);
 
-			return new LuceneEntityGeometryIterator(indexSearcher, query);
+			return new LuceneIndexGeometryIterator(indexSearcher, query);
 		} catch (Exception e) {
 			if (indexReader != null) {
 				try {
@@ -264,12 +263,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		throw new PluginException("Unsupported GeoSPARQL candidate lookup policy: " + candidateLookupPolicy);
 	}
 
-	private EntityIdIterator getEntityIdsForQuery(Query query) {
+	private CloseableIterator<CandidateEntity> getCandidateEntitiesForQuery(Query query) {
 		IndexReader indexReader = null;
 		try {
 			indexReader = openReader();
 			IndexSearcher indexSearcher = new IndexSearcher(indexReader);
-			return new LuceneEntityIdIterator(indexSearcher, query);
+			return new LuceneCandidateEntityIterator(indexSearcher, query);
 		} catch (IOException e) {
 			if (indexReader != null) {
 				try {
