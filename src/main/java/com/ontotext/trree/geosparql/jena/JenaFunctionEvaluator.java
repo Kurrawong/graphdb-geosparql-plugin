@@ -174,14 +174,15 @@ public final class JenaFunctionEvaluator {
 			throws Exception {
 		GeometryWrapper left = leftSource.asGeometryWrapper();
 		GeometryWrapper right = rightSource.asGeometryWrapper();
-		if (isGenericCollection(left) || isGenericCollection(right)) {
-			return evaluateCollectionTopological(functionUri, left, right);
-		}
-		if (left.isEmpty() || right.isEmpty()) {
+		boolean hasGenericCollection = isGenericCollection(left) || isGenericCollection(right);
+		if (!hasGenericCollection && (left.isEmpty() || right.isEmpty())) {
 			return false;
 		}
 		if (!permittedTopology(functionUri, left.getDimensionInfo(), right.getDimensionInfo())) {
 			return false;
+		}
+		if (hasGenericCollection) {
+			return evaluateCollectionTopological(functionUri, left, right);
 		}
 		if (GeoConstants.GEOF_SF_EQUALS.stringValue().equals(functionUri)
 				|| GeoConstants.GEOF_EH_EQUALS.stringValue().equals(functionUri)

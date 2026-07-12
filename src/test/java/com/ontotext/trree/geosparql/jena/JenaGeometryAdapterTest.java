@@ -236,16 +236,103 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
-	public void collectionRelateFunctionUsesRelateNgUnionSemantics() {
-		Literal collection = VALUE_FACTORY.createLiteral(
-				"GEOMETRYCOLLECTION(POINT(1 1),POINT(2 2))", GeoConstants.GEO_WKT_LITERAL);
+	public void collectionCrossesPermitsPointLineButRejectsLinePoint() throws Exception {
+		SourceGeometryLiteral points = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(MULTIPOINT((1 0),(1 1)))");
+		SourceGeometryLiteral line = SourceGeometryLiteral.fromWkt("LINESTRING(0 0,2 0)");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				points, line));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				line, points));
+	}
+
+	@Test
+	public void collectionCrossesPermitsPointAreaButRejectsAreaPoint() throws Exception {
+		SourceGeometryLiteral points = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(MULTIPOINT((1 1),(3 3)))");
+		SourceGeometryLiteral area = SourceGeometryLiteral.fromWkt(
+				"POLYGON((0 0,0 2,2 2,2 0,0 0))");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				points, area));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				area, points));
+	}
+
+	@Test
+	public void collectionCrossesPermitsLineAreaButRejectsAreaLine() throws Exception {
+		SourceGeometryLiteral line = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(LINESTRING(-1 1,3 1))");
+		SourceGeometryLiteral area = SourceGeometryLiteral.fromWkt(
+				"POLYGON((0 0,0 2,2 2,2 0,0 0))");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				line, area));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				area, line));
+	}
+
+	@Test
+	public void collectionCrossesPermitsLineLine() throws Exception {
+		SourceGeometryLiteral first = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(LINESTRING(0 0,2 2))");
+		SourceGeometryLiteral second = SourceGeometryLiteral.fromWkt("LINESTRING(0 2,2 0)");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				first, second));
+	}
+
+	@Test
+	public void collectionTouchesRejectsPointPoint() throws Exception {
+		SourceGeometryLiteral collection = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(POINT(1 1))");
+		SourceGeometryLiteral point = SourceGeometryLiteral.fromWkt("POINT(1 1)");
+
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_TOUCHES.stringValue(),
+				collection, point));
+	}
+
+	@Test
+	public void mixedCollectionUsesMaximumDimensionAndCompleteUnion() throws Exception {
+		SourceGeometryLiteral mixed = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(POLYGON((0 0,0 2,2 2,2 0,0 0)),POINT(5 5))");
+		SourceGeometryLiteral crossingLine = SourceGeometryLiteral.fromWkt("LINESTRING(-1 1,3 1)");
+		SourceGeometryLiteral lowerDimensionMember = SourceGeometryLiteral.fromWkt("POINT(5 5)");
+
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				mixed, crossingLine));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				crossingLine, mixed));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_INTERSECTS.stringValue(),
+				mixed, lowerDimensionMember));
+	}
+
+	@Test
+	public void nonCollectionCrossesBehaviorRemainsUnchanged() throws Exception {
+		SourceGeometryLiteral points = SourceGeometryLiteral.fromWkt("MULTIPOINT((1 0),(1 1))");
+		SourceGeometryLiteral line = SourceGeometryLiteral.fromWkt("LINESTRING(0 0,2 0)");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				points, line));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
+				line, points));
+	}
+
+	@Test
+	public void collectionRelateFunctionUsesOnlySuppliedPattern() {
 		Literal polygon = VALUE_FACTORY.createLiteral(
 				"POLYGON((0 0,0 3,3 3,3 0,0 0))", GeoConstants.GEO_WKT_LITERAL);
+		Literal collection = VALUE_FACTORY.createLiteral(
+				"GEOMETRYCOLLECTION(POINT(1 1))", GeoConstants.GEO_WKT_LITERAL);
 
-		Value result = JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_RELATE.stringValue(),
-				collection, polygon, VALUE_FACTORY.createLiteral("T*F**F***"));
+		Value namedRelation = JenaFunctionEvaluator.evaluate(VALUE_FACTORY,
+				GeoConstants.GEOF_SF_CROSSES.stringValue(), polygon, collection);
+		Value suppliedPattern = JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_RELATE.stringValue(),
+				polygon, collection, VALUE_FACTORY.createLiteral("T********"));
 
-		assertTrue(((Literal) result).booleanValue());
+		assertFalse(((Literal) namedRelation).booleanValue());
+		assertTrue(((Literal) suppliedPattern).booleanValue());
 	}
 
 	@Test

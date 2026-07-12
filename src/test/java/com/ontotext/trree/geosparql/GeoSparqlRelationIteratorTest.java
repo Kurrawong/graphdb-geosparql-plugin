@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.Entities;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Value;
@@ -79,6 +80,35 @@ public class GeoSparqlRelationIteratorTest {
 			assertFalse(iterator.next());
 		} finally {
 			iterator.close();
+		}
+	}
+
+	@Test
+	public void boundCrossesPropertyRelationPermitsPointLineButRejectsLinePoint() {
+		FakeEntities entities = new FakeEntities();
+		entities.add(SUBJECT, SimpleValueFactory.getInstance().createLiteral(
+				"GEOMETRYCOLLECTION(LINESTRING(0 0,2 0))", GeoConstants.GEO_WKT_LITERAL));
+		entities.add(OBJECT, SimpleValueFactory.getInstance().createLiteral(
+				"GEOMETRYCOLLECTION(MULTIPOINT((1 0),(1 1)))", GeoConstants.GEO_WKT_LITERAL));
+
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
+
+		GeoSparqlRelationIterator rejected = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_CROSSES, SUBJECT, PREDICATE, OBJECT, entities);
+		try {
+			assertFalse(rejected.next());
+		} finally {
+			rejected.close();
+		}
+
+		GeoSparqlRelationIterator permitted = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_CROSSES, OBJECT, PREDICATE, SUBJECT, entities);
+		try {
+			assertTrue(permitted.next());
+			assertFalse(permitted.next());
+		} finally {
+			permitted.close();
 		}
 	}
 
