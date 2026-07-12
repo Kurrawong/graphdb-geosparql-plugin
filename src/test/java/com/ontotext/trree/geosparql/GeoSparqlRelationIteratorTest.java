@@ -54,6 +54,34 @@ public class GeoSparqlRelationIteratorTest {
 		}
 	}
 
+	@Test
+	public void fullScanReturnsEntityWithEmptyCollectionForDisjointRelation() throws Exception {
+		IndexGeometry polygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
+		IndexGeometry emptyCollection = IndexGeometry.fromSourceGeometryLiteralComponents(
+				SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION EMPTY")).get(0);
+
+		FakeEntities entities = new FakeEntities();
+		entities.add(SUBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/empty"));
+		entities.add(OBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/polygon"));
+
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
+		plugin.indexer = new ScriptedGeoSparqlIndexer(singletonList(polygon), singletonList(polygon),
+				singletonList(emptyCollection), singletonList(emptyCollection),
+				new SingleCandidateEntityIdIterator(SUBJECT, singletonList(emptyCollection)));
+
+		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_DISJOINT, 0, PREDICATE, OBJECT, entities);
+		try {
+			assertTrue(iterator.next());
+			assertEquals(SUBJECT, iterator.subject);
+			assertEquals(OBJECT, iterator.object);
+			assertFalse(iterator.next());
+		} finally {
+			iterator.close();
+		}
+	}
+
 	private static IndexGeometry indexGeometry(String wkt) {
 		return IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(wkt));
 	}
@@ -63,16 +91,27 @@ public class GeoSparqlRelationIteratorTest {
 		private final List<IndexGeometry> objectHitGeometries;
 		private final List<IndexGeometry> firstCandidateGeometries;
 		private final List<IndexGeometry> secondCandidateGeometries;
+		private final EntityIdIterator allCandidates;
 		private int lookupCount;
 
 		private ScriptedGeoSparqlIndexer(List<IndexGeometry> objectMissGeometries,
 										 List<IndexGeometry> objectHitGeometries,
 										 List<IndexGeometry> firstCandidateGeometries,
 										 List<IndexGeometry> secondCandidateGeometries) {
+			this(objectMissGeometries, objectHitGeometries, firstCandidateGeometries,
+					secondCandidateGeometries, new EmptyEntityIdIterator());
+		}
+
+		private ScriptedGeoSparqlIndexer(List<IndexGeometry> objectMissGeometries,
+										 List<IndexGeometry> objectHitGeometries,
+										 List<IndexGeometry> firstCandidateGeometries,
+										 List<IndexGeometry> secondCandidateGeometries,
+										 EntityIdIterator allCandidates) {
 			this.objectMissGeometries = objectMissGeometries;
 			this.objectHitGeometries = objectHitGeometries;
 			this.firstCandidateGeometries = firstCandidateGeometries;
 			this.secondCandidateGeometries = secondCandidateGeometries;
+			this.allCandidates = allCandidates;
 		}
 
 		@Override
@@ -85,6 +124,11 @@ public class GeoSparqlRelationIteratorTest {
 				return new SingleCandidateEntityIdIterator(SUBJECT, secondCandidateGeometries);
 			}
 			return new EmptyEntityIdIterator();
+		}
+
+		@Override
+		public EntityIdIterator getAllEntityIds() {
+			return allCandidates;
 		}
 
 		@Override

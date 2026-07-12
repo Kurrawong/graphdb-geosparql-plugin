@@ -6,6 +6,7 @@ import com.ontotext.trree.sdk.PluginConnection;
 import com.ontotext.trree.sdk.StatementIterator;
 
 import java.util.function.Function;
+import java.util.List;
 
 /**
  * Rebuilds the complete GeoSPARQL Lucene index from repository geometry statements.
@@ -82,8 +83,9 @@ public class GeoSparqlFullIndexer {
 
 	private void indexLiteral(Entities entities, long geometryResourceId, long indexedEntityId, long literalId,
 			long predicate, Function<Long, String> subjectMapper) {
-		IndexGeometry geometry = plugin.getIndexGeometryFromLiteralId(geometryResourceId, literalId, predicate, entities);
-		if (geometry != null) {
+		List<IndexGeometry> geometries = plugin.getIndexGeometriesFromLiteralId(geometryResourceId, literalId,
+				predicate, entities);
+		for (IndexGeometry geometry : geometries) {
 			indexer.indexGeometry(indexedEntityId, subjectMapper, geometry);
 		}
 	}

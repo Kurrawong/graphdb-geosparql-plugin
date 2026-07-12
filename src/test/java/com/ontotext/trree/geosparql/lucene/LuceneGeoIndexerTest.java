@@ -54,6 +54,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -224,6 +225,38 @@ public class LuceneGeoIndexerTest {
                 CandidateLookupPolicy.INTERSECTS);
 
         assertArrayEquals(new long[]{1L}, collectEntityIds(iterator));
+    }
+
+    @Test
+    public void collectionComponentsGenerateCandidatesAndEmptySentinelRemainsFullScanVisible() throws Exception {
+        List<IndexGeometry> collection = IndexGeometry.fromSourceGeometryLiteralComponents(
+                SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION(POINT(0 0),POINT(10 10))"));
+        IndexGeometry emptySentinel = IndexGeometry.fromSourceGeometryLiteralComponents(
+                SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION EMPTY")).get(0);
+        Path dataDir = tmpFolder.getRoot().toPath().resolve("collection-candidates");
+        Files.createDirectories(dataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+        indexer.begin();
+        indexer.indexGeometryList(1L, subject -> "Subject " + subject, collection);
+        indexer.indexGeometryList(2L, subject -> "Subject " + subject, List.of(emptySentinel));
+        indexer.commit();
+
+        assertArrayEquals(new long[]{1L}, collectEntityIds(indexer.getMatchingEntityIds(
+                collection.get(0).indexGeometry(), CandidateLookupPolicy.INTERSECTS)));
+        assertArrayEquals(new long[]{1L, 2L}, collectEntityIds(indexer.getAllEntityIds()));
+
+        EntityGeometryIterator iterator = indexer.getGeometriesFor(2L);
+        try {
+            assertTrue(iterator.hasNextGeometry());
+            assertTrue(iterator.nextGeometry().isEmpty());
+            assertEquals(IndexGeometry.BUILD_MODE_EMPTY_SENTINEL,
+                    iterator.lastIndexGeometry().indexBuildMode());
+            assertFalse(iterator.lastIndexGeometry().isSpatialCandidate());
+            assertFalse(iterator.hasNextGeometry());
+        } finally {
+            iterator.close();
+        }
     }
 
     @Test

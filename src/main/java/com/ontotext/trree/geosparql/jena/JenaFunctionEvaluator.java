@@ -18,11 +18,14 @@ import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.locationtech.jts.algorithm.match.HausdorffSimilarityMeasure;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 import org.locationtech.jts.operation.distance.DistanceOp;
+import org.locationtech.jts.operation.relateng.RelateNG;
+import org.locationtech.jts.operation.relateng.RelatePredicate;
 import org.locationtech.jts.io.WKTWriter;
 import org.locationtech.jts.simplify.DouglasPeuckerSimplifier;
 import org.locationtech.jts.simplify.TopologyPreservingSimplifier;
@@ -65,7 +68,8 @@ public final class JenaFunctionEvaluator {
 			}
 			if (GeoConstants.GEOF_RELATE.stringValue().equals(functionUri)) {
 				requireMinArgs(functionUri, args, 3);
-				return valueFactory.createLiteral(geometry(args[0]).relate(geometry(args[1]), args[2].stringValue()));
+				return valueFactory.createLiteral(evaluateRelate(sourceLiteral(args[0]), sourceLiteral(args[1]),
+						args[2].stringValue()));
 			}
 			if (GeoConstants.GEOF_DISTANCE.stringValue().equals(functionUri)
 					|| GeoConstants.EXT_HAUSDORFF_DISTANCE.stringValue().equals(functionUri)) {
@@ -170,6 +174,9 @@ public final class JenaFunctionEvaluator {
 			throws Exception {
 		GeometryWrapper left = leftSource.asGeometryWrapper();
 		GeometryWrapper right = rightSource.asGeometryWrapper();
+		if (isGenericCollection(left) || isGenericCollection(right)) {
+			return evaluateCollectionTopological(functionUri, left, right);
+		}
 		if (left.isEmpty() || right.isEmpty()) {
 			return false;
 		}
@@ -243,6 +250,103 @@ public final class JenaFunctionEvaluator {
 			return left.relate(right, RCC8IntersectionPattern.NON_TANGENTIAL_PROPER_PART_INVERSE);
 		}
 		throw new ValueExprEvaluationException("Unsupported topological function: " + functionUri);
+	}
+
+	private static boolean evaluateRelate(SourceGeometryLiteral leftSource, SourceGeometryLiteral rightSource,
+			String intersectionPattern) throws Exception {
+		GeometryWrapper left = leftSource.asGeometryWrapper();
+		GeometryWrapper right = rightSource.asGeometryWrapper();
+		if (isGenericCollection(left) || isGenericCollection(right)) {
+			GeometryWrapper transformedRight = left.checkTransformSRS(right);
+			return RelateNG.relate(left.getXYGeometry(), transformedRight.getXYGeometry(), intersectionPattern);
+		}
+		return left.relate(right, intersectionPattern);
+	}
+
+	private static boolean evaluateCollectionTopological(String functionUri, GeometryWrapper left,
+			GeometryWrapper right) throws Exception {
+		GeometryWrapper transformedRight = left.checkTransformSRS(right);
+		Geometry leftGeometry = left.getXYGeometry();
+		Geometry rightGeometry = transformedRight.getXYGeometry();
+		if (GeoConstants.GEOF_SF_EQUALS.stringValue().equals(functionUri)
+				|| GeoConstants.GEOF_EH_EQUALS.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.equalsTopo());
+		}
+		if (GeoConstants.GEOF_RCC8_EQ.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RCC8IntersectionPattern.EQUALS);
+		}
+		if (GeoConstants.GEOF_SF_DISJOINT.stringValue().equals(functionUri)
+				|| GeoConstants.GEOF_EH_DISJOINT.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.disjoint());
+		}
+		if (GeoConstants.GEOF_RCC8_DC.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RCC8IntersectionPattern.DISCONNECTED);
+		}
+		if (GeoConstants.GEOF_SF_INTERSECTS.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.intersects());
+		}
+		if (GeoConstants.GEOF_SF_TOUCHES.stringValue().equals(functionUri)
+				|| GeoConstants.GEOF_EH_MEET.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.touches());
+		}
+		if (GeoConstants.GEOF_RCC8_EC.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RCC8IntersectionPattern.EXTERNALLY_CONNECTED);
+		}
+		if (GeoConstants.GEOF_SF_WITHIN.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.within());
+		}
+		if (GeoConstants.GEOF_SF_CONTAINS.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.contains());
+		}
+		if (GeoConstants.GEOF_SF_OVERLAPS.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.overlaps());
+		}
+		if (GeoConstants.GEOF_SF_CROSSES.stringValue().equals(functionUri)) {
+			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.crosses());
+		}
+		String pattern = collectionIntersectionPattern(functionUri);
+		if (pattern != null) {
+			return RelateNG.relate(leftGeometry, rightGeometry, pattern);
+		}
+		throw new ValueExprEvaluationException("Unsupported topological function: " + functionUri);
+	}
+
+	private static String collectionIntersectionPattern(String functionUri) {
+		if (GeoConstants.GEOF_EH_OVERLAP.stringValue().equals(functionUri)) {
+			return EgenhoferIntersectionPattern.OVERLAP;
+		}
+		if (GeoConstants.GEOF_EH_COVERS.stringValue().equals(functionUri)) {
+			return EgenhoferIntersectionPattern.COVERS;
+		}
+		if (GeoConstants.GEOF_EH_COVERED_BY.stringValue().equals(functionUri)) {
+			return EgenhoferIntersectionPattern.COVERED_BY;
+		}
+		if (GeoConstants.GEOF_EH_INSIDE.stringValue().equals(functionUri)) {
+			return EgenhoferIntersectionPattern.INSIDE;
+		}
+		if (GeoConstants.GEOF_EH_CONTAINS.stringValue().equals(functionUri)) {
+			return EgenhoferIntersectionPattern.CONTAINS;
+		}
+		if (GeoConstants.GEOF_RCC8_PO.stringValue().equals(functionUri)) {
+			return RCC8IntersectionPattern.PARTIALLY_OVERLAPPING;
+		}
+		if (GeoConstants.GEOF_RCC8_TPPI.stringValue().equals(functionUri)) {
+			return RCC8IntersectionPattern.TANGENTIAL_PROPER_PART_INVERSE;
+		}
+		if (GeoConstants.GEOF_RCC8_TPP.stringValue().equals(functionUri)) {
+			return RCC8IntersectionPattern.TANGENTIAL_PROPER_PART;
+		}
+		if (GeoConstants.GEOF_RCC8_NTPP.stringValue().equals(functionUri)) {
+			return RCC8IntersectionPattern.NON_TANGENTIAL_PROPER_PART;
+		}
+		if (GeoConstants.GEOF_RCC8_NTPPI.stringValue().equals(functionUri)) {
+			return RCC8IntersectionPattern.NON_TANGENTIAL_PROPER_PART_INVERSE;
+		}
+		return null;
+	}
+
+	private static boolean isGenericCollection(GeometryWrapper wrapper) {
+		return wrapper.getXYGeometry().getClass().equals(GeometryCollection.class);
 	}
 
 	private static boolean permittedTopology(String functionUri, DimensionInfo left, DimensionInfo right) {

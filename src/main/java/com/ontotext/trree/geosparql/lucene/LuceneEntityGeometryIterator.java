@@ -25,6 +25,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	private long entityId;
 	private Geometry geometry;
 	private SourceGeometryLiteral sourceGeometryLiteral;
+	private IndexGeometry indexGeometry;
 
 	LuceneEntityGeometryIterator(IndexSearcher searcher, Query query) throws IOException {
 		this.searcher = searcher;
@@ -60,6 +61,11 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 	@Override
 	public SourceGeometryLiteral lastSourceGeometryLiteral() {
 		return sourceGeometryLiteral;
+	}
+
+	@Override
+	public IndexGeometry lastIndexGeometry() {
+		return indexGeometry;
 	}
 
 	@Override
@@ -106,7 +112,7 @@ class LuceneEntityGeometryIterator implements EntityGeometryIterator {
 		ScoreDoc d = topDocs.scoreDocs[idx];
 		Document doc = searcher.doc(d.doc);
 
-		IndexGeometry indexGeometry = LuceneGeoDocumentSchema.indexGeometry(doc);
+		indexGeometry = LuceneGeoDocumentSchema.indexGeometry(doc);
 		entityId = LuceneGeoDocumentSchema.entityId(doc);
 		geometry = indexGeometry.indexGeometry();
 		sourceGeometryLiteral = indexGeometry.sourceGeometryLiteral();

@@ -11,14 +11,12 @@ import com.ontotext.trree.sdk.PluginException;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.spatial.SpatialStrategy;
-import org.apache.lucene.spatial.composite.CompositeSpatialStrategy;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialOperation;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.locationtech.jts.geom.Geometry;
@@ -28,6 +26,7 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -108,10 +107,10 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 		RecursivePrefixTreeStrategy rptStrategy = new RecursivePrefixTreeStrategy(grid,
 				LuceneGeoDocumentSchema.FIELD_SPATIAL_PREFIX);
-		SerializedDVStrategy sdvStrategy = new SerializedDVStrategy(ctx,
-				LuceneGeoDocumentSchema.FIELD_SPATIAL_DV);
-		this.strategy = new CompositeSpatialStrategy(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
-				rptStrategy, sdvStrategy);
+		// Lucene only generates coarse candidates. Exact relation evaluation is performed
+		// against the source geometry literal, so serialized shape verification here is
+		// both redundant and incompatible with the JTS 1.20 API required by RelateNG.
+		this.strategy = rptStrategy;
 	}
 
 	@Override
@@ -175,12 +174,14 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		//logger.info("Indexing literal for {}; {}", parent.getEntities().get(subject), geometries.size());
 		assertWritableCurrentSchema();
 		try {
+			List<org.apache.lucene.document.Document> documents = new ArrayList<>(geometries.size());
+			for (IndexGeometry geometry : geometries) {
+				documents.add(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
+			}
 			indexWriter.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(subject));
-			if (!geometries.isEmpty()) {
-				for (IndexGeometry geometry : geometries) {
-					indexWriter.addDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
-					schemaMarkerPending = true;
-				}
+			if (!documents.isEmpty()) {
+				indexWriter.addDocuments(documents);
+				schemaMarkerPending = true;
 			}
 		} catch (Exception e) {
 			handleCreateDocumentUnhandledException(subject, subjectMapper, e);
@@ -208,6 +209,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	public EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy) {
 		assertReadableCurrentSchema();
 		return getEntityIdsForQuery(matchingObjectsQuery(geometry, candidateLookupPolicy));
+	}
+
+	@Override
+	public EntityIdIterator getAllEntityIds() {
+		assertReadableCurrentSchema();
+		return getEntityIdsForQuery(LuceneGeoDocumentSchema.allDocumentsQuery());
 	}
 
 	@Override

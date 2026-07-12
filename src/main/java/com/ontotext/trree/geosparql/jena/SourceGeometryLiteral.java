@@ -15,6 +15,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
 
 import java.util.ServiceConfigurationError;
+import java.util.Objects;
 
 /**
  * CRS-preserving source geometry literal used for exact evaluation.
@@ -125,5 +126,22 @@ public final class SourceGeometryLiteral {
 
 	public static IRI gmlDatatype() {
 		return SimpleValueFactory.getInstance().createIRI(GMLDatatype.URI);
+	}
+
+	@Override
+	public boolean equals(Object other) {
+		if (this == other) {
+			return true;
+		}
+		if (!(other instanceof SourceGeometryLiteral)) {
+			return false;
+		}
+		SourceGeometryLiteral that = (SourceGeometryLiteral) other;
+		return lexicalForm.equals(that.lexicalForm) && datatype.equals(that.datatype);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(lexicalForm, datatype);
 	}
 }

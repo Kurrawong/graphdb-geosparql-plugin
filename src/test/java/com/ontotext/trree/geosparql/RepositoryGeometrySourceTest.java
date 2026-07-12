@@ -163,9 +163,9 @@ public class RepositoryGeometrySourceTest {
 		private int conversionCount;
 
 		@Override
-		IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
+		List<IndexGeometry> getIndexGeometriesFromLiteral(Literal literal, IRI fallbackDatatype) {
 			conversionCount++;
-			return JenaGeometryAdapter.toIndexGeometry(SourceGeometryLiteral.fromWkt(literal.stringValue()));
+			return JenaGeometryAdapter.toIndexGeometries(SourceGeometryLiteral.fromWkt(literal.stringValue()));
 		}
 	}
 

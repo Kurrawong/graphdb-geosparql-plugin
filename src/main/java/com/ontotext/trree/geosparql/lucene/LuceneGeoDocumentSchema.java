@@ -32,7 +32,6 @@ final class LuceneGeoDocumentSchema {
 	static final int SCHEMA_VERSION = 2;
 	static final String FIELD_ID = "id";
 	static final String FIELD_SPATIAL_PREFIX = "geoData1";
-	static final String FIELD_SPATIAL_DV = "geoData2";
 	static final String FIELD_INDEX_GEOMETRY = "geoData";
 	static final String FIELD_SCHEMA_VERSION = "geoSchemaVersion";
 	static final String FIELD_SOURCE_LEXICAL_FORM = "geoExactLexicalForm";
@@ -63,11 +62,13 @@ final class LuceneGeoDocumentSchema {
 		doc.add(new StoredField(FIELD_ID, entityId));
 		doc.add(new NumericDocValuesField(FIELD_ID, entityId));
 
-		JtsGeometry shape = new JtsGeometry(geometry.indexGeometry(), ctx, true, true);
-		shape.index();
+		if (geometry.isSpatialCandidate()) {
+			JtsGeometry shape = new JtsGeometry(geometry.indexGeometry(), ctx, true, true);
+			shape.index();
 
-		for (Field field : strategy.createIndexableFields(shape)) {
-			doc.add(field);
+			for (Field field : strategy.createIndexableFields(shape)) {
+				doc.add(field);
+			}
 		}
 
 		doc.add(indexGeometryField(geometry.indexGeometry()));
@@ -118,7 +119,13 @@ final class LuceneGeoDocumentSchema {
 				&& doc.get(FIELD_SOURCE_DATATYPE) != null
 				&& doc.get(FIELD_SOURCE_CRS) != null
 				&& IndexGeometry.INDEX_CRS.equals(doc.get(FIELD_INDEX_CRS))
-				&& IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY.equals(doc.get(FIELD_INDEX_BUILD_MODE));
+				&& isSupportedBuildMode(doc.get(FIELD_INDEX_BUILD_MODE));
+	}
+
+	private static boolean isSupportedBuildMode(String buildMode) {
+		return IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY.equals(buildMode)
+				|| IndexGeometry.BUILD_MODE_TRANSFORMED_COMPONENT.equals(buildMode)
+				|| IndexGeometry.BUILD_MODE_EMPTY_SENTINEL.equals(buildMode);
 	}
 
 	static void assertCurrentSchemaDocument(Document doc) {

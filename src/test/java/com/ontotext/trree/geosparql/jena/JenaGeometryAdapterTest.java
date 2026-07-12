@@ -12,6 +12,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.locationtech.jts.geom.Coordinate;
 
+import java.util.List;
+
 import static org.junit.Assert.*;
 
 public class JenaGeometryAdapterTest {
@@ -160,6 +162,102 @@ public class JenaGeometryAdapterTest {
 		assertEquals(GeoConstants.GEO_GML_LITERAL, source.datatype());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
 		assertProjectedPointCrs84Coordinate(coordinate);
+	}
+
+	@Test
+	public void genericGmlCollectionProducesComponentIndexGeometries() {
+		String gml = "<gml:MultiGeometry xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName=\"" + CRS84
+				+ "\"><gml:geometryMember><gml:Point><gml:pos>1 2</gml:pos></gml:Point>"
+				+ "</gml:geometryMember><gml:geometryMember><gml:LineString><gml:posList>3 4 5 6</gml:posList>"
+				+ "</gml:LineString></gml:geometryMember></gml:MultiGeometry>";
+		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
+
+		List<IndexGeometry> components = JenaGeometryAdapter.toIndexGeometries(
+				JenaGeometryAdapter.toSourceGeometryLiteral(literal));
+
+		assertEquals(2, components.size());
+		assertEquals("Point", components.get(0).indexGeometry().getGeometryType());
+		assertEquals("LineString", components.get(1).indexGeometry().getGeometryType());
+		assertEquals(GeoConstants.GEO_GML_LITERAL, components.get(0).sourceGeometryLiteral().datatype());
+	}
+
+	@Test
+	public void genericCollectionProducesComponentIndexGeometriesWithSharedSource() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(POINT(1 2),LINESTRING(3 4,5 6))");
+
+		List<IndexGeometry> components = IndexGeometry.fromSourceGeometryLiteralComponents(source);
+
+		assertEquals(2, components.size());
+		assertEquals("Point", components.get(0).indexGeometry().getGeometryType());
+		assertEquals("LineString", components.get(1).indexGeometry().getGeometryType());
+		assertSame(source, components.get(0).sourceGeometryLiteral());
+		assertSame(source, components.get(1).sourceGeometryLiteral());
+		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_COMPONENT,
+				components.get(0).indexBuildMode());
+		assertTrue(components.get(0).isSpatialCandidate());
+	}
+
+	@Test
+	public void nestedCollectionIsRecursivelyDecomposedButMultiGeometryIsRetained() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 2)),MULTIPOINT((3 4),(5 6)))");
+
+		List<IndexGeometry> components = IndexGeometry.fromSourceGeometryLiteralComponents(source);
+
+		assertEquals(2, components.size());
+		assertEquals("Point", components.get(0).indexGeometry().getGeometryType());
+		assertEquals("MultiPoint", components.get(1).indexGeometry().getGeometryType());
+	}
+
+	@Test
+	public void emptyCollectionProducesNonSpatialSentinel() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION EMPTY");
+
+		List<IndexGeometry> components = IndexGeometry.fromSourceGeometryLiteralComponents(source);
+
+		assertEquals(1, components.size());
+		assertTrue(components.get(0).indexGeometry().isEmpty());
+		assertEquals(IndexGeometry.BUILD_MODE_EMPTY_SENTINEL, components.get(0).indexBuildMode());
+		assertFalse(components.get(0).isSpatialCandidate());
+	}
+
+	@Test
+	public void collectionExactEvaluationUsesRelateNgUnionSemantics() throws Exception {
+		SourceGeometryLiteral collection = SourceGeometryLiteral.fromWkt(
+				"GEOMETRYCOLLECTION(POINT(1 1),POINT(2 2))");
+		SourceGeometryLiteral polygon = SourceGeometryLiteral.fromWkt(
+				"POLYGON((0 0,0 3,3 3,3 0,0 0))");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_WITHIN.stringValue(),
+				collection, polygon));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(),
+				collection, polygon));
+	}
+
+	@Test
+	public void collectionRelateFunctionUsesRelateNgUnionSemantics() {
+		Literal collection = VALUE_FACTORY.createLiteral(
+				"GEOMETRYCOLLECTION(POINT(1 1),POINT(2 2))", GeoConstants.GEO_WKT_LITERAL);
+		Literal polygon = VALUE_FACTORY.createLiteral(
+				"POLYGON((0 0,0 3,3 3,3 0,0 0))", GeoConstants.GEO_WKT_LITERAL);
+
+		Value result = JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_RELATE.stringValue(),
+				collection, polygon, VALUE_FACTORY.createLiteral("T*F**F***"));
+
+		assertTrue(((Literal) result).booleanValue());
+	}
+
+	@Test
+	public void emptyCollectionIsDisjointButNotWithin() throws Exception {
+		SourceGeometryLiteral empty = SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION EMPTY");
+		SourceGeometryLiteral polygon = SourceGeometryLiteral.fromWkt(
+				"POLYGON((0 0,0 3,3 3,3 0,0 0))");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(),
+				empty, polygon));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_WITHIN.stringValue(),
+				empty, polygon));
 	}
 
 	@Test

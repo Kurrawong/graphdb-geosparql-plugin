@@ -42,6 +42,9 @@ public interface GeoSparqlIndexer {
 	 */
 	EntityIdIterator getMatchingEntityIds(Geometry geometry, CandidateLookupPolicy candidateLookupPolicy);
 
+	/** Returns every indexed entity id, including entities represented only by non-spatial sentinel documents. */
+	EntityIdIterator getAllEntityIds();
+
 	/**
 	 * Returns an iterator over all geometries for the provided entity
 	 *

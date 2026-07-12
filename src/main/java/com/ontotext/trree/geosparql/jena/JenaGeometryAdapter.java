@@ -7,6 +7,8 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 
+import java.util.List;
+
 /**
  * Thin RDF4J-to-Jena geometry adapter.
  */
@@ -37,6 +39,11 @@ public final class JenaGeometryAdapter {
 	public static IndexGeometry toIndexGeometry(SourceGeometryLiteral sourceGeometryLiteral) {
 		initialize();
 		return IndexGeometry.fromSourceGeometryLiteral(sourceGeometryLiteral);
+	}
+
+	public static List<IndexGeometry> toIndexGeometries(SourceGeometryLiteral sourceGeometryLiteral) {
+		initialize();
+		return IndexGeometry.fromSourceGeometryLiteralComponents(sourceGeometryLiteral);
 	}
 
 	public static Literal toRdf4jLiteral(ValueFactory valueFactory, org.apache.jena.geosparql.implementation.GeometryWrapper wrapper,

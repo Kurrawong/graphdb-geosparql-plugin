@@ -84,6 +84,23 @@ public class GeoSparqlFullIndexerTest {
 		assertEquals(3, plugin.conversionCount);
 	}
 
+	@Test
+	public void fullIndexWritesEveryGenericCollectionComponent() throws Exception {
+		CountingGeoSparqlPlugin plugin = newPlugin();
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_1, SimpleValueFactory.getInstance().createIRI("http://example.com/geometry/1"));
+		entities.add(LITERAL_1, SimpleValueFactory.getInstance().createLiteral(
+				"GEOMETRYCOLLECTION(POINT(1 1),LINESTRING(2 2,3 3))", GeoConstants.GEO_WKT_LITERAL));
+		FakeStatements statements = new FakeStatements((Runnable) null);
+		statements.add(GEOMETRY_1, AS_WKT, LITERAL_1);
+
+		RecordingIndexer indexer = new RecordingIndexer();
+		new GeoSparqlFullIndexer(indexer, plugin).reindex(new FakePluginConnection(entities, statements));
+
+		assertEquals(List.of(GEOMETRY_1, GEOMETRY_1), indexer.indexedSubjects);
+		assertEquals(1, plugin.conversionCount);
+	}
+
 	private static CountingGeoSparqlPlugin newPlugin() {
 		CountingGeoSparqlPlugin plugin = new CountingGeoSparqlPlugin();
 		plugin.asWKT = AS_WKT;
@@ -98,9 +115,9 @@ public class GeoSparqlFullIndexerTest {
 		private int conversionCount;
 
 		@Override
-		IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
+		List<IndexGeometry> getIndexGeometriesFromLiteral(Literal literal, IRI fallbackDatatype) {
 			conversionCount++;
-			return JenaGeometryAdapter.toIndexGeometry(SourceGeometryLiteral.fromWkt(literal.stringValue()));
+			return JenaGeometryAdapter.toIndexGeometries(SourceGeometryLiteral.fromWkt(literal.stringValue()));
 		}
 	}
 
@@ -133,6 +150,11 @@ public class GeoSparqlFullIndexerTest {
 		@Override
 		public EntityIdIterator getMatchingEntityIds(org.locationtech.jts.geom.Geometry geometry,
 				CandidateLookupPolicy candidateLookupPolicy) {
+			return null;
+		}
+
+		@Override
+		public EntityIdIterator getAllEntityIds() {
 			return null;
 		}
 

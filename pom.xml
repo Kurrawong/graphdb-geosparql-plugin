@@ -12,7 +12,7 @@
 		<jena.version>6.1.0</jena.version>
 		<sis.version>1.4</sis.version>
 		<lucene.version>8.10.1</lucene.version>
-		<jts.version>1.17.0</jts.version>
+		<jts.version>1.20.0</jts.version>
 		<dependency.check.version>8.2.1</dependency.check.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 

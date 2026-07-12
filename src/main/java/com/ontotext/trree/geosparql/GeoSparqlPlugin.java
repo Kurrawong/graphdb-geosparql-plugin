@@ -18,6 +18,8 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 
+import java.util.List;
+
 /**
  * GeoSPARQL index/query plugin.
  */
@@ -234,6 +236,12 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 		return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
 	}
 
+	List<IndexGeometry> getIndexGeometriesFromLiteral(Literal literal, IRI fallbackDatatype) {
+		SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
+				fallbackDatatype);
+		return JenaGeometryAdapter.toIndexGeometries(sourceGeometryLiteral);
+	}
+
 	/**
 	 * Resolves and converts a repository geometry literal while applying the configured repository-indexing error
 	 * policy.
@@ -272,6 +280,31 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 					+ "and required grid files, is configured when the CRS is supported. To skip invalid or unsupported "
 					+ "repository geometries, configure ignoreErrors = true and rebuild the index.",
 					e);
+		}
+	}
+
+	List<IndexGeometry> getIndexGeometriesFromLiteralId(long geometryResourceId, long literalId, long predicateId,
+			Entities entities) {
+		Value value = entities.get(literalId);
+		if (!(value instanceof Literal)) {
+			return List.of();
+		}
+		IRI datatype = predicateId == asGML ? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
+		try {
+			return getIndexGeometriesFromLiteral((Literal) value, datatype);
+		} catch (JenaGeoSparqlException e) {
+			String subjectText = entities.get(geometryResourceId).stringValue();
+			String failureContext = indexingFailureContext((Literal) value, datatype, e);
+			if (config.isIgnoreErrors()) {
+				getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed. {}",
+						subjectText, failureContext);
+				return List.of();
+			}
+			throw new PluginException("Could not index GeoSPARQL geometry for subject " + subjectText
+					+ ". " + failureContext
+					+ ". Check that the geometry CRS URI is correct and that Apache SIS CRS data, such as SIS_DATA "
+					+ "and required grid files, is configured when the CRS is supported. To skip invalid or unsupported "
+					+ "repository geometries, configure ignoreErrors = true and rebuild the index.", e);
 		}
 	}
 

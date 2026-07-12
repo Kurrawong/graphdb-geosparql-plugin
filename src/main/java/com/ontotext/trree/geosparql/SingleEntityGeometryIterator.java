@@ -17,6 +17,7 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 	private final Iterator<IndexGeometry> iGeometries;
 	private Geometry geometry;
 	private SourceGeometryLiteral sourceGeometryLiteral;
+	private IndexGeometry indexGeometry;
 
 	public SingleEntityGeometryIterator(long entityId, List<IndexGeometry> geometries) {
 		this.entityId = entityId;
@@ -36,9 +37,9 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 
 	@Override
 	public Geometry nextGeometry() {
-		IndexGeometry next = iGeometries.next();
-		sourceGeometryLiteral = next.sourceGeometryLiteral();
-		return geometry = next.indexGeometry();
+		indexGeometry = iGeometries.next();
+		sourceGeometryLiteral = indexGeometry.sourceGeometryLiteral();
+		return geometry = indexGeometry.indexGeometry();
 	}
 
 	@Override
@@ -49,6 +50,11 @@ public class SingleEntityGeometryIterator implements EntityGeometryIterator {
 	@Override
 	public SourceGeometryLiteral lastSourceGeometryLiteral() {
 		return sourceGeometryLiteral;
+	}
+
+	@Override
+	public IndexGeometry lastIndexGeometry() {
+		return indexGeometry;
 	}
 
 	@Override

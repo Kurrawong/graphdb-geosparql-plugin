@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import org.locationtech.jts.geom.Geometry;
 
 import java.io.Closeable;
@@ -36,6 +37,11 @@ public interface EntityGeometryIterator extends Closeable {
 	 * @return a source geometry literal or null if nextGeometry() hasn't been called yet.
 	 */
 	SourceGeometryLiteral lastSourceGeometryLiteral();
+
+	/**
+	 * Returns the complete index-document representation returned by the last call to nextGeometry().
+	 */
+	IndexGeometry lastIndexGeometry();
 
 	/**
 	 * Checks if there are more geometries.
