@@ -122,7 +122,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		try {
 			parent.indexer.commit();
 		} catch (Exception e) {
-			parent.getLogger().warn("Unable to commit indexer transaction.", e);
+			throw new PluginException("Unable to commit the GeoSPARQL Lucene index.", e);
 		}
 	}
 
