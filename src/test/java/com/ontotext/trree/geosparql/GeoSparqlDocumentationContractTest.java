@@ -5,6 +5,9 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.query.QueryLanguage;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -17,6 +20,21 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
 			+ "PREFIX ex: <http://example.com/geosparql-docs-contract/>\n";
+	private static final String DOCUMENTED_FORCE_REINDEX_UPDATE = ""
+			+ "PREFIX plugin: <http://www.ontotext.com/plugins/geosparql#>\n"
+			+ "\n"
+			+ "INSERT DATA {\n"
+			+ "  [] plugin:forceReindex true\n"
+			+ "}";
+
+	@Test
+	public void readmeContainsRunnableForceReindexUpdate() throws IOException {
+		String readme = Files.readString(Path.of("README.md"));
+
+		assertTrue(readme.contains(DOCUMENTED_FORCE_REINDEX_UPDATE));
+		enablePlugin();
+		executeSparqlUpdateQuery(DOCUMENTED_FORCE_REINDEX_UPDATE);
+	}
 
 	@Test
 	public void geofFunctionsAreAvailableWhenPluginIsDisabled() {

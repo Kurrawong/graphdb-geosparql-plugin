@@ -22,6 +22,28 @@ directory. To install the plugin follow these steps:
 1. Unzip the built zip file in `lib/plugins`.
 1. Restart GraphDB.
 
+## Rebuilding the GeoSPARQL index
+
+Rebuilding regenerates the GeoSPARQL Lucene index from the current repository data and applies the currently configured
+index settings. Run a rebuild when GraphDB reports an incompatible GeoSPARQL index, after changing index settings such
+as the prefix tree or precision, or whenever the index needs to be recreated from repository data.
+
+If the plugin is disabled, enabling it performs a full index build. If the plugin is already enabled, run this SPARQL
+update to force a rebuild:
+
+```sparql
+PREFIX plugin: <http://www.ontotext.com/plugins/geosparql#>
+
+INSERT DATA {
+  [] plugin:forceReindex true
+}
+```
+
+The update runs synchronously and may take significant time for a large repository. GraphDB logs
+`Initializing force reindexing process` when the rebuild starts and `Indexing completed` when the indexing work
+finishes. If the rebuild fails, resolve the reported geometry, CRS-data, storage, or configuration problem and run the
+update again.
+
 ## CRS data
 
 The plugin works out of the box for CRS84/default GeoSPARQL geometry data. The default plugin package does not bundle
