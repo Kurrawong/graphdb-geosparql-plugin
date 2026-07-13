@@ -13,6 +13,8 @@
 		<sis.version>1.4</sis.version>
 		<lucene.version>8.10.1</lucene.version>
 		<jts.version>1.20.0</jts.version>
+		<spatial4j.version>0.7</spatial4j.version>
+		<slf4j.version>2.0.16</slf4j.version>
 		<dependency.check.version>8.2.1</dependency.check.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
@@ -87,6 +89,31 @@
 			</plugin>
 
 			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>3.7.0</version>
+				<configuration>
+					<!-- RDF4J is part of the GraphDB plugin API exposed by graphdb-sdk. -->
+					<ignoredUsedUndeclaredDependencies>
+						<ignoredUsedUndeclaredDependency>org.eclipse.rdf4j:*</ignoredUsedUndeclaredDependency>
+					</ignoredUsedUndeclaredDependencies>
+					<!-- These dependencies are supplied by the host or discovered indirectly at runtime. -->
+					<ignoredUnusedDeclaredDependencies>
+						<ignoredUnusedDeclaredDependency>org.apache.commons:commons-lang3</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.apache.lucene:lucene-backward-codecs</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.geotools:gt-referencing</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.geotools:gt-epsg-extension</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.geotools:gt-epsg-hsql</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.ogc-schemas:ogc-tools-gml-jts</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.glassfish.jaxb:jaxb-runtime</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.hsqldb:hsqldb</ignoredUnusedDeclaredDependency>
+						<!-- Test-only EPSG data; see its dependency declaration for the applicable terms. -->
+						<ignoredUnusedDeclaredDependency>org.apache.sis.non-free:sis-embedded-data</ignoredUnusedDeclaredDependency>
+					</ignoredUnusedDeclaredDependencies>
+				</configuration>
+			</plugin>
+
+			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>
 				<version>${dependency.check.version}</version>
@@ -130,6 +157,14 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- GraphDB supplies the logging API to plugins at runtime. -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>${slf4j.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
@@ -162,7 +197,19 @@
 			<version>${lucene.version}</version>
 		</dependency>
 
+		<dependency>
+			<groupId>org.locationtech.spatial4j</groupId>
+			<artifactId>spatial4j</artifactId>
+			<version>${spatial4j.version}</version>
+		</dependency>
+
 		<!-- Geometric & Geodetic stuff for GeoSPARQL implementation: -->
+		<dependency>
+			<groupId>org.apache.jena</groupId>
+			<artifactId>jena-core</artifactId>
+			<version>${jena.version}</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.apache.jena</groupId>
 			<artifactId>jena-geosparql</artifactId>
@@ -254,7 +301,18 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Non-free; test-only EPSG dataset used by Apache Jena GeoSPARQL tests. -->
+		<dependency>
+			<groupId>org.hamcrest</groupId>
+			<artifactId>hamcrest-core</artifactId>
+			<version>1.3</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Test-only EPSG dataset used by projected-CRS GeoSPARQL tests. It is not included in the assembled plugin.
+			Running these tests uses data subject to the EPSG Terms of Use: https://epsg.org/terms-of-use.html
+			Plugin deployments obtain optional EPSG data separately and expose it to Apache SIS through SIS_DATA.
+		-->
 		<dependency>
 			<groupId>org.apache.sis.non-free</groupId>
 			<artifactId>sis-embedded-data</artifactId>

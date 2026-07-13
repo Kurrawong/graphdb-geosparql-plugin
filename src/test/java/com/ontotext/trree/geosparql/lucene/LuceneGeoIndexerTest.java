@@ -22,7 +22,6 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
 import org.locationtech.jts.geom.Geometry;
-import org.apache.commons.io.IOUtils;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.IndexSearcher;
@@ -42,10 +41,13 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -152,10 +154,12 @@ public class LuceneGeoIndexerTest {
     }
 
     private void wkt2Geometry() throws IOException {
-        final List<String> wktLines = IOUtils.readLines(
-                LuceneGeoIndexerTest.class.getResourceAsStream("/example_data.wkt"));
-        for (String line : wktLines) {
-            geometries.add(TestIndexGeometries.exactlyOne(SourceGeometryLiteral.fromWkt(line)));
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                LuceneGeoIndexerTest.class.getResourceAsStream("/example_data.wkt"), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                geometries.add(TestIndexGeometries.exactlyOne(SourceGeometryLiteral.fromWkt(line)));
+            }
         }
     }
 

@@ -1,6 +1,5 @@
 package com.ontotext.trree.geosparql;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.ontotext.trree.geosparql.function.GeoSparqlFunctionRegistration;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
@@ -219,7 +218,6 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         return config;
     }
 
-    @VisibleForTesting
     public void setConfig(GeoSparqlConfig config) {
         this.config = config;
     }
