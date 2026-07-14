@@ -15,8 +15,12 @@
 		<jts.version>1.20.0</jts.version>
 		<spatial4j.version>0.7</spatial4j.version>
 		<slf4j.version>2.0.16</slf4j.version>
+		<testcontainers.version>1.21.4</testcontainers.version>
 		<dependency.check.version>8.2.1</dependency.check.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<graphdb.packaging-smoke.graphdb-image>ontotext/graphdb:10.8.12</graphdb.packaging-smoke.graphdb-image>
+		<graphdb.packaging-smoke.java-image>eclipse-temurin:21.0.11_10-jdk-jammy</graphdb.packaging-smoke.java-image>
+		<graphdb.packaging-smoke.plugin-zip>${project.build.directory}/${project.artifactId}-graphdb-plugin.zip</graphdb.packaging-smoke.plugin-zip>
 
 		<internal.repo>https://maven.ontotext.com/content/repositories/owlim-releases</internal.repo>
 		<snapshots.repo>https://maven.ontotext.com/content/repositories/owlim-snapshots</snapshots.repo>
@@ -308,6 +312,13 @@
 			<scope>test</scope>
 		</dependency>
 
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<version>${testcontainers.version}</version>
+			<scope>test</scope>
+		</dependency>
+
 		<!--
 			Test-only EPSG dataset used by projected-CRS GeoSPARQL tests. It is not included in the assembled plugin.
 			Running these tests uses data subject to the EPSG Terms of Use: https://epsg.org/terms-of-use.html
@@ -390,6 +401,34 @@
 			<properties>
 				<extraArgLine>--add-exports jdk.management.agent/jdk.internal.agent=ALL-UNNAMED</extraArgLine>
 			</properties>
+		</profile>
+		<profile>
+			<id>graphdb-packaging-smoke</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-failsafe-plugin</artifactId>
+						<version>3.2.5</version>
+						<configuration>
+							<systemPropertyVariables>
+								<graphdb.packagingSmoke.dockerfile>${project.basedir}/src/test/docker/graphdb/Dockerfile</graphdb.packagingSmoke.dockerfile>
+								<graphdb.packagingSmoke.pluginZip>${graphdb.packaging-smoke.plugin-zip}</graphdb.packagingSmoke.pluginZip>
+								<graphdb.packagingSmoke.graphdbImage>${graphdb.packaging-smoke.graphdb-image}</graphdb.packagingSmoke.graphdbImage>
+								<graphdb.packagingSmoke.javaImage>${graphdb.packaging-smoke.java-image}</graphdb.packagingSmoke.javaImage>
+							</systemPropertyVariables>
+						</configuration>
+						<executions>
+							<execution>
+								<goals>
+									<goal>integration-test</goal>
+									<goal>verify</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
 		</profile>
 	</profiles>
 

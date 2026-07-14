@@ -13,6 +13,18 @@ The built plugin can be found in the `target` directory:
 
 - `graphdb-geosparql-plugin-graphdb-plugin.zip`
 
+### Packaging smoke test
+
+The opt-in packaging smoke test requires Docker. It builds a temporary GraphDB 10.8.12 image with Java 21, installs
+the assembled plugin ZIP, and runs one indexed GeoSPARQL property-relation query:
+
+```bash
+mvn -Pgraphdb-packaging-smoke verify
+```
+
+This test checks the plugin archive layout and runtime dependency closure. It does not establish GraphDB 10.8 support
+or replace validation against the target GraphDB 11 runtime.
+
 ## Installing the plugin
 
 External plugins are installed under `lib/plugins` in the GraphDB distribution
