@@ -11,7 +11,7 @@ Run `mvn clean package` to build the plugin and execute the tests.
 
 The built plugin can be found in the `target` directory:
 
-- `graphdb-geosparql-plugin-graphdb-plugin.zip`
+- `geosparql-plugin-graphdb-plugin.zip`
 
 ### Packaging smoke test
 
