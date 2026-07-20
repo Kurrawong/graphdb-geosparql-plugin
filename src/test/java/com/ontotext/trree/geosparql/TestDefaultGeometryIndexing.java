@@ -14,6 +14,29 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 			+ "PREFIX ex: <http://example.com/default-geometry-indexing/>\n";
 
 	@Test
+	public void mixedCrsPropertyRelationHasNoFalseNegativesInBothBindingDirections() throws Exception {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:container a geo:Feature ; geo:hasDefaultGeometry ex:containerGeom .\n"
+				+ "  ex:containerGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((24.58 41.39,24.58 41.42,24.60 41.42,24.60 41.39,24.58 41.39))\"^^geo:wktLiteral .\n"
+				+ "  ex:thing a geo:Feature ; geo:hasDefaultGeometry ex:thingGeom .\n"
+				+ "  ex:thingGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)\"^^geo:wktLiteral .\n"
+				+ "}");
+		enablePlugin();
+
+		assertEquals(1, count("SELECT ?s WHERE {\n"
+				+ "  ?s geo:sfWithin ex:container .\n"
+				+ "  FILTER(?s = ex:thing)\n"
+				+ "}"));
+		assertEquals(1, count("SELECT ?o WHERE {\n"
+				+ "  ex:thing geo:sfWithin ?o .\n"
+				+ "  FILTER(?o = ex:container)\n"
+				+ "}"));
+	}
+
+	@Test
 	public void geometryLiteralUpdateReindexesGeometryAndReferencingFeature() throws Exception {
 		insertContainerAndFeature("POINT(1 1)");
 		enablePlugin();
