@@ -75,7 +75,7 @@ public class TestReindex extends AbstractGeoSparqlPluginTest {
 
         restartRepository();
 
-        final File indexDir = new File(getGeoSparqlStorageDir(), "index");
+        final File indexDir = GeoSparqlConfig.resolveIndexPath(getGeoSparqlStorageDir().toPath()).toFile();
         assertFalse(indexDir.exists());
     }
 
