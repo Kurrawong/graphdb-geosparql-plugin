@@ -5,6 +5,8 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.util.function.Predicate;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -14,20 +16,14 @@ public class CrsDataEnvironmentTest {
 	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	@Test
-	public void nullSisDataIsUnset() {
-		CrsDataEnvironment environment = CrsDataEnvironment.inspect(null, path -> true, path -> true);
+	public void absentSisDataValuesAreUnset() {
+		for (String sisData : new String[]{null, "", " \t "}) {
+			CrsDataEnvironment environment = CrsDataEnvironment.inspect(sisData, path -> true, path -> true);
 
-		assertEquals(CrsDataEnvironment.Status.UNSET, environment.status());
-		assertTrue(environment.message().contains("SIS_DATA is not set"));
-		assertTrue(environment.message().contains("CRS84/default GeoSPARQL data is supported"));
-	}
-
-	@Test
-	public void blankSisDataIsUnset() {
-		CrsDataEnvironment environment = CrsDataEnvironment.inspect(" \t ", path -> true, path -> true);
-
-		assertEquals(CrsDataEnvironment.Status.UNSET, environment.status());
-		assertTrue(environment.message().contains("SIS_DATA is not set"));
+			assertEquals(CrsDataEnvironment.Status.UNSET, environment.status());
+			assertTrue(environment.message().contains("SIS_DATA is not set"));
+			assertTrue(environment.message().contains("CRS84/default GeoSPARQL data is supported"));
+		}
 	}
 
 	@Test
@@ -43,41 +39,24 @@ public class CrsDataEnvironmentTest {
 	}
 
 	@Test
-	public void existingFileIsUnusable() throws Exception {
+	public void unusableSisDataPathsReportTheirFailureClass() throws Exception {
 		File sisDataFile = temporaryFolder.newFile("sis-data-file");
-
-		CrsDataEnvironment environment = CrsDataEnvironment.inspect(sisDataFile.getAbsolutePath(),
-				path -> path.toFile().isDirectory(), path -> path.toFile().canRead());
-
-		assertEquals(CrsDataEnvironment.Status.UNUSABLE, environment.status());
-		assertTrue(environment.message().contains("does not point to a directory"));
-	}
-
-	@Test
-	public void missingPathIsUnusable() {
 		File missingPath = new File(temporaryFolder.getRoot(), "missing");
 
-		CrsDataEnvironment environment = CrsDataEnvironment.inspect(missingPath.getAbsolutePath(),
-				path -> path.toFile().isDirectory(), path -> path.toFile().canRead());
-
-		assertEquals(CrsDataEnvironment.Status.UNUSABLE, environment.status());
-		assertTrue(environment.message().contains("does not point to a directory"));
+		assertUnusable(sisDataFile.getAbsolutePath(), path -> path.toFile().isDirectory(),
+				path -> path.toFile().canRead(), "does not point to a directory");
+		assertUnusable(missingPath.getAbsolutePath(), path -> path.toFile().isDirectory(),
+				path -> path.toFile().canRead(), "does not point to a directory");
+		assertUnusable("/opt/graphdb/sis-data", path -> true, path -> false, "is not readable");
+		assertUnusable("bad\0path", path -> true, path -> true, "not a valid filesystem path");
 	}
 
-	@Test
-	public void unreadableDirectoryIsUnusable() {
-		CrsDataEnvironment environment = CrsDataEnvironment.inspect("/opt/graphdb/sis-data",
-				path -> true, path -> false);
+	private static void assertUnusable(String sisData, Predicate<Path> isDirectory, Predicate<Path> isReadable,
+			String expectedMessage) {
+		CrsDataEnvironment environment = CrsDataEnvironment.inspect(sisData, isDirectory, isReadable);
 
 		assertEquals(CrsDataEnvironment.Status.UNUSABLE, environment.status());
-		assertTrue(environment.message().contains("is not readable"));
-	}
-
-	@Test
-	public void invalidPathIsUnusable() {
-		CrsDataEnvironment environment = CrsDataEnvironment.inspect("bad\0path", path -> true, path -> true);
-
-		assertEquals(CrsDataEnvironment.Status.UNUSABLE, environment.status());
-		assertTrue(environment.message().contains("not a valid filesystem path"));
+		assertTrue(environment.message().contains(expectedMessage));
+		assertTrue(environment.message().contains("CRS84/default GeoSPARQL data is supported"));
 	}
 }
