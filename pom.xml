@@ -73,6 +73,30 @@
 
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-failsafe-plugin</artifactId>
+				<version>3.2.5</version>
+				<executions>
+					<execution>
+						<id>verify-plugin-archive</id>
+						<phase>package</phase>
+						<goals>
+							<goal>integration-test</goal>
+							<goal>verify</goal>
+						</goals>
+						<configuration>
+							<includes>
+								<include>**/GraphDbPluginArchiveIT.java</include>
+							</includes>
+							<systemPropertyVariables>
+								<graphdb.pluginArchive>${graphdb.packaging-smoke.plugin-zip}</graphdb.pluginArchive>
+							</systemPropertyVariables>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>3.2.5</version>
 				<configuration>
@@ -419,7 +443,6 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-failsafe-plugin</artifactId>
-						<version>3.2.5</version>
 						<configuration>
 							<systemPropertyVariables>
 								<graphdb.packagingSmoke.dockerfile>${project.basedir}/src/test/docker/graphdb/Dockerfile</graphdb.packagingSmoke.dockerfile>
@@ -431,10 +454,16 @@
 						</configuration>
 						<executions>
 							<execution>
+								<id>run-graphdb-packaging-smoke</id>
 								<goals>
 									<goal>integration-test</goal>
 									<goal>verify</goal>
 								</goals>
+								<configuration>
+									<includes>
+										<include>**/GraphDbPackagingSmokeIT.java</include>
+									</includes>
+								</configuration>
 							</execution>
 						</executions>
 					</plugin>

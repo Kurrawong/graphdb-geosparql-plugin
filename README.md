@@ -9,6 +9,9 @@ The plugin is a Maven project targeting GraphDB 11. JDK 21 is required to build 
 
 Run `mvn clean package` to build the plugin and execute the tests.
 
+The package lifecycle also inspects the assembled plugin ZIP without Docker. It verifies that the plugin and supported
+Apache SIS Derby runtime are present and that test-only or legacy CRS provider dependencies are absent.
+
 The tests use the test-scoped Apache SIS `sis-embedded-data` dependency, whose EPSG data is subject to the
 [EPSG Terms of Use](https://epsg.org/terms-of-use.html). This dependency is not included in the assembled plugin.
 
@@ -19,14 +22,14 @@ The built plugin can be found in the `target` directory:
 ### Packaging smoke test
 
 The opt-in packaging smoke test requires Docker. It builds a temporary GraphDB 10.8.12 image with Java 21, installs
-the assembled plugin ZIP, and runs one indexed GeoSPARQL property-relation query:
+the assembled plugin ZIP, and runs indexed GeoSPARQL property-relation queries for CRS84 and a projected CRS:
 
 ```bash
 mvn -Pgraphdb-packaging-smoke verify
 ```
 
-This test checks the plugin archive layout and runtime dependency closure. It does not establish GraphDB 10.8 support
-or replace validation against the target GraphDB 11 runtime.
+This test checks that the assembled plugin loads and executes in GraphDB with externally supplied Apache SIS CRS data.
+It does not establish GraphDB 10.8 support or replace validation against the target GraphDB 11 runtime.
 
 ## Installing the plugin
 
