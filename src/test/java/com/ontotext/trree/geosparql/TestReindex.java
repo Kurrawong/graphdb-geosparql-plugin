@@ -79,6 +79,18 @@ public class TestReindex extends AbstractGeoSparqlPluginTest {
         assertFalse(indexDir.exists());
     }
 
+    @Test
+    public void testCurrentV2IndexRemainsQueryableAfterRepositoryRestart() throws Exception {
+        final File indexDir = GeoSparqlConfig.resolveIndexPath(getGeoSparqlStorageDir().toPath()).toFile();
+        assertTrue(indexDir.isDirectory());
+        assertSparqlSelectExample5Results();
+
+        restartRepository();
+
+        assertTrue(indexDir.isDirectory());
+        assertSparqlSelectExample5Results();
+    }
+
 
     private void assertLuceneIndexFiles(File[] files) {
         for (File file : files) {
