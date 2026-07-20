@@ -8,7 +8,6 @@
 
 	<properties>
 		<graphdb.version>11.0-spring-6-TR18</graphdb.version>
-		<gt.version>29.6</gt.version>
 		<jena.version>6.1.0</jena.version>
 		<sis.version>1.4</sis.version>
 		<derby.version>10.15.2.0</derby.version>
@@ -103,12 +102,8 @@
 					<ignoredUnusedDeclaredDependencies>
 						<ignoredUnusedDeclaredDependency>org.apache.commons:commons-lang3</ignoredUnusedDeclaredDependency>
 						<ignoredUnusedDeclaredDependency>org.apache.lucene:lucene-backward-codecs</ignoredUnusedDeclaredDependency>
-						<ignoredUnusedDeclaredDependency>org.geotools:gt-referencing</ignoredUnusedDeclaredDependency>
-						<ignoredUnusedDeclaredDependency>org.geotools:gt-epsg-extension</ignoredUnusedDeclaredDependency>
-						<ignoredUnusedDeclaredDependency>org.geotools:gt-epsg-hsql</ignoredUnusedDeclaredDependency>
 						<ignoredUnusedDeclaredDependency>org.ogc-schemas:ogc-tools-gml-jts</ignoredUnusedDeclaredDependency>
 						<ignoredUnusedDeclaredDependency>org.glassfish.jaxb:jaxb-runtime</ignoredUnusedDeclaredDependency>
-						<ignoredUnusedDeclaredDependency>org.hsqldb:hsqldb</ignoredUnusedDeclaredDependency>
 						<!-- Apache SIS discovers the Derby data source reflectively. -->
 						<ignoredUnusedDeclaredDependency>org.apache.derby:derby</ignoredUnusedDeclaredDependency>
 						<ignoredUnusedDeclaredDependency>org.apache.derby:derbytools</ignoredUnusedDeclaredDependency>
@@ -228,24 +223,6 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.geotools</groupId>
-			<artifactId>gt-referencing</artifactId>
-			<version>${gt.version}</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.geotools</groupId>
-			<artifactId>gt-epsg-extension</artifactId>
-			<version>${gt.version}</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.geotools</groupId>
-			<artifactId>gt-epsg-hsql</artifactId>
-			<version>${gt.version}</version>
-		</dependency>
-
-		<dependency>
 			<groupId>org.ogc-schemas</groupId>
 			<artifactId>ogc-tools-gml-jts</artifactId>
 			<version>4.0.2</version>
@@ -254,14 +231,6 @@
 			<groupId>org.glassfish.jaxb</groupId>
 			<artifactId>jaxb-runtime</artifactId>
 			<version>4.0.5</version>
-		</dependency>
-
-		<!-- For Geotoolkit's cache. We need to have it outside the plugin classloader so it must be packaged in the dist -->
-		<dependency>
-			<groupId>org.hsqldb</groupId>
-			<artifactId>hsqldb</artifactId>
-			<version>2.7.1</version>
-			<scope>provided</scope>
 		</dependency>
 
 		<dependency>

@@ -20,7 +20,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.regex.Pattern;
+import java.util.zip.ZipFile;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class GraphDbPackagingSmokeIT {
@@ -89,12 +92,38 @@ public class GraphDbPackagingSmokeIT {
 
 	@Test
 	public void assembledPluginLoadsAndExecutesIndexedPropertyRelation() throws Exception {
+		assertPluginDependencyClosure();
 		createRepository();
 		executeUpdate(INSERT_GEOMETRIES, "insert smoke-test geometries");
 		executeUpdate(ENABLE_GEOSPARQL, "enable GeoSPARQL and build its index");
 
 		assertAskTrue(WITHIN_QUERY, "execute indexed geo:sfWithin query");
 		assertAskTrue(PROJECTED_WITHIN_QUERY, "execute projected-CRS indexed geo:sfWithin query");
+	}
+
+	private void assertPluginDependencyClosure() throws IOException {
+		Path pluginZip = requiredPath(PLUGIN_ZIP_PROPERTY, "assembled plugin ZIP");
+		try (ZipFile archive = new ZipFile(pluginZip.toFile())) {
+			assertArchiveContains(archive, "derby.jar");
+			assertArchiveContains(archive, "derbyshared.jar");
+			assertArchiveContains(archive, "derbytools.jar");
+
+			assertArchiveDoesNotContain(archive, "sis-embedded-data.jar");
+			assertArchiveDoesNotContain(archive, "gt-referencing.jar");
+			assertArchiveDoesNotContain(archive, "gt-epsg-extension.jar");
+			assertArchiveDoesNotContain(archive, "gt-epsg-hsql.jar");
+			assertArchiveDoesNotContain(archive, "hsqldb.jar");
+		}
+	}
+
+	private void assertArchiveContains(ZipFile archive, String jarName) {
+		assertNotNull("Expected assembled plugin to contain " + jarName,
+				archive.getEntry("geosparql-plugin/" + jarName));
+	}
+
+	private void assertArchiveDoesNotContain(ZipFile archive, String jarName) {
+		assertNull("Expected assembled plugin not to contain " + jarName,
+				archive.getEntry("geosparql-plugin/" + jarName));
 	}
 
 	private void assertAskTrue(String query, String operation) throws Exception {
