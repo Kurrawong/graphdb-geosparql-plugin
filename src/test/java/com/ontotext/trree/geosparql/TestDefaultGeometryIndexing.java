@@ -69,6 +69,26 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 	}
 
 	@Test
+	public void rolledBackGeometryUpdateLeavesRdfAndLuceneStateUnchanged() throws Exception {
+		insertContainerAndFeature("POINT(1 1)");
+		enablePlugin();
+		assertTrue(ask("ex:thing geo:sfWithin ex:container"));
+
+		connection.begin();
+		try {
+			connection.prepareUpdate(QueryLanguage.SPARQL, PREFIXES
+					+ "DELETE { ex:thingGeom geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral }\n"
+					+ "INSERT { ex:thingGeom geo:asWKT \"POINT(9 9)\"^^geo:wktLiteral }\n"
+					+ "WHERE { ex:thingGeom geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral }").execute();
+		} finally {
+			connection.rollback();
+		}
+
+		assertTrue(ask("ex:thing geo:sfWithin ex:container"));
+		assertTrue(ask("ex:thingGeom geo:sfWithin ex:container"));
+	}
+
+	@Test
 	public void defaultGeometryUpdateReindexesFeature() throws Exception {
 		executeSparqlUpdateQuery(PREFIXES
 				+ "INSERT DATA {\n"
