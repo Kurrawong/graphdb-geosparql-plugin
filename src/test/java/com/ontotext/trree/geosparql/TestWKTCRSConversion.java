@@ -1,19 +1,23 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
-import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.junit.Assert;
 import org.junit.Test;
-import org.locationtech.jts.geom.Coordinate;
 
 import java.util.List;
-import java.util.Locale;
 
 public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 	private final static String EXPECTED_SUBJECT_RESULT = "http://data.bigdatagrapes.eu/resource/AUA/estate/Fasoulis/Geotrisi/geo";
 	private final static String EXPECTED_WITHIN_RESULT = "http://example.org/ApplicationSchema#F";
+	// Independently derived with PROJ from EPSG:32634 (799997.80, 4589779.63) to CRS84
+	// (24.588775547985, 41.403595789244), with a 0.001 degree margin.
+	private final static String CRS84_SEARCH_AREA = "POLYGON(("
+			+ "24.587775547985 41.402595789244,"
+			+ "24.589775547985 41.402595789244,"
+			+ "24.589775547985 41.404595789244,"
+			+ "24.587775547985 41.404595789244,"
+			+ "24.587775547985 41.402595789244))";
 	private final static String SUBJECT_SEARCH_QUERY_WITH_DEFAULT_CRS = "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n" +
 			"PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n" +
 			"PREFIX onto: <http://www.ontotext.com/>\n" +
@@ -53,30 +57,15 @@ public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 			"}";
 	@Test
 	public void shouldProperlyConvertAndIndexDifferentCRSThanDefault() throws Exception {
-		final IndexGeometry pointInCRS84 = TestIndexGeometries.exactlyOne(
-				SourceGeometryLiteral.fromWkt("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)"));
-		final String searchAreaInCRS84 = polygonAround(pointInCRS84.indexGeometry().getCoordinate(), 0.001);
-
 		importData("gdb3142.ttl", RDFFormat.TURTLE);
 		enablePlugin();
 		List<Value> resultValues = executeSparqlQueryWithResult(
-				String.format(SUBJECT_SEARCH_QUERY_WITH_DEFAULT_CRS, searchAreaInCRS84), "s");
+				String.format(SUBJECT_SEARCH_QUERY_WITH_DEFAULT_CRS, CRS84_SEARCH_AREA), "s");
 
-		Assert.assertTrue("Should return one result", !resultValues.isEmpty());
-		Assert.assertTrue("Should return result matching subject", EXPECTED_SUBJECT_RESULT.equals(resultValues.get(0).stringValue()));
+		Assert.assertEquals(List.of(VF.createIRI(EXPECTED_SUBJECT_RESULT)), resultValues);
 
 		resultValues = executeSparqlQueryWithResult(SUBJECT_SEARCH_QUERY_WITH_EPSG_32634_CRS, "s");
-		Assert.assertTrue("Should return one result", !resultValues.isEmpty());
-		Assert.assertTrue("Should return result matching subject", EXPECTED_SUBJECT_RESULT.equals(resultValues.get(0).stringValue()));
-	}
-
-	private static String polygonAround(Coordinate coordinate, double delta) {
-		double minX = coordinate.x - delta;
-		double maxX = coordinate.x + delta;
-		double minY = coordinate.y - delta;
-		double maxY = coordinate.y + delta;
-		return String.format(Locale.ROOT, "POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))",
-				minX, minY, maxX, minY, maxX, maxY, minX, maxY, minX, minY);
+		Assert.assertEquals(List.of(VF.createIRI(EXPECTED_SUBJECT_RESULT)), resultValues);
 	}
 
 	@Test
@@ -86,7 +75,6 @@ public class TestWKTCRSConversion extends AbstractGeoSparqlPluginTest {
 		enablePlugin();
 		List<Value> resultValues = executeSparqlQueryWithResult(SEARCH_POINT_IN_POLYGON_QUERY, "f");
 
-		Assert.assertTrue("Should return one result", !resultValues.isEmpty());
-		Assert.assertTrue("Should return result matching F my favorite place", EXPECTED_WITHIN_RESULT.equals(resultValues.get(0).stringValue()));
+		Assert.assertEquals(List.of(VF.createIRI(EXPECTED_WITHIN_RESULT)), resultValues);
 	}
 }
