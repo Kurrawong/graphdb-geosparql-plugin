@@ -29,6 +29,29 @@ public class GeoSparqlRelationIteratorTest {
 	private static final long PREDICATE = 3L;
 
 	@Test
+	public void candidateReturnedByIndexIsRejectedWhenExactRelationDoesNotHold() throws Exception {
+		IndexGeometry polygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
+		IndexGeometry boundaryPoint = indexGeometry("POINT(2 1)");
+
+		FakeEntities entities = new FakeEntities();
+		entities.add(SUBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/boundary-point"));
+		entities.add(OBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/container"));
+
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
+		plugin.indexer = new ScriptedGeoSparqlIndexer(singletonList(polygon), singletonList(polygon),
+				singletonList(boundaryPoint), singletonList(boundaryPoint));
+
+		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_WITHIN, 0, PREDICATE, OBJECT, entities);
+		try {
+			assertFalse(iterator.next());
+		} finally {
+			iterator.close();
+		}
+	}
+
+	@Test
 	public void objectBoundLookupReconsidersCandidateAfterEarlierBoundGeometryExactMiss() throws Exception {
 		IndexGeometry missPolygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
 		IndexGeometry hitPolygon = indexGeometry("POLYGON((10 10,10 12,12 12,12 10,10 10))");
