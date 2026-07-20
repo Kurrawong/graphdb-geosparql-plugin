@@ -6,12 +6,27 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 	private static final String PREFIXES = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX ex: <http://example.com/default-geometry-indexing/>\n";
+
+	@Test
+	public void ignoreErrorsDoesNotHideUnsupportedQueryCrs() throws Exception {
+		insertContainerAndFeature("POINT(1 1)");
+		executePluginControl(GeoSparqlPlugin.IGNORE_ERRORS_PREDICATE_IRI, VF.createLiteral(true));
+		enablePlugin();
+
+		RuntimeException exception = assertThrows(RuntimeException.class, () -> ask(
+				"ex:thing geo:sfWithin \"<http://www.opengis.net/def/crs/EPSG/0/999999> "
+						+ "POLYGON((0 0,0 4,4 4,4 0,0 0))\"^^geo:wktLiteral"));
+
+		assertCauseChainContains(exception, "Unsupported CRS");
+		assertCauseChainContains(exception, "999999");
+	}
 
 	@Test
 	public void mixedCrsPropertyRelationHasNoFalseNegativesInBothBindingDirections() throws Exception {
@@ -261,6 +276,15 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 
 	private boolean ask(String pattern) {
 		return connection.prepareBooleanQuery(QueryLanguage.SPARQL, PREFIXES + "ASK { " + pattern + " }").evaluate();
+	}
+
+	private static void assertCauseChainContains(Throwable throwable, String expectedText) {
+		for (Throwable current = throwable; current != null; current = current.getCause()) {
+			if (current.getMessage() != null && current.getMessage().contains(expectedText)) {
+				return;
+			}
+		}
+		throw new AssertionError("Expected exception cause containing: " + expectedText, throwable);
 	}
 
 	private int count(String query) throws Exception {
