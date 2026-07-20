@@ -145,6 +145,8 @@ public class JenaBackedFunctionCoverageTest {
 
 		assertTrue(distance instanceof Literal);
 		assertDoubleValue(distance, 1111950.7973436872, 1e-6);
+		assertEquals(VF.createIRI("http://www.w3.org/2001/XMLSchema#double"),
+				((Literal) distance).getDatatype());
 	}
 
 	@Test
