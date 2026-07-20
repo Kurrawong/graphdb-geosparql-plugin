@@ -162,6 +162,27 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
+	public void storedMetadataFactoryRejectsIncompleteOrUnsupportedV2Metadata() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
+		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
+
+		assertStoredMetadataRejected(index, source, null, IndexGeometry.INDEX_CRS,
+				IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, "CRS metadata is missing");
+		assertStoredMetadataRejected(index, source, CRS84, EPSG_32634,
+				IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, "Unsupported GeoSPARQL Lucene index CRS");
+		assertStoredMetadataRejected(index, source, CRS84, IndexGeometry.INDEX_CRS,
+				"legacy-build-mode", "Unsupported GeoSPARQL Lucene index build mode");
+	}
+
+	private static void assertStoredMetadataRejected(IndexGeometry index, SourceGeometryLiteral source,
+			String effectiveSourceCrs, String indexCrs, String buildMode, String expectedMessage) {
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class, () ->
+				IndexGeometry.fromStoredMetadata(index.indexGeometry(), source, effectiveSourceCrs,
+						indexCrs, buildMode));
+		assertTrue(exception.getMessage().contains(expectedMessage));
+	}
+
+	@Test
 	public void projectedGmlIsTransformedToCrs84IndexGeometry() {
 		String gml = "<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName=\"" + EPSG_32634
 				+ "\"><gml:pos>799997.80 4589779.63</gml:pos></gml:Point>";
