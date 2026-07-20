@@ -5,9 +5,12 @@ http://graphdb.ontotext.com/documentation/enterprise/geosparql-support.html
 
 ## Building the plugin
 
-The plugin is a Maven project.
+The plugin is a Maven project targeting GraphDB 11. JDK 21 is required to build the plugin and run it in GraphDB.
 
 Run `mvn clean package` to build the plugin and execute the tests.
+
+The tests use the test-scoped Apache SIS `sis-embedded-data` dependency, whose EPSG data is subject to the
+[EPSG Terms of Use](https://epsg.org/terms-of-use.html). This dependency is not included in the assembled plugin.
 
 The built plugin can be found in the `target` directory:
 
@@ -30,8 +33,9 @@ or replace validation against the target GraphDB 11 runtime.
 External plugins are installed under `lib/plugins` in the GraphDB distribution
 directory. To install the plugin follow these steps:
 
-1. Remove the directory containing another version of the plugin from `lib/plugins` (e.g. `graphdb-geosparql-plugin`).
-1. Unzip the built zip file in `lib/plugins`.
+1. Remove `lib/plugins/geosparql-plugin`. Also remove `lib/plugins/graphdb-geosparql-plugin` if it exists from an
+   older installation.
+1. Unzip the built zip file in `lib/plugins`. This creates `lib/plugins/geosparql-plugin`.
 1. Restart GraphDB.
 
 ## Rebuilding the GeoSPARQL index
@@ -59,7 +63,7 @@ update again.
 ## CRS data
 
 The plugin works out of the box for CRS84/default GeoSPARQL geometry data. The default plugin package does not bundle
-non-free EPSG data or national grid-shift files.
+the optional Apache SIS `sis-embedded-data` EPSG dataset or national grid-shift files.
 
 Default supported behavior:
 
