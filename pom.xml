@@ -23,7 +23,7 @@
 		<graphdb.packaging-smoke.graphdb-image>ontotext/graphdb:10.8.12</graphdb.packaging-smoke.graphdb-image>
 		<graphdb.packaging-smoke.java-image>eclipse-temurin:21.0.11_10-jdk-jammy</graphdb.packaging-smoke.java-image>
 		<graphdb.packaging-smoke.plugin-zip>${project.build.directory}/${project.artifactId}-graphdb-plugin.zip</graphdb.packaging-smoke.plugin-zip>
-		<graphdb.packaging-smoke.sis-runtime-dir>${project.build.directory}/packaging-smoke</graphdb.packaging-smoke.sis-runtime-dir>
+		<graphdb.packaging-smoke.sis-data-dir>${project.build.directory}/packaging-smoke</graphdb.packaging-smoke.sis-data-dir>
 
 		<internal.repo>https://maven.ontotext.com/content/repositories/owlim-releases</internal.repo>
 		<snapshots.repo>https://maven.ontotext.com/content/repositories/owlim-snapshots</snapshots.repo>
@@ -109,6 +109,9 @@
 						<ignoredUnusedDeclaredDependency>org.ogc-schemas:ogc-tools-gml-jts</ignoredUnusedDeclaredDependency>
 						<ignoredUnusedDeclaredDependency>org.glassfish.jaxb:jaxb-runtime</ignoredUnusedDeclaredDependency>
 						<ignoredUnusedDeclaredDependency>org.hsqldb:hsqldb</ignoredUnusedDeclaredDependency>
+						<!-- Apache SIS discovers the Derby data source reflectively. -->
+						<ignoredUnusedDeclaredDependency>org.apache.derby:derby</ignoredUnusedDeclaredDependency>
+						<ignoredUnusedDeclaredDependency>org.apache.derby:derbytools</ignoredUnusedDeclaredDependency>
 						<!-- Test-only EPSG data; see its dependency declaration for the applicable terms. -->
 						<ignoredUnusedDeclaredDependency>org.apache.sis.non-free:sis-embedded-data</ignoredUnusedDeclaredDependency>
 					</ignoredUnusedDeclaredDependencies>
@@ -318,6 +321,21 @@
 		</dependency>
 
 		<!--
+			Apache SIS uses Derby for the SpatialMetadata database under SIS_DATA. The plugin supplies
+			the database runtime; deployments supply the optional EPSG data separately.
+		-->
+		<dependency>
+			<groupId>org.apache.derby</groupId>
+			<artifactId>derby</artifactId>
+			<version>${derby.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.derby</groupId>
+			<artifactId>derbytools</artifactId>
+			<version>${derby.version}</version>
+		</dependency>
+
+		<!--
 			Test-only EPSG dataset used by projected-CRS GeoSPARQL tests. It is not included in the assembled plugin.
 			Running these tests uses data subject to the EPSG Terms of Use: https://epsg.org/terms-of-use.html
 			Plugin deployments obtain optional EPSG data separately and expose it to Apache SIS through SIS_DATA.
@@ -409,10 +427,10 @@
 						<artifactId>maven-dependency-plugin</artifactId>
 						<executions>
 							<execution>
-								<id>copy-packaging-smoke-sis-data</id>
+								<id>unpack-packaging-smoke-sis-data</id>
 								<phase>pre-integration-test</phase>
 								<goals>
-									<goal>copy</goal>
+									<goal>unpack</goal>
 								</goals>
 								<configuration>
 									<artifactItems>
@@ -422,31 +440,7 @@
 											<version>${sis.version}</version>
 											<type>jar</type>
 											<outputDirectory>${project.build.directory}/packaging-smoke</outputDirectory>
-											<destFileName>sis-embedded-data.jar</destFileName>
-										</artifactItem>
-										<artifactItem>
-											<groupId>org.apache.derby</groupId>
-											<artifactId>derby</artifactId>
-											<version>${derby.version}</version>
-											<type>jar</type>
-											<outputDirectory>${project.build.directory}/packaging-smoke</outputDirectory>
-											<destFileName>derby.jar</destFileName>
-										</artifactItem>
-										<artifactItem>
-											<groupId>org.apache.derby</groupId>
-											<artifactId>derbyshared</artifactId>
-											<version>${derby.version}</version>
-											<type>jar</type>
-											<outputDirectory>${project.build.directory}/packaging-smoke</outputDirectory>
-											<destFileName>derbyshared.jar</destFileName>
-										</artifactItem>
-										<artifactItem>
-											<groupId>org.apache.derby</groupId>
-											<artifactId>derbytools</artifactId>
-											<version>${derby.version}</version>
-											<type>jar</type>
-											<outputDirectory>${project.build.directory}/packaging-smoke</outputDirectory>
-											<destFileName>derbytools.jar</destFileName>
+											<includes>SIS_DATA/**</includes>
 										</artifactItem>
 									</artifactItems>
 								</configuration>
@@ -461,7 +455,7 @@
 							<systemPropertyVariables>
 								<graphdb.packagingSmoke.dockerfile>${project.basedir}/src/test/docker/graphdb/Dockerfile</graphdb.packagingSmoke.dockerfile>
 								<graphdb.packagingSmoke.pluginZip>${graphdb.packaging-smoke.plugin-zip}</graphdb.packagingSmoke.pluginZip>
-								<graphdb.packagingSmoke.sisRuntimeDir>${graphdb.packaging-smoke.sis-runtime-dir}</graphdb.packagingSmoke.sisRuntimeDir>
+								<graphdb.packagingSmoke.sisDataDir>${graphdb.packaging-smoke.sis-data-dir}</graphdb.packagingSmoke.sisDataDir>
 								<graphdb.packagingSmoke.graphdbImage>${graphdb.packaging-smoke.graphdb-image}</graphdb.packagingSmoke.graphdbImage>
 								<graphdb.packagingSmoke.javaImage>${graphdb.packaging-smoke.java-image}</graphdb.packagingSmoke.javaImage>
 							</systemPropertyVariables>

@@ -22,6 +22,8 @@ COPY --from=plugin-build /plugin/geosparql-plugin \
   /opt/graphdb/dist/lib/plugins/geosparql-plugin
 
 # Optional EPSG data is deliberately not part of the assembled plugin. The smoke image
-# supplies the test-scoped dataset explicitly to verify projected-CRS deployment wiring.
-COPY sis-runtime/ \
-  /opt/graphdb/dist/lib/plugins/geosparql-plugin/
+# supplies only SIS_DATA; the Derby runtime must come from the assembled plugin.
+COPY sis-data/SIS_DATA/Databases/spatial-metadata/ \
+  /opt/graphdb/sis-data/Databases/SpatialMetadata/
+
+ENV SIS_DATA=/opt/graphdb/sis-data

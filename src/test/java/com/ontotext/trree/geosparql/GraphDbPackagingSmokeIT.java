@@ -27,7 +27,7 @@ public class GraphDbPackagingSmokeIT {
 	private static final String REPOSITORY_ID = "packaging-smoke";
 	private static final String DOCKERFILE_PROPERTY = "graphdb.packagingSmoke.dockerfile";
 	private static final String PLUGIN_ZIP_PROPERTY = "graphdb.packagingSmoke.pluginZip";
-	private static final String SIS_RUNTIME_DIR_PROPERTY = "graphdb.packagingSmoke.sisRuntimeDir";
+	private static final String SIS_DATA_DIR_PROPERTY = "graphdb.packagingSmoke.sisDataDir";
 	private static final String GRAPHDB_IMAGE_PROPERTY = "graphdb.packagingSmoke.graphdbImage";
 	private static final String JAVA_IMAGE_PROPERTY = "graphdb.packagingSmoke.javaImage";
 
@@ -70,8 +70,8 @@ public class GraphDbPackagingSmokeIT {
 			.withFileFromPath("Dockerfile", requiredPath(DOCKERFILE_PROPERTY, "packaging-smoke Dockerfile"))
 			.withFileFromPath("geosparql-plugin-graphdb-plugin.zip",
 					requiredPath(PLUGIN_ZIP_PROPERTY, "assembled plugin ZIP"))
-			.withFileFromPath("sis-runtime",
-					requiredDirectory(SIS_RUNTIME_DIR_PROPERTY, "packaging-smoke Apache SIS runtime directory"))
+			.withFileFromPath("sis-data",
+					requiredDirectory(SIS_DATA_DIR_PROPERTY, "packaging-smoke Apache SIS data directory"))
 			.withDockerfilePath("Dockerfile")
 			.withBuildArg("GRAPHDB_IMAGE", requiredProperty(GRAPHDB_IMAGE_PROPERTY))
 			.withBuildArg("JAVA_IMAGE", requiredProperty(JAVA_IMAGE_PROPERTY));
