@@ -4,6 +4,11 @@ import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.slf4j.LoggerFactory;
+
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.Assert.*;
 
@@ -23,6 +28,31 @@ public class GeoSparqlUtilsTest {
     @Test
     public void testCanSaveAndRead2() {
         test(false, GeoSparqlConfig.PrefixTree.GEOHASH, 7, GeoSparqlConfig.PrefixTree.QUAD, 12, false);
+    }
+
+    @Test
+    public void legacyEnabledConfigMigratesDisabledForV2Reindex() throws Exception {
+        Path pluginDataDir = tmpFolder.newFolder("legacy-config-migration").toPath();
+        Path legacyConfigPath = GeoSparqlConfig.resolveLegacyConfigPath(pluginDataDir);
+        Files.createDirectories(legacyConfigPath.getParent());
+
+        GeoSparqlConfig legacyConfig = new GeoSparqlConfig();
+        legacyConfig.setEnabled(true);
+        legacyConfig.setPrefixTree(GeoSparqlConfig.PrefixTree.GEOHASH);
+        legacyConfig.setPrecision(7);
+        legacyConfig.setIgnoreErrors(true);
+        try (OutputStream output = Files.newOutputStream(legacyConfigPath)) {
+            legacyConfig.getAsProperties().store(output, "legacy GeoSPARQL configuration");
+        }
+
+        GeoSparqlUtils.migrateConfig(pluginDataDir, LoggerFactory.getLogger(GeoSparqlUtilsTest.class));
+
+        assertTrue(Files.isReadable(GeoSparqlConfig.resolveConfigPath(pluginDataDir)));
+        GeoSparqlConfig migrated = GeoSparqlUtils.readConfig(pluginDataDir);
+        assertFalse("An incompatible pre-v2 index must not remain enabled", migrated.isEnabled());
+        assertEquals(GeoSparqlConfig.PrefixTree.GEOHASH, migrated.getPrefixTree());
+        assertEquals(7, migrated.getPrecision());
+        assertTrue(migrated.isIgnoreErrors());
     }
 
     private void test(boolean enabled, GeoSparqlConfig.PrefixTree prefixTree, int precision,
