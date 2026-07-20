@@ -27,6 +27,7 @@ public class GraphDbPackagingSmokeIT {
 	private static final String REPOSITORY_ID = "packaging-smoke";
 	private static final String DOCKERFILE_PROPERTY = "graphdb.packagingSmoke.dockerfile";
 	private static final String PLUGIN_ZIP_PROPERTY = "graphdb.packagingSmoke.pluginZip";
+	private static final String SIS_RUNTIME_DIR_PROPERTY = "graphdb.packagingSmoke.sisRuntimeDir";
 	private static final String GRAPHDB_IMAGE_PROPERTY = "graphdb.packagingSmoke.graphdbImage";
 	private static final String JAVA_IMAGE_PROPERTY = "graphdb.packagingSmoke.javaImage";
 
@@ -40,6 +41,12 @@ public class GraphDbPackagingSmokeIT {
 			+ "  ex:thing a geo:Feature ; geo:hasDefaultGeometry ex:thingGeometry .\n"
 			+ "  ex:thingGeometry a geo:Geometry ;\n"
 			+ "    geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral .\n"
+			+ "  ex:projectedContainer a geo:Feature ; geo:hasDefaultGeometry ex:projectedContainerGeometry .\n"
+			+ "  ex:projectedContainerGeometry a geo:Geometry ;\n"
+			+ "    geo:asWKT \"POLYGON((24.58 41.39,24.58 41.42,24.60 41.42,24.60 41.39,24.58 41.39))\"^^geo:wktLiteral .\n"
+			+ "  ex:projectedThing a geo:Feature ; geo:hasDefaultGeometry ex:projectedThingGeometry .\n"
+			+ "  ex:projectedThingGeometry a geo:Geometry ;\n"
+			+ "    geo:asWKT \"<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)\"^^geo:wktLiteral .\n"
 			+ "}";
 
 	private static final String ENABLE_GEOSPARQL = ""
@@ -51,6 +58,11 @@ public class GraphDbPackagingSmokeIT {
 			+ "PREFIX ex: <http://example.com/packaging-smoke/>\n"
 			+ "ASK { ex:thing geo:sfWithin ex:container }";
 
+	private static final String PROJECTED_WITHIN_QUERY = ""
+			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+			+ "PREFIX ex: <http://example.com/packaging-smoke/>\n"
+			+ "ASK { ex:projectedThing geo:sfWithin ex:projectedContainer }";
+
 	private static final Pattern TRUE_BOOLEAN_RESULT =
 			Pattern.compile("\\\"boolean\\\"\\s*:\\s*true");
 
@@ -58,6 +70,8 @@ public class GraphDbPackagingSmokeIT {
 			.withFileFromPath("Dockerfile", requiredPath(DOCKERFILE_PROPERTY, "packaging-smoke Dockerfile"))
 			.withFileFromPath("geosparql-plugin-graphdb-plugin.zip",
 					requiredPath(PLUGIN_ZIP_PROPERTY, "assembled plugin ZIP"))
+			.withFileFromPath("sis-runtime",
+					requiredDirectory(SIS_RUNTIME_DIR_PROPERTY, "packaging-smoke Apache SIS runtime directory"))
 			.withDockerfilePath("Dockerfile")
 			.withBuildArg("GRAPHDB_IMAGE", requiredProperty(GRAPHDB_IMAGE_PROPERTY))
 			.withBuildArg("JAVA_IMAGE", requiredProperty(JAVA_IMAGE_PROPERTY));
@@ -79,12 +93,17 @@ public class GraphDbPackagingSmokeIT {
 		executeUpdate(INSERT_GEOMETRIES, "insert smoke-test geometries");
 		executeUpdate(ENABLE_GEOSPARQL, "enable GeoSPARQL and build its index");
 
+		assertAskTrue(WITHIN_QUERY, "execute indexed geo:sfWithin query");
+		assertAskTrue(PROJECTED_WITHIN_QUERY, "execute projected-CRS indexed geo:sfWithin query");
+	}
+
+	private void assertAskTrue(String query, String operation) throws Exception {
 		HttpResponse<String> response = send(HttpRequest.newBuilder(
-				endpoint("/repositories/" + REPOSITORY_ID + "?query=" + encode(WITHIN_QUERY)))
+				endpoint("/repositories/" + REPOSITORY_ID + "?query=" + encode(query)))
 				.header("Accept", "application/sparql-results+json")
 				.timeout(Duration.ofMinutes(2))
 				.GET()
-				.build(), "execute indexed geo:sfWithin query");
+				.build(), operation);
 
 		assertTrue(failureMessage("Expected the indexed property relation to return true", response),
 				TRUE_BOOLEAN_RESULT.matcher(response.body()).find());
@@ -149,6 +168,15 @@ public class GraphDbPackagingSmokeIT {
 	private static Path requiredPath(String propertyName, String description) {
 		Path path = Paths.get(requiredProperty(propertyName)).toAbsolutePath().normalize();
 		if (!Files.isRegularFile(path)) {
+			throw new IllegalStateException("Missing " + description + " at " + path
+					+ ". Run this test with mvn -Pgraphdb-packaging-smoke verify.");
+		}
+		return path;
+	}
+
+	private static Path requiredDirectory(String propertyName, String description) {
+		Path path = Paths.get(requiredProperty(propertyName)).toAbsolutePath().normalize();
+		if (!Files.isDirectory(path)) {
 			throw new IllegalStateException("Missing " + description + " at " + path
 					+ ". Run this test with mvn -Pgraphdb-packaging-smoke verify.");
 		}
