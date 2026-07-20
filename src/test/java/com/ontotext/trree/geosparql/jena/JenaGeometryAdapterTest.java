@@ -77,6 +77,20 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
+	public void malformedGmlFailsAsControlledGeometryError() {
+		String malformedGml = "<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName=\""
+				+ CRS84 + "\"><gml:pos>1 2</gml:pos>";
+		SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(
+				VALUE_FACTORY.createLiteral(malformedGml, GeoConstants.GEO_GML_LITERAL));
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toIndexGeometries(source));
+
+		assertEquals(malformedGml, source.lexicalForm());
+		assertTrue(exception.getMessage().contains("Invalid GeoSPARQL geometry literal"));
+	}
+
+	@Test
 	public void xmlLiteralCanUseGmlFallbackDatatype() {
 		String gml = legacyGmlWithDoubleQuotedNamespaceAndCrs();
 		Literal literal = VALUE_FACTORY.createLiteral(gml, VALUE_FACTORY.createIRI(RDF_XML_LITERAL));
