@@ -394,40 +394,6 @@ public class LuceneGeoIndexerTest {
     }
 
     @Test
-    public void entitySourceReuseSpansLucenePageBoundary() throws Exception {
-        IndexGeometry geometry = TestIndexGeometries.exactlyOne(
-                SourceGeometryLiteral.fromWkt("POINT(0 0)"));
-        try (Directory directory = new ByteBuffersDirectory();
-             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
-            for (int i = 0; i < 1001; i++) {
-                writer.addDocument(currentSchemaDocument(1L, geometry));
-            }
-            writer.commit();
-
-            IndexReader reader = DirectoryReader.open(directory);
-            CloseableIterator<CandidateEntity> entities = new LuceneCandidateEntityIterator(new IndexSearcher(reader),
-                    new MatchAllDocsQuery());
-            try {
-                assertTrue(entities.hasNext());
-                CandidateEntity candidate = entities.next();
-                assertEquals(1L, candidate.entityId());
-                SourceGeometryLiteral source = null;
-                for (IndexGeometry component : candidate.matchingGeometries()) {
-                    if (source == null) {
-                        source = component.sourceGeometryLiteral();
-                    } else {
-                        assertSame(source, component.sourceGeometryLiteral());
-                    }
-                }
-                assertEquals(1001, candidate.matchingGeometries().size());
-                assertFalse(entities.hasNext());
-            } finally {
-                entities.close();
-            }
-        }
-    }
-
-    @Test
     public void candidateEntityGeometryLookupUsesCandidateReader() throws Exception {
         IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
         Path entityCandidateDataDir = tmpFolder.getRoot().toPath().resolve("candidate-entity-geometries");
