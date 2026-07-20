@@ -963,6 +963,19 @@ public class LuceneGeoIndexerTest {
             assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY,
                     doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE));
         }
+
+        CloseableIterator<IndexGeometry> storedGeometries = projectedIndexer.getGeometriesFor(1L);
+        try {
+            assertTrue(storedGeometries.hasNext());
+            IndexGeometry storedGeometry = storedGeometries.next();
+            assertEquals(PROJECTED_POINT_WKT, storedGeometry.sourceGeometryLiteral().lexicalForm());
+            assertEquals(GeoConstants.GEO_WKT_LITERAL, storedGeometry.sourceGeometryLiteral().datatype());
+            assertEquals(EPSG_32634, storedGeometry.sourceGeometryLiteral().effectiveCrsUri());
+            assertEquals(IndexGeometry.INDEX_CRS, storedGeometry.indexCrs());
+            assertFalse(storedGeometries.hasNext());
+        } finally {
+            storedGeometries.close();
+        }
     }
 
     private long getDocId(ScoreDoc docs) throws IOException {
