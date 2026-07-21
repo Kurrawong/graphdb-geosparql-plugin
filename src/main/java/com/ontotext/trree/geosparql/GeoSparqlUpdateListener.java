@@ -14,8 +14,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	private final long asGML;
 	private final long hasDefaultGeometry;
 
-	private TLongHashSet geometriesToUpdate = new TLongHashSet();
-	private TLongHashSet featuresToUpdate = new TLongHashSet();
+	private final TLongHashSet geometriesToUpdate = new TLongHashSet();
+	private final TLongHashSet featuresToUpdate = new TLongHashSet();
 
 	GeoSparqlUpdateListener(GeoSparqlPlugin parent, long asWKT, long asGML, long hasDefaultGeometry) {
 		this.parent = parent;
@@ -146,7 +146,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	}
 
 	private void cleanupAfterTransaction() {
-		// TODO: clear() or new object?
+		// Reuse the accumulators while discarding all transaction-local entity ids.
 		geometriesToUpdate.clear();
 		featuresToUpdate.clear();
 	}
