@@ -264,19 +264,11 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	private CloseableIterator<CandidateEntity> getCandidateEntitiesForQuery(Query query) {
-		IndexReader indexReader = null;
 		try {
-			indexReader = openReader();
+			IndexReader indexReader = openReader();
 			IndexSearcher indexSearcher = new IndexSearcher(indexReader);
 			return new LuceneCandidateEntityIterator(indexSearcher, query);
 		} catch (IOException e) {
-			if (indexReader != null) {
-				try {
-					indexReader.close();
-				} catch (IOException x) {
-					// ignore
-				}
-			}
 			throw new PluginException("Unable to execute Lucene query.", e);
 		}
 	}
