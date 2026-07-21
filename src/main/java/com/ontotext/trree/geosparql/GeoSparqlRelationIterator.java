@@ -9,7 +9,6 @@ import com.ontotext.trree.sdk.StatementIterator;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
-import org.locationtech.jts.geom.Geometry;
 import org.slf4j.Logger;
 
 import java.io.IOException;

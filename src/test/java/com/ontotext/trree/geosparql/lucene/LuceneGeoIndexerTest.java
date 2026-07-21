@@ -644,21 +644,6 @@ public class LuceneGeoIndexerTest {
         }
     }
 
-    private void assertEntityGeometryCount(int expected, CloseableIterator<IndexGeometry> iterator) throws IOException {
-        try {
-            int count = 0;
-            while (iterator.hasNext()) {
-                IndexGeometry geometry = iterator.next();
-                assertNotNull(geometry.indexGeometry());
-                assertNotNull(geometry.sourceGeometryLiteral());
-                count++;
-            }
-            assertEquals(expected, count);
-        } finally {
-            iterator.close();
-        }
-    }
-
     private static final class CountingLuceneGeoIndexer extends LuceneGeoIndexer {
         private int openReaderCount;
 
