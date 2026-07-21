@@ -72,10 +72,10 @@ public class GraphDbPackagingSmokeIT {
 					requiredPath(PLUGIN_ZIP_PROPERTY, "assembled plugin ZIP"))
 			.withFileFromPath("sis-data",
 					requiredDirectory(SIS_DATA_DIR_PROPERTY, "packaging-smoke Apache SIS data directory"))
-			.withDockerfilePath("Dockerfile")
 			.withBuildArg("GRAPHDB_IMAGE", requiredProperty(GRAPHDB_IMAGE_PROPERTY))
 			.withBuildArg("JAVA_IMAGE", requiredProperty(JAVA_IMAGE_PROPERTY));
 
+	@SuppressWarnings("resource") // JUnit's class rule stops the container after the test class finishes.
 	@ClassRule
 	public static final GenericContainer<?> GRAPHDB = new GenericContainer<>(IMAGE)
 			.withExposedPorts(7200)
