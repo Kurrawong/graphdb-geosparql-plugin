@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 public class JenaBackedFunctionCoverageTest {
 	private static final ValueFactory VF = SimpleValueFactory.getInstance();
+	private static final ValueFactoryTripleSource TRIPLE_SOURCE = new ValueFactoryTripleSource(VF);
 
 	private static final String SAME_AREA_A = "POLYGON((0 0,0 4,4 4,4 0,0 0))";
 	private static final String SAME_AREA_B = "POLYGON((0 0,0 4,4 4,4 0,0 0))";
@@ -310,7 +311,7 @@ public class JenaBackedFunctionCoverageTest {
 		Function function = FunctionRegistry.getInstance()
 				.get(functionUri.stringValue())
 				.orElseThrow(() -> new AssertionError("Function not registered: " + functionUri));
-		return function.evaluate(VF, args);
+		return function.evaluate(TRIPLE_SOURCE, args);
 	}
 
 	private static Set<String> coveredFunctionUris() {

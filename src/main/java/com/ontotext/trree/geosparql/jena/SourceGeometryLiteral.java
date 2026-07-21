@@ -12,7 +12,7 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 
 import java.util.ServiceConfigurationError;
 import java.util.Objects;
@@ -114,7 +114,7 @@ public final class SourceGeometryLiteral {
 		if (GeoConstants.GEO_WKT_LITERAL.equals(datatype)
 				|| GeoConstants.XMLSCHEMA_OGC_WKT.equals(datatype)
 				|| GeoConstants.XMLSCHEMA_SPATIAL_TEXT.equals(datatype)
-				|| XMLSchema.STRING.equals(datatype)) {
+				|| XSD.STRING.equals(datatype)) {
 			return GeoConstants.GEO_WKT_LITERAL;
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);

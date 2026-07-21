@@ -2,7 +2,7 @@ package com.ontotext.trree.geosparql.jena;
 
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.eclipse.rdf4j.model.IRI;
-import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 
 /**
  * Compatibility rules for geometry literals accepted by the pre-Jena plugin and existing fixture data.
@@ -47,6 +47,6 @@ final class GeometryLiteralCompatibility {
 	}
 
 	private static boolean isPlainString(IRI datatype) {
-		return datatype == null || XMLSchema.STRING.equals(datatype);
+		return datatype == null || XSD.STRING.equals(datatype);
 	}
 }

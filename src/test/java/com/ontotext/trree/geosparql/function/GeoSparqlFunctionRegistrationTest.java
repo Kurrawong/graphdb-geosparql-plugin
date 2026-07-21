@@ -18,6 +18,7 @@ import static org.junit.Assert.assertTrue;
 
 public class GeoSparqlFunctionRegistrationTest {
     private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
+    private static final ValueFactoryTripleSource TRIPLE_SOURCE = new ValueFactoryTripleSource(VALUE_FACTORY);
 
     @Test
     public void registerAllRegistersSupportedFunctionUris() {
@@ -40,7 +41,7 @@ public class GeoSparqlFunctionRegistrationTest {
                 "<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)",
                 GeoConstants.GEO_WKT_LITERAL);
 
-        Value result = function.evaluate(VALUE_FACTORY, left, right, GeoSparqlUnits.URI_METRE);
+		Value result = function.evaluate(TRIPLE_SOURCE, left, right, GeoSparqlUnits.URI_METRE);
 
         assertTrue(result instanceof Literal);
         assertEquals(0d, ((Literal) result).doubleValue(), 0.2d);

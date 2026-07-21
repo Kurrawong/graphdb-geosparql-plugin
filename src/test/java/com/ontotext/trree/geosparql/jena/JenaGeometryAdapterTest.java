@@ -8,7 +8,7 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.junit.Before;
 import org.junit.Test;
 import org.locationtech.jts.geom.Coordinate;
@@ -54,7 +54,7 @@ public class JenaGeometryAdapterTest {
 
 	@Test
 	public void plainStringLiteralCanUseWktFallbackDatatype() {
-		Literal literal = VALUE_FACTORY.createLiteral("POINT(3 4)", XMLSchema.STRING);
+		Literal literal = VALUE_FACTORY.createLiteral("POINT(3 4)", XSD.STRING);
 
 		SourceGeometryLiteral geometry = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
 				GeoConstants.GEO_WKT_LITERAL);
