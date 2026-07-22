@@ -13,13 +13,12 @@ import org.junit.Before;
 import org.junit.Test;
 import org.locationtech.jts.geom.Coordinate;
 
-import java.util.List;
-
 import static org.junit.Assert.*;
 
 public class JenaGeometryAdapterTest {
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 	private static final String CRS84 = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
+	private static final String EPSG_4326 = "http://www.opengis.net/def/crs/EPSG/0/4326";
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String RDF_XML_LITERAL = "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral";
 	private static final String GML_LEGACY_NAMESPACE = "http://www.opengis.net/gml";
@@ -84,7 +83,7 @@ public class JenaGeometryAdapterTest {
 				VALUE_FACTORY.createLiteral(malformedGml, GeoConstants.GEO_GML_LITERAL));
 
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
-				() -> JenaGeometryAdapter.toIndexGeometries(source));
+				() -> JenaGeometryAdapter.toIndexGeometry(source));
 
 		assertEquals(malformedGml, source.lexicalForm());
 		assertTrue(exception.getMessage().contains("Invalid GeoSPARQL geometry literal"));
@@ -154,7 +153,7 @@ public class JenaGeometryAdapterTest {
 	public void projectedWktIsTransformedToCrs84IndexGeometry() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
 
-		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
+		IndexGeometry index = TestIndexGeometries.fromSource(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
@@ -166,7 +165,7 @@ public class JenaGeometryAdapterTest {
 	@Test
 	public void storedMetadataFactoryRejectsConflictingEffectiveSourceCrs() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
-		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
+		IndexGeometry index = TestIndexGeometries.fromSource(source);
 
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class, () ->
 				IndexGeometry.fromStoredMetadata(index.indexGeometry(), source, EPSG_32634,
@@ -178,7 +177,7 @@ public class JenaGeometryAdapterTest {
 	@Test
 	public void storedMetadataFactoryRejectsIncompleteOrUnsupportedV2Metadata() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
-		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
+		IndexGeometry index = TestIndexGeometries.fromSource(source);
 
 		assertStoredMetadataRejected(index, source, null, IndexGeometry.INDEX_CRS,
 				IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, "CRS metadata is missing");
@@ -203,7 +202,7 @@ public class JenaGeometryAdapterTest {
 		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
 
 		SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
-		IndexGeometry index = TestIndexGeometries.exactlyOne(source);
+		IndexGeometry index = TestIndexGeometries.fromSource(source);
 		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
@@ -213,61 +212,92 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
-	public void genericGmlCollectionProducesComponentIndexGeometries() {
+	public void genericGmlCollectionProducesOneEnvelopeIndexGeometry() {
 		String gml = "<gml:MultiGeometry xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName=\"" + CRS84
 				+ "\"><gml:geometryMember><gml:Point><gml:pos>1 2</gml:pos></gml:Point>"
 				+ "</gml:geometryMember><gml:geometryMember><gml:LineString><gml:posList>3 4 5 6</gml:posList>"
 				+ "</gml:LineString></gml:geometryMember></gml:MultiGeometry>";
 		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
 
-		List<IndexGeometry> components = JenaGeometryAdapter.toIndexGeometries(
+		IndexGeometry envelope = JenaGeometryAdapter.toIndexGeometry(
 				JenaGeometryAdapter.toSourceGeometryLiteral(literal));
 
-		assertEquals(2, components.size());
-		assertEquals("Point", components.get(0).indexGeometry().getGeometryType());
-		assertEquals("LineString", components.get(1).indexGeometry().getGeometryType());
-		assertEquals(GeoConstants.GEO_GML_LITERAL, components.get(0).sourceGeometryLiteral().datatype());
+		assertEquals("Polygon", envelope.indexGeometry().getGeometryType());
+		assertEquals(1.0, envelope.indexGeometry().getEnvelopeInternal().getMinX(), 0.0);
+		assertEquals(5.0, envelope.indexGeometry().getEnvelopeInternal().getMaxX(), 0.0);
+		assertEquals(2.0, envelope.indexGeometry().getEnvelopeInternal().getMinY(), 0.0);
+		assertEquals(6.0, envelope.indexGeometry().getEnvelopeInternal().getMaxY(), 0.0);
+		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_ENVELOPE, envelope.indexBuildMode());
+		assertEquals(GeoConstants.GEO_GML_LITERAL, envelope.sourceGeometryLiteral().datatype());
 	}
 
 	@Test
-	public void genericCollectionProducesComponentIndexGeometriesWithSharedSource() {
+	public void genericCollectionProducesOneEnvelopeWithCompleteSource() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(
 				"GEOMETRYCOLLECTION(POINT(1 2),LINESTRING(3 4,5 6))");
 
-		List<IndexGeometry> components = IndexGeometry.fromSourceGeometryLiteralComponents(source);
+		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(source);
 
-		assertEquals(2, components.size());
-		assertEquals("Point", components.get(0).indexGeometry().getGeometryType());
-		assertEquals("LineString", components.get(1).indexGeometry().getGeometryType());
-		assertSame(source, components.get(0).sourceGeometryLiteral());
-		assertSame(source, components.get(1).sourceGeometryLiteral());
-		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_COMPONENT,
-				components.get(0).indexBuildMode());
-		assertTrue(components.get(0).isSpatialCandidate());
+		assertEquals("Polygon", envelope.indexGeometry().getGeometryType());
+		assertEquals(source.asGeometryWrapper().getXYGeometry().getEnvelopeInternal(),
+				envelope.indexGeometry().getEnvelopeInternal());
+		assertSame(source, envelope.sourceGeometryLiteral());
+		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_ENVELOPE, envelope.indexBuildMode());
+		assertTrue(envelope.isSpatialCandidate());
 	}
 
 	@Test
-	public void nestedCollectionIsRecursivelyDecomposedButMultiGeometryIsRetained() {
+	public void nestedCollectionUsesEnvelopeOfEveryMember() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(
 				"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 2)),MULTIPOINT((3 4),(5 6)))");
 
-		List<IndexGeometry> components = IndexGeometry.fromSourceGeometryLiteralComponents(source);
+		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(source);
 
-		assertEquals(2, components.size());
-		assertEquals("Point", components.get(0).indexGeometry().getGeometryType());
-		assertEquals("MultiPoint", components.get(1).indexGeometry().getGeometryType());
+		assertEquals(1.0, envelope.indexGeometry().getEnvelopeInternal().getMinX(), 0.0);
+		assertEquals(5.0, envelope.indexGeometry().getEnvelopeInternal().getMaxX(), 0.0);
+		assertEquals(2.0, envelope.indexGeometry().getEnvelopeInternal().getMinY(), 0.0);
+		assertEquals(6.0, envelope.indexGeometry().getEnvelopeInternal().getMaxY(), 0.0);
 	}
 
 	@Test
 	public void emptyCollectionProducesNonSpatialSentinel() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION EMPTY");
 
-		List<IndexGeometry> components = IndexGeometry.fromSourceGeometryLiteralComponents(source);
+		IndexGeometry sentinel = IndexGeometry.fromSourceGeometryLiteral(source);
 
-		assertEquals(1, components.size());
-		assertTrue(components.get(0).indexGeometry().isEmpty());
-		assertEquals(IndexGeometry.BUILD_MODE_EMPTY_SENTINEL, components.get(0).indexBuildMode());
-		assertFalse(components.get(0).isSpatialCandidate());
+		assertTrue(sentinel.indexGeometry().isEmpty());
+		assertEquals(IndexGeometry.BUILD_MODE_EMPTY_SENTINEL, sentinel.indexBuildMode());
+		assertFalse(sentinel.isSpatialCandidate());
+	}
+
+	@Test
+	public void homogeneousMultiGeometryRetainsCompleteIndexGeometry() {
+		IndexGeometry multiPoint = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("MULTIPOINT((1 2),(5 6))"));
+
+		assertEquals("MultiPoint", multiPoint.indexGeometry().getGeometryType());
+		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, multiPoint.indexBuildMode());
+	}
+
+	@Test
+	public void projectedSingleMemberCollectionUsesTransformedPointEnvelope() {
+		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(
+				"<" + EPSG_32634 + "> GEOMETRYCOLLECTION(POINT(799997.80 4589779.63))"));
+
+		assertEquals("Point", envelope.indexGeometry().getGeometryType());
+		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_ENVELOPE, envelope.indexBuildMode());
+		assertProjectedPointCrs84Coordinate(envelope.indexGeometry().getCoordinate());
+	}
+
+	@Test
+	public void axisOrderSensitiveCollectionBuildsEnvelopeAfterCrsTransformation() {
+		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(
+				"<" + EPSG_4326 + "> GEOMETRYCOLLECTION(POINT(50 10),POINT(51 11))"));
+
+		assertEquals(10.0, envelope.indexGeometry().getEnvelopeInternal().getMinX(), 1e-9);
+		assertEquals(11.0, envelope.indexGeometry().getEnvelopeInternal().getMaxX(), 1e-9);
+		assertEquals(50.0, envelope.indexGeometry().getEnvelopeInternal().getMinY(), 1e-9);
+		assertEquals(51.0, envelope.indexGeometry().getEnvelopeInternal().getMaxY(), 1e-9);
 	}
 
 	@Test
@@ -429,7 +459,7 @@ public class JenaGeometryAdapterTest {
 	@Test
 	public void unsupportedCrsCannotProduceIndexGeometry() {
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
-				() -> TestIndexGeometries.exactlyOne(
+				() -> TestIndexGeometries.fromSource(
 						SourceGeometryLiteral.fromWkt("<http://example.com/crs/unknown> POINT(1 2)")));
 
 		assertTrue(exception.getMessage().contains("Unsupported CRS")

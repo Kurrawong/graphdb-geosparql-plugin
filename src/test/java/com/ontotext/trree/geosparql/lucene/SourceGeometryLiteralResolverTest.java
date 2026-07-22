@@ -1,77 +1,77 @@
 package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
+import com.ontotext.trree.sdk.PluginException;
+import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.junit.Test;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class SourceGeometryLiteralResolverTest {
-
 	@Test
-	public void identicalPersistedSourceIdentityLoadsOnce() {
-		AtomicInteger loadCount = new AtomicInteger();
+	public void identicalPersistedSourceCacheReusesOneSnapshot() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
-		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver(identity -> {
-			loadCount.incrementAndGet();
-			return source;
-		});
-		StoredSourceGeometryIdentity identity = new StoredSourceGeometryIdentity(
-				"POINT(1 2)", source.datatype().stringValue(), source.effectiveCrsUri());
+		byte[] sourceWkb = SourceGeometryWkbCodec.encode(source);
+		DimensionInfo dimensions = source.asGeometryWrapper().getDimensionInfo();
+		StoredSourceGeometryIdentity identity = identity(source);
+		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver();
 
-		assertSame(resolver.resolve(identity), resolver.resolve(identity));
-		assertEquals(1, loadCount.get());
+		assertSame(resolver.resolve(identity, sourceWkb, dimensions),
+				resolver.resolve(identity, sourceWkb, dimensions));
 	}
 
 	@Test
-	public void everyPersistedSourceIdentityFieldParticipatesInCaching() {
-		AtomicInteger loadCount = new AtomicInteger();
-		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
-		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver(identity -> {
-			loadCount.incrementAndGet();
-			return source;
-		});
+	public void repeatedIdentityWithDifferentWkbRequiresForceReindex() {
+		SourceGeometryLiteral first = SourceGeometryLiteral.fromWkt("POINT(1 2)");
+		SourceGeometryLiteral conflicting = SourceGeometryLiteral.fromWkt("POINT(3 4)");
+		StoredSourceGeometryIdentity identity = identity(first);
+		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver();
+		resolver.resolve(identity, SourceGeometryWkbCodec.encode(first),
+				first.asGeometryWrapper().getDimensionInfo());
 
-		resolver.resolve(new StoredSourceGeometryIdentity("POINT(1 2)", "datatype:one", "crs:one"));
-		resolver.resolve(new StoredSourceGeometryIdentity("POINT(2 3)", "datatype:one", "crs:one"));
-		resolver.resolve(new StoredSourceGeometryIdentity("POINT(1 2)", "datatype:two", "crs:one"));
-		resolver.resolve(new StoredSourceGeometryIdentity("POINT(1 2)", "datatype:one", "crs:two"));
+		PluginException exception = assertThrows(PluginException.class, () -> resolver.resolve(identity,
+				SourceGeometryWkbCodec.encode(conflicting), conflicting.asGeometryWrapper().getDimensionInfo()));
 
-		assertEquals(4, loadCount.get());
+		assertTrue(exception.getMessage().contains("force-reindex"));
 	}
 
 	@Test
-	public void clearingAtEntityBoundaryLoadsIdentityAgain() {
-		AtomicInteger loadCount = new AtomicInteger();
-		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver(identity -> {
-			loadCount.incrementAndGet();
-			return SourceGeometryLiteral.fromWkt(identity.lexicalForm());
-		});
-		StoredSourceGeometryIdentity identity = new StoredSourceGeometryIdentity(
-				"POINT(1 2)", "datatype", "crs");
+	public void repeatedIdentityWithDifferentDimensionsRequiresForceReindex() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
+		StoredSourceGeometryIdentity identity = identity(source);
+		byte[] sourceWkb = SourceGeometryWkbCodec.encode(source);
+		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver();
+		resolver.resolve(identity, sourceWkb, source.asGeometryWrapper().getDimensionInfo());
 
-		resolver.resolve(identity);
+		PluginException exception = assertThrows(PluginException.class,
+				() -> resolver.resolve(identity, sourceWkb, new DimensionInfo(3, 3, 0)));
+
+		assertTrue(exception.getMessage().contains("force-reindex"));
+	}
+
+	@Test
+	public void clearingAtEntityBoundaryAllowsIdentityToBeReconstructedAgain() {
+		SourceGeometryLiteral first = SourceGeometryLiteral.fromWkt("POINT(1 2)");
+		SourceGeometryLiteral second = SourceGeometryLiteral.fromWkt("POINT(3 4)");
+		StoredSourceGeometryIdentity identity = identity(first);
+		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver();
+		SourceGeometryLiteral firstResolved = resolver.resolve(identity, SourceGeometryWkbCodec.encode(first),
+				first.asGeometryWrapper().getDimensionInfo());
+
 		resolver.clear();
-		resolver.resolve(identity);
+		SourceGeometryLiteral secondResolved = resolver.resolve(identity, SourceGeometryWkbCodec.encode(second),
+				second.asGeometryWrapper().getDimensionInfo());
 
-		assertEquals(2, loadCount.get());
+		assertNotSame(firstResolved, secondResolved);
+		assertTrue(secondResolved.asGeometryWrapper().getXYGeometry()
+				.equalsExact(second.asGeometryWrapper().getXYGeometry()));
 	}
 
-	@Test
-	public void failedLoadsAreNotCached() {
-		AtomicInteger loadCount = new AtomicInteger();
-		SourceGeometryLiteralResolver resolver = new SourceGeometryLiteralResolver(identity -> {
-			loadCount.incrementAndGet();
-			throw new IllegalArgumentException("invalid source metadata");
-		});
-		StoredSourceGeometryIdentity identity = new StoredSourceGeometryIdentity(
-				"POINT(1 2)", "datatype", "crs");
-
-		assertThrows(IllegalArgumentException.class, () -> resolver.resolve(identity));
-		assertThrows(IllegalArgumentException.class, () -> resolver.resolve(identity));
-		assertEquals(2, loadCount.get());
+	private StoredSourceGeometryIdentity identity(SourceGeometryLiteral source) {
+		return new StoredSourceGeometryIdentity(source.lexicalForm(), source.datatype().stringValue(),
+				source.effectiveCrsUri());
 	}
 }

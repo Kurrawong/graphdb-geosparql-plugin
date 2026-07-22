@@ -10,7 +10,6 @@ import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.junit.Test;
-import org.locationtech.jts.geom.Geometry;
 
 import java.io.IOException;
 import java.util.List;
@@ -80,7 +79,7 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		}
 
 		@Override
-		public CloseableIterator<CandidateEntity> getMatchingEntities(Geometry geometry,
+		public CloseableIterator<CandidateEntity> getCandidatesForSource(IndexGeometry boundSourceIndexGeometry,
 				CandidateLookupPolicy candidateLookupPolicy) {
 			throw new UnsupportedOperationException();
 		}
@@ -114,7 +113,7 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		}
 
 		@Override
-		public void indexGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
+		public void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
 			throw new UnsupportedOperationException();
 		}
 

@@ -222,28 +222,32 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         this.config = config;
     }
 
-	List<IndexGeometry> getIndexGeometriesFromLiteral(Literal literal, IRI fallbackDatatype) {
+	IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
 		SourceGeometryLiteral sourceGeometryLiteral = JenaGeometryAdapter.toSourceGeometryLiteral(literal,
 				fallbackDatatype);
-		return JenaGeometryAdapter.toIndexGeometries(sourceGeometryLiteral);
+		return JenaGeometryAdapter.toIndexGeometry(sourceGeometryLiteral);
 	}
 
-	List<IndexGeometry> getIndexGeometriesFromLiteralId(long geometryResourceId, long literalId, long predicateId,
+	/**
+	 * Returns one index geometry for a repository source literal, or {@code null} when the object is not a literal or
+	 * {@code ignoreErrors} deliberately skips an invalid repository geometry.
+	 */
+	IndexGeometry getIndexGeometryFromLiteralId(long geometryResourceId, long literalId, long predicateId,
 			Entities entities) {
 		Value value = entities.get(literalId);
 		if (!(value instanceof Literal)) {
-			return List.of();
+			return null;
 		}
 		IRI datatype = predicateId == asGML ? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
 		try {
-			return getIndexGeometriesFromLiteral((Literal) value, datatype);
+			return getIndexGeometryFromLiteral((Literal) value, datatype);
 		} catch (JenaGeoSparqlException e) {
 			String subjectText = entities.get(geometryResourceId).stringValue();
 			String failureContext = indexingFailureContext((Literal) value, datatype, e);
 			if (config.isIgnoreErrors()) {
 				getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed. {}",
 						subjectText, failureContext);
-				return List.of();
+				return null;
 			}
 			throw new PluginException("Could not index GeoSPARQL geometry for subject " + subjectText
 					+ ". " + failureContext

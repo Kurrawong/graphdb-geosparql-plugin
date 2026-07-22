@@ -5,10 +5,6 @@ import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryCollection;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 /**
  * Associates a source geometry literal representation with one derived Lucene index geometry.
  *
@@ -17,13 +13,13 @@ import java.util.List;
  * geometry used for exact GeoSPARQL relation evaluation; exact evaluation uses
  * the source geometry literal, including its datatype and effective source CRS.
  *
- * <p>A generic geometry collection produces one instance per non-empty indexable component. An empty collection
- * produces a non-spatial sentinel that retains the entity and source metadata for full scans.
+ * <p>A non-empty generic geometry collection uses the envelope of the complete CRS84-transformed collection. An
+ * empty collection produces a non-spatial sentinel that retains the entity and source metadata for full scans.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
 	public static final String BUILD_MODE_TRANSFORMED_GEOMETRY = "transformed-geometry";
-	public static final String BUILD_MODE_TRANSFORMED_COMPONENT = "transformed-component";
+	public static final String BUILD_MODE_TRANSFORMED_ENVELOPE = "transformed-envelope";
 	public static final String BUILD_MODE_EMPTY_SENTINEL = "empty-sentinel";
 
 	private final SourceGeometryLiteral sourceGeometryLiteral;
@@ -39,8 +35,7 @@ public final class IndexGeometry {
 		this.indexBuildMode = indexBuildMode;
 	}
 
-	public static List<IndexGeometry> fromSourceGeometryLiteralComponents(
-			SourceGeometryLiteral sourceGeometryLiteral) {
+	public static IndexGeometry fromSourceGeometryLiteral(SourceGeometryLiteral sourceGeometryLiteral) {
 		try {
 			GeometryWrapper sourceWrapper = sourceGeometryLiteral.asGeometryWrapper();
 			GeometryWrapper indexWrapper = INDEX_CRS.equals(sourceWrapper.getSrsURI())
@@ -48,49 +43,22 @@ public final class IndexGeometry {
 					: sourceWrapper.transform(INDEX_CRS);
 			Geometry transformed = indexWrapper.getXYGeometry().copy();
 			if (transformed.getClass().equals(GeometryCollection.class)) {
-				List<IndexGeometry> components = new ArrayList<>();
-				addComponents(sourceGeometryLiteral, (GeometryCollection) transformed, components);
-				if (components.isEmpty()) {
-					components.add(new IndexGeometry(sourceGeometryLiteral, transformed, INDEX_CRS,
-							BUILD_MODE_EMPTY_SENTINEL));
+				if (transformed.isEmpty()) {
+					return new IndexGeometry(sourceGeometryLiteral, transformed, INDEX_CRS,
+							BUILD_MODE_EMPTY_SENTINEL);
 				}
-				return Collections.unmodifiableList(components);
+				Geometry envelope = transformed.getFactory().toGeometry(transformed.getEnvelopeInternal());
+				return new IndexGeometry(sourceGeometryLiteral, envelope, INDEX_CRS,
+						BUILD_MODE_TRANSFORMED_ENVELOPE);
 			}
-			return Collections.singletonList(new IndexGeometry(sourceGeometryLiteral, transformed, INDEX_CRS,
-					BUILD_MODE_TRANSFORMED_GEOMETRY));
+			return new IndexGeometry(sourceGeometryLiteral, transformed, INDEX_CRS,
+					BUILD_MODE_TRANSFORMED_GEOMETRY);
 		} catch (JenaGeoSparqlException e) {
 			throw e;
 		} catch (Exception e) {
 			throw new JenaGeoSparqlException("Unable to derive CRS84 index geometry from source geometry literal. "
 					+ "Configure Apache SIS CRS data, for example SIS_DATA, if the CRS is supported.", e);
 		}
-	}
-
-	private static void addComponents(SourceGeometryLiteral sourceGeometryLiteral, GeometryCollection collection,
-			List<IndexGeometry> components) {
-		for (int i = 0; i < collection.getNumGeometries(); i++) {
-			Geometry component = collection.getGeometryN(i);
-			if (component.isEmpty()) {
-				continue;
-			}
-			if (component.getClass().equals(GeometryCollection.class)) {
-				addComponents(sourceGeometryLiteral, (GeometryCollection) component, components);
-			} else {
-				components.add(new IndexGeometry(sourceGeometryLiteral, component.copy(), INDEX_CRS,
-						BUILD_MODE_TRANSFORMED_COMPONENT));
-			}
-		}
-	}
-
-	public static IndexGeometry fromStoredMetadata(Geometry indexGeometry, String lexicalForm, String datatype,
-											  String effectiveSourceCrsUri, String indexCrs,
-											  String indexBuildMode) {
-		SourceGeometryLiteral sourceGeometryLiteral = SourceGeometryLiteral.fromLiteral(
-				org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance()
-						.createLiteral(lexicalForm,
-								org.eclipse.rdf4j.model.impl.SimpleValueFactory.getInstance().createIRI(datatype)));
-		return fromStoredMetadata(indexGeometry, sourceGeometryLiteral, effectiveSourceCrsUri, indexCrs,
-				indexBuildMode);
 	}
 
 	public static IndexGeometry fromStoredMetadata(Geometry indexGeometry,
@@ -107,7 +75,7 @@ public final class IndexGeometry {
 			throw new JenaGeoSparqlException("Unsupported GeoSPARQL Lucene index CRS: " + indexCrs);
 		}
 		if (!BUILD_MODE_TRANSFORMED_GEOMETRY.equals(indexBuildMode)
-				&& !BUILD_MODE_TRANSFORMED_COMPONENT.equals(indexBuildMode)
+				&& !BUILD_MODE_TRANSFORMED_ENVELOPE.equals(indexBuildMode)
 				&& !BUILD_MODE_EMPTY_SENTINEL.equals(indexBuildMode)) {
 			throw new JenaGeoSparqlException("Unsupported GeoSPARQL Lucene index build mode: " + indexBuildMode);
 		}
@@ -132,5 +100,10 @@ public final class IndexGeometry {
 
 	public boolean isSpatialCandidate() {
 		return !BUILD_MODE_EMPTY_SENTINEL.equals(indexBuildMode);
+	}
+
+	public boolean isGenericCollectionSource() {
+		return BUILD_MODE_TRANSFORMED_ENVELOPE.equals(indexBuildMode)
+				|| BUILD_MODE_EMPTY_SENTINEL.equals(indexBuildMode);
 	}
 }

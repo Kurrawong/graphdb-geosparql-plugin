@@ -52,6 +52,36 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 	}
 
 	@Test
+	public void collectionEnvelopeCandidatesUseCompleteSourceForExactEvaluation() throws Exception {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:collection a geo:Feature ; geo:hasDefaultGeometry ex:collectionGeom .\n"
+				+ "  ex:collectionGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"GEOMETRYCOLLECTION(POINT(0 0),POINT(10 10))\"^^geo:wktLiteral .\n"
+				+ "  ex:multipoint a geo:Feature ; geo:hasDefaultGeometry ex:multipointGeom .\n"
+				+ "  ex:multipointGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"MULTIPOINT((0 0),(10 10))\"^^geo:wktLiteral .\n"
+				+ "  ex:envelopeInterior a geo:Feature ; geo:hasDefaultGeometry ex:envelopeInteriorGeom .\n"
+				+ "  ex:envelopeInteriorGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POINT(5 5)\"^^geo:wktLiteral .\n"
+				+ "}");
+		enablePlugin();
+
+		assertEquals(1, count("SELECT ?s WHERE {\n"
+				+ "  ?s geo:sfEquals ex:multipoint .\n"
+				+ "  FILTER(?s = ex:collection)\n"
+				+ "}"));
+		assertEquals(1, count("SELECT ?o WHERE {\n"
+				+ "  ex:collection geo:sfEquals ?o .\n"
+				+ "  FILTER(?o = ex:multipoint)\n"
+				+ "}"));
+		assertEquals(0, count("SELECT ?s WHERE {\n"
+				+ "  ?s geo:sfIntersects ex:envelopeInterior .\n"
+				+ "  FILTER(?s = ex:collection)\n"
+				+ "}"));
+	}
+
+	@Test
 	public void geometryLiteralUpdateReindexesGeometryAndReferencingFeature() throws Exception {
 		insertContainerAndFeature("POINT(1 1)");
 		enablePlugin();

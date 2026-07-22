@@ -1,7 +1,6 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
-import org.locationtech.jts.geom.Geometry;
 
 import java.util.List;
 import java.util.function.Function;
@@ -20,7 +19,7 @@ public interface GeoSparqlIndexer {
 	void initialize() throws Exception;
 
 	/**
-	 * Indexes an entity (Geometry) with the predicate asWKT/asGML.
+	 * Replaces all indexed geometry documents for an entity during an incremental update.
 	 *
 	 * @param subject  id of the subject
 	 * @param geometries geometries that corresponds to asWKT/asGML's object
@@ -28,13 +27,15 @@ public interface GeoSparqlIndexer {
 	void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<IndexGeometry> geometries);
 
 	/**
-	 * Returns immutable entity groups whose Lucene documents match the candidate lookup.
+	 * Returns candidates for one complete bound source geometry literal. The adapter keeps the relation-specific policy
+	 * for ordinary sources and applies conservative envelope handling for generic collections.
 	 *
-	 * @param geometry an index geometry
-	 * @param candidateLookupPolicy the candidate lookup policy
-	 * @return a closeable iterator over grouped matching entities
+	 * @param boundSourceIndexGeometry derived index geometry for one bound source geometry literal
+	 * @param candidateLookupPolicy spatial candidate policy; {@link CandidateLookupPolicy#FULL_SCAN} must use
+	 *                              {@link #getAllEntities()}
+	 * @return a closeable iterator over entity groups and their matching source geometry literal snapshots
 	 */
-	CloseableIterator<CandidateEntity> getMatchingEntities(Geometry geometry,
+	CloseableIterator<CandidateEntity> getCandidatesForSource(IndexGeometry boundSourceIndexGeometry,
 			CandidateLookupPolicy candidateLookupPolicy);
 
 	/** Returns every indexed entity, including entities represented only by non-spatial empty sentinels. */
@@ -57,7 +58,8 @@ public interface GeoSparqlIndexer {
 
 	void rollback() throws Exception;
 
-	void indexGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry);
+	/** Appends the index geometry derived from one source geometry literal during a streaming full index build. */
+	void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry);
 
 	void freshIndex() throws Exception;
 }

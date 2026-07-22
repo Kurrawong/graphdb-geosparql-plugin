@@ -75,8 +75,11 @@ final class RepositoryGeometrySource {
 		StatementIterator iterator = pluginConnection.getStatements().get(geometryResourceId, predicate, 0);
 		try {
 			while (iterator.next()) {
-				geometries.addAll(plugin.getIndexGeometriesFromLiteralId(geometryResourceId, iterator.object,
-						predicate, entities));
+				IndexGeometry geometry = plugin.getIndexGeometryFromLiteralId(geometryResourceId, iterator.object,
+						predicate, entities);
+				if (geometry != null) {
+					geometries.add(geometry);
+				}
 			}
 		} finally {
 			iterator.close();

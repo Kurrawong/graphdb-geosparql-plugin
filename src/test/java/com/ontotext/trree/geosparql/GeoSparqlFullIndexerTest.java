@@ -85,7 +85,7 @@ public class GeoSparqlFullIndexerTest {
 	}
 
 	@Test
-	public void fullIndexWritesEveryGenericCollectionComponent() throws Exception {
+	public void fullIndexAppendsGenericCollectionSourceOnce() throws Exception {
 		CountingGeoSparqlPlugin plugin = newPlugin();
 		FakeEntities entities = new FakeEntities();
 		entities.add(GEOMETRY_1, SimpleValueFactory.getInstance().createIRI("http://example.com/geometry/1"));
@@ -97,7 +97,7 @@ public class GeoSparqlFullIndexerTest {
 		RecordingIndexer indexer = new RecordingIndexer();
 		new GeoSparqlFullIndexer(indexer, plugin).reindex(new FakePluginConnection(entities, statements));
 
-		assertEquals(List.of(GEOMETRY_1, GEOMETRY_1), indexer.indexedSubjects);
+		assertEquals(List.of(GEOMETRY_1), indexer.indexedSubjects);
 		assertEquals(1, plugin.conversionCount);
 	}
 
@@ -115,9 +115,10 @@ public class GeoSparqlFullIndexerTest {
 		private int conversionCount;
 
 		@Override
-		List<IndexGeometry> getIndexGeometriesFromLiteral(Literal literal, IRI fallbackDatatype) {
+		IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
 			conversionCount++;
-			return JenaGeometryAdapter.toIndexGeometries(SourceGeometryLiteral.fromWkt(literal.stringValue()));
+			return JenaGeometryAdapter.toIndexGeometry(
+					SourceGeometryLiteral.fromWkt(literal.stringValue()));
 		}
 	}
 
@@ -125,7 +126,7 @@ public class GeoSparqlFullIndexerTest {
 		private final List<Long> indexedSubjects = new ArrayList<>();
 
 		@Override
-		public void indexGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
+		public void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
 			indexedSubjects.add(subject);
 		}
 
@@ -136,13 +137,11 @@ public class GeoSparqlFullIndexerTest {
 		@Override
 		public void indexGeometryList(long subject, Function<Long, String> subjectMapper,
 				List<IndexGeometry> geometries) {
-			for (IndexGeometry geometry : geometries) {
-				indexGeometry(subject, subjectMapper, geometry);
-			}
+			throw new UnsupportedOperationException("Full indexing must append one source geometry at a time.");
 		}
 
 		@Override
-		public CloseableIterator<CandidateEntity> getMatchingEntities(org.locationtech.jts.geom.Geometry geometry,
+		public CloseableIterator<CandidateEntity> getCandidatesForSource(IndexGeometry boundSourceIndexGeometry,
 				CandidateLookupPolicy candidateLookupPolicy) {
 			return null;
 		}

@@ -1,38 +1,31 @@
 package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
-import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
+import com.ontotext.trree.sdk.PluginException;
+import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Reuses validated source geometry literal snapshots within one entity traversal.
+ * Reuses validated source geometry literal snapshots within one entity traversal and rejects conflicting caches.
  */
 final class SourceGeometryLiteralResolver {
-	@FunctionalInterface
-	interface Loader {
-		SourceGeometryLiteral load(StoredSourceGeometryIdentity identity);
-	}
+	private final Map<StoredSourceGeometryIdentity, ResolvedSource> cache = new HashMap<>();
 
-	private final Loader loader;
-	private final Map<StoredSourceGeometryIdentity, SourceGeometryLiteral> cache = new HashMap<>();
-
-	SourceGeometryLiteralResolver() {
-		this(SourceGeometryLiteralResolver::loadAndValidate);
-	}
-
-	SourceGeometryLiteralResolver(Loader loader) {
-		this.loader = loader;
-	}
-
-	SourceGeometryLiteral resolve(StoredSourceGeometryIdentity identity) {
-		SourceGeometryLiteral source = cache.get(identity);
-		if (source == null) {
-			source = loader.load(identity);
-			cache.put(identity, source);
+	SourceGeometryLiteral resolve(StoredSourceGeometryIdentity identity, byte[] sourceGeometryWkb,
+			DimensionInfo dimensionInfo) {
+		ResolvedSource resolved = cache.get(identity);
+		if (resolved != null) {
+			if (!resolved.matches(sourceGeometryWkb, dimensionInfo)) {
+				throw new PluginException(LuceneGeoDocumentSchema.SCHEMA_MISMATCH_MESSAGE);
+			}
+			return resolved.source;
 		}
+		SourceGeometryLiteral source = loadAndValidate(identity, sourceGeometryWkb, dimensionInfo);
+		cache.put(identity, new ResolvedSource(source, sourceGeometryWkb, dimensionInfo));
 		return source;
 	}
 
@@ -40,14 +33,34 @@ final class SourceGeometryLiteralResolver {
 		cache.clear();
 	}
 
-	private static SourceGeometryLiteral loadAndValidate(StoredSourceGeometryIdentity identity) {
+	private static SourceGeometryLiteral loadAndValidate(StoredSourceGeometryIdentity identity,
+			byte[] sourceGeometryWkb, DimensionInfo dimensionInfo) {
 		SimpleValueFactory values = SimpleValueFactory.getInstance();
-		SourceGeometryLiteral source = SourceGeometryLiteral.fromLiteral(values.createLiteral(
-				identity.lexicalForm(), values.createIRI(identity.datatype())));
-		if (!source.effectiveCrsUri().equals(identity.effectiveSourceCrsUri())) {
-			throw new JenaGeoSparqlException("Lucene source geometry literal CRS metadata does not match "
-					+ "effective source CRS.");
+		return SourceGeometryLiteral.fromStoredGeometry(identity.lexicalForm(),
+				values.createIRI(identity.datatype()), identity.effectiveSourceCrsUri(),
+				SourceGeometryWkbCodec.decode(sourceGeometryWkb), dimensionInfo);
+	}
+
+	private static final class ResolvedSource {
+		private final SourceGeometryLiteral source;
+		private final byte[] sourceGeometryWkb;
+		private final int coordinateDimension;
+		private final int spatialDimension;
+		private final int topologicalDimension;
+
+		private ResolvedSource(SourceGeometryLiteral source, byte[] sourceGeometryWkb, DimensionInfo dimensions) {
+			this.source = source;
+			this.sourceGeometryWkb = sourceGeometryWkb;
+			this.coordinateDimension = dimensions.getCoordinate();
+			this.spatialDimension = dimensions.getSpatial();
+			this.topologicalDimension = dimensions.getTopological();
 		}
-		return source;
+
+		private boolean matches(byte[] otherSourceGeometryWkb, DimensionInfo otherDimensions) {
+			return Arrays.equals(sourceGeometryWkb, otherSourceGeometryWkb)
+					&& coordinateDimension == otherDimensions.getCoordinate()
+					&& spatialDimension == otherDimensions.getSpatial()
+					&& topologicalDimension == otherDimensions.getTopological();
+		}
 	}
 }

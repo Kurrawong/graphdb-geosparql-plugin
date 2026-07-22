@@ -1,11 +1,11 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.junit.Test;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -13,26 +13,29 @@ import static org.junit.Assert.assertThrows;
 public class CandidateEntityTest {
 	@Test
 	public void candidateEntityOwnsAnImmutableDefensiveCopy() {
-		IndexGeometry geometry = TestIndexGeometries.exactlyOne(SourceGeometryLiteral.fromWkt("POINT(0 0)"));
-		List<IndexGeometry> input = new ArrayList<>();
-		input.add(geometry);
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(0 0)");
+		Set<SourceGeometryLiteral> input = new LinkedHashSet<>();
+		input.add(source);
 
 		CandidateEntity candidate = new CandidateEntity(7, input);
 		input.clear();
 
 		assertEquals(7, candidate.entityId());
-		assertEquals(List.of(geometry), candidate.matchingGeometries());
+		assertEquals(List.of(source), candidate.matchingSourceGeometryLiterals());
 		assertThrows(UnsupportedOperationException.class,
-				() -> candidate.matchingGeometries().add(geometry));
+				() -> candidate.matchingSourceGeometryLiterals().add(source));
 	}
 
 	@Test
 	public void candidateEntityRejectsInvalidState() {
-		IndexGeometry geometry = TestIndexGeometries.exactlyOne("POINT(0 0)");
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(0 0)");
 
-		assertThrows(IllegalArgumentException.class, () -> new CandidateEntity(0, List.of(geometry)));
+		assertThrows(IllegalArgumentException.class, () -> new CandidateEntity(0, Set.of(source)));
 		assertThrows(NullPointerException.class, () -> new CandidateEntity(1, null));
-		assertThrows(IllegalArgumentException.class, () -> new CandidateEntity(1, List.of()));
-		assertThrows(NullPointerException.class, () -> new CandidateEntity(1, java.util.Arrays.asList(geometry, null)));
+		assertThrows(IllegalArgumentException.class, () -> new CandidateEntity(1, Set.of()));
+		Set<SourceGeometryLiteral> sourceWithNull = new LinkedHashSet<>();
+		sourceWithNull.add(source);
+		sourceWithNull.add(null);
+		assertThrows(NullPointerException.class, () -> new CandidateEntity(1, sourceWithNull));
 	}
 }

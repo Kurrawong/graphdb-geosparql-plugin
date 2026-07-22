@@ -1,36 +1,37 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Immutable result for one entity returned by a Lucene candidate lookup.
  *
- * <p>The geometry list contains values decoded from the Lucene documents matched by that lookup. It is the complete
- * entity geometry set for a full scan, but may be a lookup-specific subset for a spatial query. Each
- * {@link IndexGeometry} retains the source geometry literal snapshot used by exact evaluation.
+ * <p>The source list contains the complete source geometry literals represented by the Lucene documents matched by
+ * that lookup. It is the complete entity source set for a full scan, but may be a lookup-specific subset for a
+ * spatial query.
  *
  * <p>This type is plugin-internal; public visibility allows the Lucene adapter to return it across packages.
  */
 public final class CandidateEntity {
 	private final long entityId;
-	private final List<IndexGeometry> matchingGeometries;
+	private final List<SourceGeometryLiteral> matchingSourceGeometryLiterals;
 
 	/**
 	 * Creates a candidate group with a positive GraphDB entity id and at least one matching geometry.
-	 * The supplied list is defensively copied.
+	 * The supplied unique source set is defensively copied.
 	 *
 	 * @param entityId positive GraphDB entity id shared by the matching documents
-	 * @param matchingGeometries non-empty geometry values decoded from those documents
+	 * @param matchingSourceGeometryLiterals non-empty unique source values decoded from those documents
 	 */
-	public CandidateEntity(long entityId, List<IndexGeometry> matchingGeometries) {
+	public CandidateEntity(long entityId, Set<SourceGeometryLiteral> matchingSourceGeometryLiterals) {
 		if (entityId <= 0) {
 			throw new IllegalArgumentException("Candidate entity id must be positive.");
 		}
-		this.matchingGeometries = List.copyOf(matchingGeometries);
-		if (this.matchingGeometries.isEmpty()) {
-			throw new IllegalArgumentException("Candidate entity must contain at least one matching index geometry.");
+		this.matchingSourceGeometryLiterals = List.copyOf(matchingSourceGeometryLiterals);
+		if (this.matchingSourceGeometryLiterals.isEmpty()) {
+			throw new IllegalArgumentException("Candidate entity must contain at least one matching source geometry.");
 		}
 		this.entityId = entityId;
 	}
@@ -40,8 +41,8 @@ public final class CandidateEntity {
 		return entityId;
 	}
 
-	/** Returns the immutable matching geometry snapshot for this lookup. */
-	public List<IndexGeometry> matchingGeometries() {
-		return matchingGeometries;
+	/** Returns the immutable matching source geometry literal snapshots for this lookup. */
+	public List<SourceGeometryLiteral> matchingSourceGeometryLiterals() {
+		return matchingSourceGeometryLiterals;
 	}
 }

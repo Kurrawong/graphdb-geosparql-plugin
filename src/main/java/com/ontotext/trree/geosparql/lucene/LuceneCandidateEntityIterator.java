@@ -2,7 +2,7 @@ package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.CandidateEntity;
 import com.ontotext.trree.geosparql.CloseableIterator;
-import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginException;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.search.IndexSearcher;
@@ -13,8 +13,7 @@ import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.NoSuchElementException;
 
 /**
@@ -84,20 +83,20 @@ class LuceneCandidateEntityIterator implements CloseableIterator<CandidateEntity
 			}
 			long entityId = LuceneGeoDocumentSchema.entityId(firstDocument);
 			sourceResolver.clear();
-			List<IndexGeometry> geometries = new ArrayList<>();
-			geometries.add(LuceneGeoDocumentSchema.indexGeometry(firstDocument, sourceResolver));
+			LinkedHashSet<SourceGeometryLiteral> sources = new LinkedHashSet<>();
+			sources.add(LuceneGeoDocumentSchema.sourceGeometryLiteral(firstDocument, sourceResolver));
 
 			while (true) {
 				Document document = nextDocument();
 				if (document == null) {
-					return new CandidateEntity(entityId, geometries);
+					return new CandidateEntity(entityId, sources);
 				}
 				long documentEntityId = LuceneGeoDocumentSchema.entityId(document);
 				if (documentEntityId != entityId) {
 					bufferedDocument = document;
-					return new CandidateEntity(entityId, geometries);
+					return new CandidateEntity(entityId, sources);
 				}
-				geometries.add(LuceneGeoDocumentSchema.indexGeometry(document, sourceResolver));
+				sources.add(LuceneGeoDocumentSchema.sourceGeometryLiteral(document, sourceResolver));
 			}
 		} catch (IOException e) {
 			throw new PluginException("Unable to read Lucene candidate entity documents.", e);
