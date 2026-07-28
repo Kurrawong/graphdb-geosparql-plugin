@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.OwlimSchemaRepository;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.PluginException;
 import org.eclipse.rdf4j.model.IRI;
@@ -79,8 +80,7 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		}
 
 		@Override
-		public CloseableIterator<CandidateEntity> getCandidatesForSource(IndexGeometry boundSourceIndexGeometry,
-				CandidateLookupPolicy candidateLookupPolicy) {
+		public CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry) {
 			throw new UnsupportedOperationException();
 		}
 
@@ -90,7 +90,7 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		}
 
 		@Override
-		public CloseableIterator<IndexGeometry> getGeometriesFor(long subject) {
+		public CloseableIterator<SourceGeometryLiteral> getSourceGeometryLiteralsFor(long subject) {
 			throw new UnsupportedOperationException();
 		}
 

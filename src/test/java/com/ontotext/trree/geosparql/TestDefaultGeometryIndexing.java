@@ -238,6 +238,29 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 				+ "}"));
 	}
 
+	@Test
+	public void disjointFullScanRetainsOverlappingEnvelopePairInBothBindingDirections() throws Exception {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:holedArea a geo:Feature ; geo:hasDefaultGeometry ex:holedAreaGeom .\n"
+				+ "  ex:holedAreaGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((0 0,0 10,10 10,10 0,0 0),"
+				+ "(4 4,6 4,6 6,4 6,4 4))\"^^geo:wktLiteral .\n"
+				+ "  ex:pointInHole a geo:Feature ; geo:hasDefaultGeometry ex:pointInHoleGeom .\n"
+				+ "  ex:pointInHoleGeom a geo:Geometry ; geo:asWKT \"POINT(5 5)\"^^geo:wktLiteral .\n"
+				+ "}");
+		enablePlugin();
+
+		assertEquals(1, count("SELECT ?s WHERE {\n"
+				+ "  ?s geo:sfDisjoint ex:holedArea .\n"
+				+ "  FILTER(?s = ex:pointInHole)\n"
+				+ "}"));
+		assertEquals(1, count("SELECT ?o WHERE {\n"
+				+ "  ex:pointInHole geo:sfDisjoint ?o .\n"
+				+ "  FILTER(?o = ex:holedArea)\n"
+				+ "}"));
+	}
+
 	private void insertContainerAndFeature(String featurePointWkt) {
 		executeSparqlUpdateQuery(PREFIXES
 				+ "INSERT DATA {\n"

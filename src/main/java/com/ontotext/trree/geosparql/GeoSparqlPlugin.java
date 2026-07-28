@@ -24,7 +24,8 @@ import java.util.List;
  *
  * <p>The plugin coordinates configuration, repository geometry discovery, Lucene candidate indexing, property
  * relation iteration, and Jena-backed function registration. Geometry literal conversion preserves the source
- * geometry literal used for exact evaluation while deriving one or more CRS84 index geometries for Lucene.
+ * geometry literal used for exact evaluation while deriving one CRS84 index envelope for each non-empty source
+ * geometry literal. An empty source produces a non-spatial sentinel document.
  */
 public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, UpdateInterpreter,
         ParallelTransactionListener, StatementListener {

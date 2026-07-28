@@ -8,15 +8,14 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
-import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.spatial.SpatialStrategy;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
-import org.locationtech.jts.geom.Geometry;
-import org.locationtech.spatial4j.context.jts.JtsSpatialContext;
-import org.locationtech.spatial4j.shape.jts.JtsGeometry;
+import org.locationtech.jts.geom.Envelope;
+import org.locationtech.spatial4j.context.SpatialContext;
+import org.locationtech.spatial4j.shape.Rectangle;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,10 +31,8 @@ final class LuceneGeoDocumentSchema {
 	static final int SCHEMA_VERSION = 2;
 	/** GraphDB entity id, stored for reconstruction and indexed/doc-valued for lookup and grouping. */
 	static final String FIELD_ID = "id";
-	/** Indexed terms for one complete CRS84 geometry or collection envelope; absent on empty sentinels. */
+	/** Indexed terms for one CRS84 source envelope; absent on empty sentinels. */
 	static final String FIELD_SPATIAL_PREFIX = "geoData1";
-	/** Binary doc values for the same complete geometry or envelope, used to verify candidates and reload bound inputs. */
-	static final String FIELD_INDEX_GEOMETRY = "geoData2";
 	/** Stored WKB for the complete native-CRS source geometry used to construct Jena exact-evaluation input. */
 	static final String FIELD_SOURCE_GEOMETRY = "geoData";
 	/** Stored per-document schema number used for defensive validation after the commit-level check. */
@@ -52,18 +49,16 @@ final class LuceneGeoDocumentSchema {
 	static final String FIELD_SOURCE_SPATIAL_DIMENSION = "geoSourceSpatialDimension";
 	/** Stored source topological dimension used to preserve point, line, area, and collection semantics. */
 	static final String FIELD_SOURCE_TOPOLOGICAL_DIMENSION = "geoSourceTopologicalDimension";
-	/** Stored CRS URI for the derived index geometry in geoData1 and geoData2; currently always CRS84. */
+	/** Stored CRS URI used to derive the index envelope in geoData1; currently always CRS84. */
 	static final String FIELD_INDEX_CRS = "geoIndexCrs";
-	/** Indexed/stored marker distinguishing complete geometries, collection envelopes, and empty sentinels. */
-	static final String FIELD_INDEX_BUILD_MODE = "geoIndexBuildMode";
 	/** Commit metadata key used for the constant-time index-level schema compatibility check. */
 	static final String COMMIT_SCHEMA_VERSION_KEY = "geosparql.luceneSchemaVersion";
 	/** Commit metadata value written by the final unpublished schema-v2 layout. */
 	static final String COMMIT_SCHEMA_VERSION_VALUE = Integer.toString(SCHEMA_VERSION);
 	/** Commit metadata key distinguishing the final unpublished layout from earlier development-v2 indexes. */
 	static final String COMMIT_SCHEMA_LAYOUT_KEY = "geosparql.luceneSchemaLayout";
-	/** Commit metadata value requiring doc-values verification, source WKB, and one collection-envelope document. */
-	static final String COMMIT_SCHEMA_LAYOUT_VALUE = "doc-values-source-wkb-collection-envelope";
+	/** Commit metadata value requiring prefix-tree envelopes and native-CRS source WKB. */
+	static final String COMMIT_SCHEMA_LAYOUT_VALUE = "prefix-envelope-source-wkb";
 	static final String SCHEMA_MISMATCH_MESSAGE = "Existing GeoSPARQL Lucene index does not match current schema v2. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
 			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
@@ -72,7 +67,7 @@ final class LuceneGeoDocumentSchema {
 	}
 
 	static List<Document> toDocuments(long entityId, List<IndexGeometry> geometries,
-			SpatialStrategy strategy, JtsSpatialContext ctx) {
+			SpatialStrategy strategy, SpatialContext ctx) {
 		Map<SourceGeometryLiteral, IndexGeometry> distinctSources = new LinkedHashMap<>();
 		for (IndexGeometry geometry : geometries) {
 			distinctSources.putIfAbsent(geometry.sourceGeometryLiteral(), geometry);
@@ -85,7 +80,7 @@ final class LuceneGeoDocumentSchema {
 	}
 
 	static Document toDocument(long entityId, IndexGeometry geometry,
-			SpatialStrategy strategy, JtsSpatialContext ctx) {
+			SpatialStrategy strategy, SpatialContext ctx) {
 		SourceGeometryLiteral source = geometry.sourceGeometryLiteral();
 		byte[] sourceGeometryWkb = SourceGeometryWkbCodec.encode(source);
 		DimensionInfo dimensions = source.asGeometryWrapper().getDimensionInfo();
@@ -96,9 +91,9 @@ final class LuceneGeoDocumentSchema {
 		doc.add(new NumericDocValuesField(FIELD_ID, entityId));
 
 		if (geometry.isSpatialCandidate()) {
-			JtsGeometry shape = new JtsGeometry(geometry.indexGeometry(), ctx, true, true);
-			shape.index();
-
+			Envelope envelope = geometry.indexEnvelope();
+			Rectangle shape = ctx.getShapeFactory().rect(
+					envelope.getMinX(), envelope.getMaxX(), envelope.getMinY(), envelope.getMaxY());
 			for (Field field : strategy.createIndexableFields(shape)) {
 				doc.add(field);
 			}
@@ -115,23 +110,8 @@ final class LuceneGeoDocumentSchema {
 		doc.add(new StoredField(FIELD_SOURCE_SPATIAL_DIMENSION, dimensions.getSpatial()));
 		doc.add(new StoredField(FIELD_SOURCE_TOPOLOGICAL_DIMENSION, dimensions.getTopological()));
 		doc.add(new StoredField(FIELD_INDEX_CRS, geometry.indexCrs()));
-		doc.add(new StringField(FIELD_INDEX_BUILD_MODE, geometry.indexBuildMode(), Field.Store.YES));
 
 		return doc;
-	}
-
-	static IndexGeometry indexGeometry(Document doc, SourceGeometryLiteral source,
-			Geometry indexGeometry) {
-		try {
-			return IndexGeometry.fromStoredMetadata(
-					indexGeometry,
-					source,
-					doc.get(FIELD_SOURCE_CRS),
-					doc.get(FIELD_INDEX_CRS),
-					doc.get(FIELD_INDEX_BUILD_MODE));
-		} catch (RuntimeException e) {
-			throw new PluginException(SCHEMA_MISMATCH_MESSAGE, e);
-		}
 	}
 
 	static SourceGeometryLiteral sourceGeometryLiteral(Document doc, SourceGeometryLiteralResolver sourceResolver) {
@@ -166,14 +146,7 @@ final class LuceneGeoDocumentSchema {
 				&& numericFieldValue(doc, FIELD_SOURCE_COORDINATE_DIMENSION) != null
 				&& numericFieldValue(doc, FIELD_SOURCE_SPATIAL_DIMENSION) != null
 				&& numericFieldValue(doc, FIELD_SOURCE_TOPOLOGICAL_DIMENSION) != null
-				&& IndexGeometry.INDEX_CRS.equals(doc.get(FIELD_INDEX_CRS))
-				&& isSupportedBuildMode(doc.get(FIELD_INDEX_BUILD_MODE));
-	}
-
-	private static boolean isSupportedBuildMode(String buildMode) {
-		return IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY.equals(buildMode)
-				|| IndexGeometry.BUILD_MODE_TRANSFORMED_ENVELOPE.equals(buildMode)
-				|| IndexGeometry.BUILD_MODE_EMPTY_SENTINEL.equals(buildMode);
+				&& IndexGeometry.INDEX_CRS.equals(doc.get(FIELD_INDEX_CRS));
 	}
 
 	static void assertCurrentSchemaDocument(Document doc) {

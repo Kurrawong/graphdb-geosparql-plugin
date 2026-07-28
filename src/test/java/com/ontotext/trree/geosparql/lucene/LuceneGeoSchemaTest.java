@@ -10,7 +10,6 @@ import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.PluginException;
-import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.StoredField;
@@ -23,27 +22,20 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.spatial.SpatialStrategy;
-import org.apache.lucene.spatial.composite.CompositeSpatialStrategy;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.util.BytesRef;
-import org.locationtech.jts.geom.Geometry;
-import org.locationtech.spatial4j.context.jts.JtsSpatialContext;
-import org.locationtech.spatial4j.context.jts.JtsSpatialContextFactory;
+import org.locationtech.spatial4j.context.SpatialContext;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -54,6 +46,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -67,20 +60,14 @@ public class LuceneGeoSchemaTest {
 	public TemporaryLocalFolder tmpFolder = new TemporaryLocalFolder();
 
 	private IndexGeometry sampleGeometry;
-	private JtsSpatialContext testSpatialContext;
-	private SpatialStrategy testCompositeStrategy;
+	private SpatialContext testSpatialContext;
+	private SpatialStrategy testSpatialStrategy;
 
 	@Before
 	public void init() {
-		JtsSpatialContextFactory contextFactory = new JtsSpatialContextFactory();
-		contextFactory.geo = true;
-		contextFactory.binaryCodecClass = JtsBinaryCodec.class;
-		testSpatialContext = contextFactory.newSpatialContext();
-		RecursivePrefixTreeStrategy prefixStrategy = new RecursivePrefixTreeStrategy(
+		testSpatialContext = SpatialContext.GEO;
+		testSpatialStrategy = new RecursivePrefixTreeStrategy(
 				new QuadPrefixTree(testSpatialContext, 11), LuceneGeoDocumentSchema.FIELD_SPATIAL_PREFIX);
-		SerializedDVStrategy geometryStrategy = new SerializedDVStrategy(testSpatialContext,
-				LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY);
-		testCompositeStrategy = new CompositeSpatialStrategy("geoData", prefixStrategy, geometryStrategy);
 		sampleGeometry = TestIndexGeometries.fromWkt("POINT(1 2)");
 	}
 
@@ -108,7 +95,7 @@ public class LuceneGeoSchemaTest {
 
 	private Document currentSchemaDocument(long entityId, IndexGeometry geometry) {
 		return LuceneGeoDocumentSchema.toDocument(entityId, geometry,
-				testCompositeStrategy, testSpatialContext);
+				testSpatialStrategy, testSpatialContext);
 	}
 
     @Test
@@ -119,7 +106,8 @@ public class LuceneGeoSchemaTest {
 
         LuceneGeoIndexer indexer = createIndexer(nonCurrentDataDir.toFile());
 
-        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
 
         assertForceReindexMessage(exception);
     }
@@ -131,7 +119,8 @@ public class LuceneGeoSchemaTest {
         writeMarkedIndexMissingRequiredSchemaV2Field(malformedDataDir);
 
         LuceneGeoIndexer indexer = createIndexer(malformedDataDir.toFile());
-        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(0);
+        CloseableIterator<SourceGeometryLiteral> iterator =
+                indexer.getSourceGeometryLiteralsFor(0);
 
         try {
             PluginException exception = assertThrows(PluginException.class, iterator::next);
@@ -141,42 +130,6 @@ public class LuceneGeoSchemaTest {
             iterator.close();
         }
     }
-
-    @Test
-    public void testMarkedIndexMissingIndexGeometryDocValuesRequiresForceReindex() throws Exception {
-        Path malformedDataDir = tmpFolder.getRoot().toPath().resolve("missing-index-doc-values");
-        Files.createDirectories(malformedDataDir);
-        Document document = currentSchemaDocument(1L, sampleGeometry);
-        document.removeFields(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY);
-        writeMarkedDocument(malformedDataDir, document);
-
-        LuceneGeoIndexer indexer = createIndexer(malformedDataDir.toFile());
-        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(1L);
-        try {
-            assertForceReindexMessage(assertThrows(PluginException.class, iterator::next));
-        } finally {
-            iterator.close();
-        }
-    }
-
-	@Test
-	public void testMarkedIndexWithMalformedIndexGeometryDocValuesRequiresForceReindex() throws Exception {
-		Path malformedDataDir = tmpFolder.getRoot().toPath().resolve("malformed-index-doc-values");
-		Files.createDirectories(malformedDataDir);
-		Document document = currentSchemaDocument(1L, sampleGeometry);
-		document.removeFields(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY);
-		document.add(new BinaryDocValuesField(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
-				new BytesRef(new byte[]{Byte.MAX_VALUE})));
-		writeMarkedDocument(malformedDataDir, document);
-
-		LuceneGeoIndexer indexer = createIndexer(malformedDataDir.toFile());
-		CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(1L);
-		try {
-			assertForceReindexMessage(assertThrows(PluginException.class, iterator::next));
-		} finally {
-			iterator.close();
-		}
-	}
 
     @Test
     public void testMalformedSourceWkbRequiresForceReindex() throws Exception {
@@ -206,16 +159,14 @@ public class LuceneGeoSchemaTest {
                 firstSource.lexicalForm(), firstSource.datatype(), firstSource.effectiveCrsUri(),
                 otherGeometry.asGeometryWrapper().getXYGeometry().copy(),
                 otherGeometry.asGeometryWrapper().getDimensionInfo());
-        IndexGeometry first = IndexGeometry.fromStoredMetadata(
-                firstSource.asGeometryWrapper().getXYGeometry().copy(), firstSource,
-                firstSource.effectiveCrsUri(), IndexGeometry.INDEX_CRS,
-                IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY);
-        IndexGeometry conflicting = IndexGeometry.fromStoredMetadata(
-                conflictingSource.asGeometryWrapper().getXYGeometry().copy(), conflictingSource,
-                conflictingSource.effectiveCrsUri(), IndexGeometry.INDEX_CRS,
-                IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY);
-        writeMarkedDocuments(malformedDataDir, List.of(
-                currentSchemaDocument(1L, first), currentSchemaDocument(1L, conflicting)));
+        Document firstDocument = currentSchemaDocument(1L,
+                IndexGeometry.fromSourceGeometryLiteral(firstSource));
+        Document conflictingDocument = currentSchemaDocument(1L,
+                IndexGeometry.fromSourceGeometryLiteral(firstSource));
+        conflictingDocument.removeFields(LuceneGeoDocumentSchema.FIELD_SOURCE_GEOMETRY);
+        conflictingDocument.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_GEOMETRY,
+                SourceGeometryWkbCodec.encode(conflictingSource)));
+        writeMarkedDocuments(malformedDataDir, List.of(firstDocument, conflictingDocument));
 
         LuceneGeoIndexer indexer = createIndexer(malformedDataDir.toFile());
         CloseableIterator<CandidateEntity> iterator = indexer.getAllEntities();
@@ -225,7 +176,8 @@ public class LuceneGeoSchemaTest {
             iterator.close();
         }
 
-        CloseableIterator<IndexGeometry> boundIterator = indexer.getGeometriesFor(1L);
+        CloseableIterator<SourceGeometryLiteral> boundIterator =
+                indexer.getSourceGeometryLiteralsFor(1L);
         try {
             assertTrue(boundIterator.hasNext());
             boundIterator.next();
@@ -243,7 +195,8 @@ public class LuceneGeoSchemaTest {
 
         LuceneGeoIndexer indexer = createIndexer(missingMarkerDataDir.toFile());
 
-        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
 
         assertForceReindexMessage(exception);
     }
@@ -256,20 +209,22 @@ public class LuceneGeoSchemaTest {
 
         LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
 
-        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
 
         assertForceReindexMessage(exception);
     }
 
     @Test
-    public void testDevelopmentV2IndexWithStoredOnlyBuildModeLayoutRequiresReindex() throws Exception {
-        Path developmentV2DataDir = tmpFolder.getRoot().toPath().resolve("development-v2-stored-build-mode");
+    public void testEarlierDevelopmentV2CollectionEnvelopeLayoutRequiresReindex() throws Exception {
+        Path developmentV2DataDir = tmpFolder.getRoot().toPath().resolve("development-v2-collection-envelope");
         Files.createDirectories(developmentV2DataDir);
-        writeDevelopmentV2IndexWithStoredOnlyBuildModeLayout(developmentV2DataDir);
+        writeEarlierDevelopmentV2CollectionEnvelopeLayout(developmentV2DataDir);
 
         LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
 
-        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
 
         assertForceReindexMessage(exception);
     }
@@ -281,13 +236,12 @@ public class LuceneGeoSchemaTest {
         writeMarkedCurrentSchemaIndex(markedDataDir);
 
         LuceneGeoIndexer indexer = createIndexer(markedDataDir.toFile());
-        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(0);
+        CloseableIterator<SourceGeometryLiteral> iterator =
+                indexer.getSourceGeometryLiteralsFor(0);
 
         try {
             assertTrue(iterator.hasNext());
-            IndexGeometry geometry = iterator.next();
-            assertNotNull(geometry.indexGeometry());
-            assertNotNull(geometry.sourceGeometryLiteral());
+            assertNotNull(iterator.next());
         } finally {
             iterator.close();
         }
@@ -355,7 +309,8 @@ public class LuceneGeoSchemaTest {
         indexer.freshIndex();
         indexer.rollback();
 
-        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
 
         assertForceReindexMessage(exception);
     }
@@ -372,7 +327,8 @@ public class LuceneGeoSchemaTest {
             indexer.freshIndex();
             indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
 
-            PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
+            PluginException exception = assertThrows(PluginException.class,
+                    () -> indexer.getSourceGeometryLiteralsFor(0));
 
             assertForceReindexMessage(exception);
         } finally {
@@ -393,7 +349,8 @@ public class LuceneGeoSchemaTest {
         indexer.failCommitClose();
 
         assertThrows(IOException.class, indexer::commit);
-        PluginException exception = assertThrows(PluginException.class, () -> indexer.getGeometriesFor(0));
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
 
         assertForceReindexMessage(exception);
         indexer.rollback();
@@ -411,12 +368,11 @@ public class LuceneGeoSchemaTest {
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
         indexer.commit();
 
-        CloseableIterator<IndexGeometry> iterator = indexer.getGeometriesFor(0);
+        CloseableIterator<SourceGeometryLiteral> iterator =
+                indexer.getSourceGeometryLiteralsFor(0);
         try {
             assertTrue(iterator.hasNext());
-            IndexGeometry geometry = iterator.next();
-            assertNotNull(geometry.indexGeometry());
-            assertNotNull(geometry.sourceGeometryLiteral());
+            assertNotNull(iterator.next());
         } finally {
             iterator.close();
         }
@@ -448,18 +404,18 @@ public class LuceneGeoSchemaTest {
                     doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_DATATYPE));
             assertEquals(EPSG_32634, doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS));
             assertEquals(IndexGeometry.INDEX_CRS, doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_CRS));
-            assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY,
-                    doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE));
+            assertNull(doc.get("geoData2"));
+            assertNull(doc.get("geoIndexBuildMode"));
         }
 
-        CloseableIterator<IndexGeometry> storedGeometries = projectedIndexer.getGeometriesFor(1L);
+        CloseableIterator<SourceGeometryLiteral> storedGeometries =
+                projectedIndexer.getSourceGeometryLiteralsFor(1L);
         try {
             assertTrue(storedGeometries.hasNext());
-            IndexGeometry storedGeometry = storedGeometries.next();
-            assertEquals(PROJECTED_POINT_WKT, storedGeometry.sourceGeometryLiteral().lexicalForm());
-            assertEquals(GeoConstants.GEO_WKT_LITERAL, storedGeometry.sourceGeometryLiteral().datatype());
-            assertEquals(EPSG_32634, storedGeometry.sourceGeometryLiteral().effectiveCrsUri());
-            assertEquals(IndexGeometry.INDEX_CRS, storedGeometry.indexCrs());
+            SourceGeometryLiteral storedGeometry = storedGeometries.next();
+            assertEquals(PROJECTED_POINT_WKT, storedGeometry.lexicalForm());
+            assertEquals(GeoConstants.GEO_WKT_LITERAL, storedGeometry.datatype());
+            assertEquals(EPSG_32634, storedGeometry.effectiveCrsUri());
             assertFalse(storedGeometries.hasNext());
         } finally {
             storedGeometries.close();
@@ -501,8 +457,7 @@ public class LuceneGeoSchemaTest {
             Document doc = new Document();
             doc.add(new LongPoint(LuceneGeoDocumentSchema.FIELD_ID, 1L));
             doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_ID, 1L));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
-                    serializeGeometry(sampleGeometry.indexGeometry())));
+            doc.add(new StoredField("geoData2", new byte[]{1, 2, 3}));
             writer.addDocument(doc);
         }
     }
@@ -510,23 +465,10 @@ public class LuceneGeoSchemaTest {
     private void writeMarkedIndexMissingRequiredSchemaV2Field(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
-        IndexGeometry geometry = sampleGeometry;
         try (FSDirectory dir = FSDirectory.open(indexDir);
             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
-            Document doc = new Document();
-            doc.add(new LongPoint(LuceneGeoDocumentSchema.FIELD_ID, 1L));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_ID, 1L));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_GEOMETRY,
-                    serializeGeometry(geometry.indexGeometry())));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SCHEMA_VERSION,
-                    LuceneGeoDocumentSchema.SCHEMA_VERSION));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_LEXICAL_FORM,
-                    geometry.sourceGeometryLiteral().lexicalForm()));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_DATATYPE,
-                    GeoConstants.GEO_WKT_LITERAL.stringValue()));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_CRS, IndexGeometry.INDEX_CRS));
-            doc.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE,
-                    IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY));
+            Document doc = currentSchemaDocument(1L, sampleGeometry);
+            doc.removeFields(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS);
             writer.addDocument(doc);
             markCurrentSchema(writer);
         }
@@ -563,20 +505,19 @@ public class LuceneGeoSchemaTest {
         }
     }
 
-    private void writeDevelopmentV2IndexWithStoredOnlyBuildModeLayout(Path dataDir) throws Exception {
+    private void writeEarlierDevelopmentV2CollectionEnvelopeLayout(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
         try (FSDirectory dir = FSDirectory.open(indexDir);
-             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+            IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
             Document document = currentSchemaDocument(1L, sampleGeometry);
-            document.removeFields(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE);
-            document.add(new StoredField(LuceneGeoDocumentSchema.FIELD_INDEX_BUILD_MODE,
-                    IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY));
+            document.add(new StoredField("geoIndexBuildMode", "transformed-geometry"));
             writer.addDocument(document);
             Map<String, String> commitData = new HashMap<>();
             commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_KEY,
                     LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
-            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY, "doc-values-source-wkb");
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
+                    "doc-values-source-wkb-collection-envelope");
             writer.setLiveCommitData(commitData.entrySet());
         }
     }
@@ -613,14 +554,6 @@ public class LuceneGeoSchemaTest {
         config.setMergePolicy(NoMergePolicy.INSTANCE);
         return config;
     }
-
-    private byte[] serializeGeometry(Geometry geometry) throws IOException {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		ObjectOutputStream oos = new ObjectOutputStream(bos);
-		oos.writeObject(geometry);
-		oos.close();
-		return bos.toByteArray();
-	}
 
 	private static final class FailingCommitLuceneGeoIndexer extends LuceneGeoIndexer {
 		private boolean failCommitClose;

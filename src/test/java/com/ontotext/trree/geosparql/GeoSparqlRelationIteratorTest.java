@@ -47,8 +47,7 @@ public class GeoSparqlRelationIteratorTest {
 				GeoSparqlPropertyRelation.SF_WITHIN, 0, PREDICATE, OBJECT, entities);
 		try {
 			assertFalse(iterator.next());
-			assertEquals(List.of(CandidateLookupPolicy.WITHIN),
-					((ScriptedGeoSparqlIndexer) plugin.indexer).lookupPolicies);
+			assertEquals(1, ((ScriptedGeoSparqlIndexer) plugin.indexer).envelopeLookupCount);
 		} finally {
 			iterator.close();
 		}
@@ -77,8 +76,7 @@ public class GeoSparqlRelationIteratorTest {
 			assertEquals(SUBJECT, iterator.subject);
 			assertEquals(OBJECT, iterator.object);
 			assertFalse(iterator.next());
-			assertEquals(List.of(CandidateLookupPolicy.WITHIN, CandidateLookupPolicy.WITHIN),
-					((ScriptedGeoSparqlIndexer) plugin.indexer).lookupPolicies);
+			assertEquals(2, ((ScriptedGeoSparqlIndexer) plugin.indexer).envelopeLookupCount);
 		} finally {
 			iterator.close();
 		}
@@ -97,7 +95,8 @@ public class GeoSparqlRelationIteratorTest {
 		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
 		plugin.indexer = new ScriptedGeoSparqlIndexer(singletonList(polygon),
-				singletonList(emptyCollection), singletonList(emptyCollection));
+				singletonList(emptyCollection), singletonList(emptyCollection),
+				candidateIterator(SUBJECT, singletonList(emptyCollection)));
 
 		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
 				GeoSparqlPropertyRelation.SF_DISJOINT, 0, PREDICATE, OBJECT, entities);
@@ -107,9 +106,8 @@ public class GeoSparqlRelationIteratorTest {
 			assertEquals(OBJECT, iterator.object);
 			assertFalse(iterator.next());
 			ScriptedGeoSparqlIndexer indexer = (ScriptedGeoSparqlIndexer) plugin.indexer;
-			assertEquals(List.of(CandidateLookupPolicy.DISJOINT),
-					indexer.lookupPolicies);
-			assertEquals(0, indexer.allEntitiesLookupCount);
+			assertEquals(0, indexer.envelopeLookupCount);
+			assertEquals(1, indexer.allEntitiesLookupCount);
 		} finally {
 			iterator.close();
 		}
@@ -138,8 +136,7 @@ public class GeoSparqlRelationIteratorTest {
 			assertEquals(SUBJECT, iterator.subject);
 			assertEquals(OBJECT, iterator.object);
 			assertFalse(iterator.next());
-			assertEquals(List.of(CandidateLookupPolicy.CONTAINS),
-					((ScriptedGeoSparqlIndexer) plugin.indexer).lookupPolicies);
+			assertEquals(1, ((ScriptedGeoSparqlIndexer) plugin.indexer).envelopeLookupCount);
 		} finally {
 			iterator.close();
 		}
@@ -167,7 +164,7 @@ public class GeoSparqlRelationIteratorTest {
 			assertFalse(iterator.next());
 			ScriptedGeoSparqlIndexer indexer = (ScriptedGeoSparqlIndexer) plugin.indexer;
 			assertEquals(1, indexer.allEntitiesLookupCount);
-			assertTrue(indexer.lookupPolicies.isEmpty());
+			assertEquals(0, indexer.envelopeLookupCount);
 		} finally {
 			iterator.close();
 		}
@@ -197,7 +194,7 @@ public class GeoSparqlRelationIteratorTest {
 			assertFalse(iterator.next());
 			ScriptedGeoSparqlIndexer indexer = (ScriptedGeoSparqlIndexer) plugin.indexer;
 			assertEquals(1, indexer.allEntitiesLookupCount);
-			assertTrue(indexer.lookupPolicies.isEmpty());
+			assertEquals(0, indexer.envelopeLookupCount);
 		} finally {
 			iterator.close();
 		}
@@ -221,7 +218,7 @@ public class GeoSparqlRelationIteratorTest {
 		try {
 			assertFalse(iterator.next());
 			ScriptedGeoSparqlIndexer indexer = (ScriptedGeoSparqlIndexer) plugin.indexer;
-			assertEquals(List.of(CandidateLookupPolicy.EQUALS), indexer.lookupPolicies);
+			assertEquals(1, indexer.envelopeLookupCount);
 			assertEquals(0, indexer.allEntitiesLookupCount);
 		} finally {
 			iterator.close();
@@ -249,7 +246,7 @@ public class GeoSparqlRelationIteratorTest {
 			assertTrue(iterator.next());
 			assertFalse(iterator.next());
 			ScriptedGeoSparqlIndexer indexer = (ScriptedGeoSparqlIndexer) plugin.indexer;
-			assertEquals(List.of(CandidateLookupPolicy.WITHIN), indexer.lookupPolicies);
+			assertEquals(1, indexer.envelopeLookupCount);
 			assertEquals(0, indexer.allEntitiesLookupCount);
 		} finally {
 			iterator.close();
@@ -300,8 +297,7 @@ public class GeoSparqlRelationIteratorTest {
 		private final List<IndexGeometry> secondCandidateGeometries;
 		private final CloseableIterator<CandidateEntity> allCandidates;
 		private final long candidateEntityId;
-		private final List<CandidateLookupPolicy> lookupPolicies = new ArrayList<>();
-		private int lookupCount;
+		private int envelopeLookupCount;
 		private int allEntitiesLookupCount;
 
 		private ScriptedGeoSparqlIndexer(List<IndexGeometry> boundObjectGeometries,
@@ -340,15 +336,14 @@ public class GeoSparqlRelationIteratorTest {
 		}
 
 		@Override
-		public CloseableIterator<CandidateEntity> getCandidatesForSource(IndexGeometry boundSourceIndexGeometry,
-				CandidateLookupPolicy candidateLookupPolicy) {
-			lookupPolicies.add(candidateLookupPolicy);
-			lookupCount++;
-			if (lookupCount == 1) {
+		public CloseableIterator<CandidateEntity> getEnvelopeIntersections(
+				IndexGeometry boundSourceIndexGeometry) {
+			envelopeLookupCount++;
+			if (envelopeLookupCount == 1) {
 				return firstCandidateGeometries.isEmpty()
 						? emptyIterator() : candidateIterator(candidateEntityId, firstCandidateGeometries);
 			}
-			if (lookupCount == 2) {
+			if (envelopeLookupCount == 2) {
 				return secondCandidateGeometries.isEmpty()
 						? emptyIterator() : candidateIterator(candidateEntityId, secondCandidateGeometries);
 			}
@@ -362,9 +357,13 @@ public class GeoSparqlRelationIteratorTest {
 		}
 
 		@Override
-		public CloseableIterator<IndexGeometry> getGeometriesFor(long subject) {
+		public CloseableIterator<SourceGeometryLiteral> getSourceGeometryLiteralsFor(long subject) {
 			if (subject == OBJECT) {
-				return iterator(boundObjectGeometries);
+				List<SourceGeometryLiteral> sources = new ArrayList<>();
+				for (IndexGeometry geometry : boundObjectGeometries) {
+					sources.add(geometry.sourceGeometryLiteral());
+				}
+				return iterator(sources);
 			}
 			throw new UnsupportedOperationException();
 		}

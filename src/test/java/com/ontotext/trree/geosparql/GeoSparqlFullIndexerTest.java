@@ -141,8 +141,7 @@ public class GeoSparqlFullIndexerTest {
 		}
 
 		@Override
-		public CloseableIterator<CandidateEntity> getCandidatesForSource(IndexGeometry boundSourceIndexGeometry,
-				CandidateLookupPolicy candidateLookupPolicy) {
+		public CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry) {
 			return null;
 		}
 
@@ -152,7 +151,7 @@ public class GeoSparqlFullIndexerTest {
 		}
 
 		@Override
-		public CloseableIterator<IndexGeometry> getGeometriesFor(long subject) {
+		public CloseableIterator<SourceGeometryLiteral> getSourceGeometryLiteralsFor(long subject) {
 			return null;
 		}
 

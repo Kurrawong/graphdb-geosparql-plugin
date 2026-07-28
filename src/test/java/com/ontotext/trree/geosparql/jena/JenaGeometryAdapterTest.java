@@ -11,7 +11,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.junit.Before;
 import org.junit.Test;
-import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Envelope;
 
 import static org.junit.Assert.*;
 
@@ -154,45 +154,10 @@ public class JenaGeometryAdapterTest {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
 
 		IndexGeometry index = TestIndexGeometries.fromSource(source);
-		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
-		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, index.indexBuildMode());
-		assertProjectedPointCrs84Coordinate(coordinate);
-	}
-
-	@Test
-	public void storedMetadataFactoryRejectsConflictingEffectiveSourceCrs() {
-		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
-		IndexGeometry index = TestIndexGeometries.fromSource(source);
-
-		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class, () ->
-				IndexGeometry.fromStoredMetadata(index.indexGeometry(), source, EPSG_32634,
-						IndexGeometry.INDEX_CRS, IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY));
-
-		assertTrue(exception.getMessage().contains("CRS metadata does not match"));
-	}
-
-	@Test
-	public void storedMetadataFactoryRejectsIncompleteOrUnsupportedV2Metadata() {
-		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
-		IndexGeometry index = TestIndexGeometries.fromSource(source);
-
-		assertStoredMetadataRejected(index, source, null, IndexGeometry.INDEX_CRS,
-				IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, "CRS metadata is missing");
-		assertStoredMetadataRejected(index, source, CRS84, EPSG_32634,
-				IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, "Unsupported GeoSPARQL Lucene index CRS");
-		assertStoredMetadataRejected(index, source, CRS84, IndexGeometry.INDEX_CRS,
-				"legacy-build-mode", "Unsupported GeoSPARQL Lucene index build mode");
-	}
-
-	private static void assertStoredMetadataRejected(IndexGeometry index, SourceGeometryLiteral source,
-			String effectiveSourceCrs, String indexCrs, String buildMode, String expectedMessage) {
-		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class, () ->
-				IndexGeometry.fromStoredMetadata(index.indexGeometry(), source, effectiveSourceCrs,
-						indexCrs, buildMode));
-		assertTrue(exception.getMessage().contains(expectedMessage));
+		assertProjectedPointCrs84Envelope(index.indexEnvelope());
 	}
 
 	@Test
@@ -203,12 +168,11 @@ public class JenaGeometryAdapterTest {
 
 		SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
 		IndexGeometry index = TestIndexGeometries.fromSource(source);
-		Coordinate coordinate = index.indexGeometry().getCoordinate();
 
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
 		assertEquals(GeoConstants.GEO_GML_LITERAL, source.datatype());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
-		assertProjectedPointCrs84Coordinate(coordinate);
+		assertProjectedPointCrs84Envelope(index.indexEnvelope());
 	}
 
 	@Test
@@ -222,12 +186,7 @@ public class JenaGeometryAdapterTest {
 		IndexGeometry envelope = JenaGeometryAdapter.toIndexGeometry(
 				JenaGeometryAdapter.toSourceGeometryLiteral(literal));
 
-		assertEquals("Polygon", envelope.indexGeometry().getGeometryType());
-		assertEquals(1.0, envelope.indexGeometry().getEnvelopeInternal().getMinX(), 0.0);
-		assertEquals(5.0, envelope.indexGeometry().getEnvelopeInternal().getMaxX(), 0.0);
-		assertEquals(2.0, envelope.indexGeometry().getEnvelopeInternal().getMinY(), 0.0);
-		assertEquals(6.0, envelope.indexGeometry().getEnvelopeInternal().getMaxY(), 0.0);
-		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_ENVELOPE, envelope.indexBuildMode());
+		assertEnvelope(envelope, 1.0, 5.0, 2.0, 6.0);
 		assertEquals(GeoConstants.GEO_GML_LITERAL, envelope.sourceGeometryLiteral().datatype());
 	}
 
@@ -238,11 +197,9 @@ public class JenaGeometryAdapterTest {
 
 		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(source);
 
-		assertEquals("Polygon", envelope.indexGeometry().getGeometryType());
 		assertEquals(source.asGeometryWrapper().getXYGeometry().getEnvelopeInternal(),
-				envelope.indexGeometry().getEnvelopeInternal());
+				envelope.indexEnvelope());
 		assertSame(source, envelope.sourceGeometryLiteral());
-		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_ENVELOPE, envelope.indexBuildMode());
 		assertTrue(envelope.isSpatialCandidate());
 	}
 
@@ -253,30 +210,42 @@ public class JenaGeometryAdapterTest {
 
 		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(source);
 
-		assertEquals(1.0, envelope.indexGeometry().getEnvelopeInternal().getMinX(), 0.0);
-		assertEquals(5.0, envelope.indexGeometry().getEnvelopeInternal().getMaxX(), 0.0);
-		assertEquals(2.0, envelope.indexGeometry().getEnvelopeInternal().getMinY(), 0.0);
-		assertEquals(6.0, envelope.indexGeometry().getEnvelopeInternal().getMaxY(), 0.0);
+		assertEnvelope(envelope, 1.0, 5.0, 2.0, 6.0);
 	}
 
 	@Test
-	public void emptyCollectionProducesNonSpatialSentinel() {
-		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION EMPTY");
+	public void everyEmptyGeometryTypeProducesNonSpatialSentinel() {
+		for (String wkt : new String[]{
+				"POINT EMPTY",
+				"LINESTRING EMPTY",
+				"POLYGON EMPTY",
+				"MULTIPOINT EMPTY",
+				"MULTILINESTRING EMPTY",
+				"MULTIPOLYGON EMPTY",
+				"GEOMETRYCOLLECTION EMPTY"}) {
+			IndexGeometry sentinel = IndexGeometry.fromSourceGeometryLiteral(
+					SourceGeometryLiteral.fromWkt(wkt));
 
-		IndexGeometry sentinel = IndexGeometry.fromSourceGeometryLiteral(source);
-
-		assertTrue(sentinel.indexGeometry().isEmpty());
-		assertEquals(IndexGeometry.BUILD_MODE_EMPTY_SENTINEL, sentinel.indexBuildMode());
-		assertFalse(sentinel.isSpatialCandidate());
+			assertTrue(wkt, sentinel.indexEnvelope().isNull());
+			assertFalse(wkt, sentinel.isSpatialCandidate());
+		}
 	}
 
 	@Test
-	public void homogeneousMultiGeometryRetainsCompleteIndexGeometry() {
+	public void homogeneousMultiGeometryUsesCompleteEnvelope() {
 		IndexGeometry multiPoint = IndexGeometry.fromSourceGeometryLiteral(
 				SourceGeometryLiteral.fromWkt("MULTIPOINT((1 2),(5 6))"));
+		IndexGeometry multiLine = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt(
+						"MULTILINESTRING((1 2,3 4),(4 1,5 6))"));
+		IndexGeometry multiPolygon = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt(
+						"MULTIPOLYGON(((1 2,1 3,2 3,2 2,1 2)),"
+								+ "((4 5,4 6,5 6,5 5,4 5)))"));
 
-		assertEquals("MultiPoint", multiPoint.indexGeometry().getGeometryType());
-		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_GEOMETRY, multiPoint.indexBuildMode());
+		assertEnvelope(multiPoint, 1.0, 5.0, 2.0, 6.0);
+		assertEnvelope(multiLine, 1.0, 5.0, 1.0, 6.0);
+		assertEnvelope(multiPolygon, 1.0, 5.0, 2.0, 6.0);
 	}
 
 	@Test
@@ -284,9 +253,7 @@ public class JenaGeometryAdapterTest {
 		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(
 				"<" + EPSG_32634 + "> GEOMETRYCOLLECTION(POINT(799997.80 4589779.63))"));
 
-		assertEquals("Point", envelope.indexGeometry().getGeometryType());
-		assertEquals(IndexGeometry.BUILD_MODE_TRANSFORMED_ENVELOPE, envelope.indexBuildMode());
-		assertProjectedPointCrs84Coordinate(envelope.indexGeometry().getCoordinate());
+		assertProjectedPointCrs84Envelope(envelope.indexEnvelope());
 	}
 
 	@Test
@@ -294,10 +261,28 @@ public class JenaGeometryAdapterTest {
 		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(
 				"<" + EPSG_4326 + "> GEOMETRYCOLLECTION(POINT(50 10),POINT(51 11))"));
 
-		assertEquals(10.0, envelope.indexGeometry().getEnvelopeInternal().getMinX(), 1e-9);
-		assertEquals(11.0, envelope.indexGeometry().getEnvelopeInternal().getMaxX(), 1e-9);
-		assertEquals(50.0, envelope.indexGeometry().getEnvelopeInternal().getMinY(), 1e-9);
-		assertEquals(51.0, envelope.indexGeometry().getEnvelopeInternal().getMaxY(), 1e-9);
+		assertEnvelope(envelope, 10.0, 11.0, 50.0, 51.0);
+	}
+
+	@Test
+	public void degeneratePointAndLineEnvelopesRemainSpatialCandidates() {
+		IndexGeometry point = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("POINT(1 2)"));
+		IndexGeometry verticalLine = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("LINESTRING(3 4,3 8)"));
+
+		assertEnvelope(point, 1.0, 1.0, 2.0, 2.0);
+		assertEnvelope(verticalLine, 3.0, 3.0, 4.0, 8.0);
+		assertTrue(point.isSpatialCandidate());
+		assertTrue(verticalLine.isSpatialCandidate());
+	}
+
+	@Test
+	public void antimeridianSpanningInputUsesConservativeCompleteEnvelope() {
+		IndexGeometry geometry = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("LINESTRING(170 10,-170 12)"));
+
+		assertEnvelope(geometry, -170.0, 170.0, 10.0, 12.0);
 	}
 
 	@Test
@@ -502,8 +487,19 @@ public class JenaGeometryAdapterTest {
 				+ "\"><gml:pos>1 2</gml:pos></gml:Point>";
 	}
 
-	private static void assertProjectedPointCrs84Coordinate(Coordinate coordinate) {
-		assertEquals(PROJECTED_POINT_CRS84_X, coordinate.x, CRS84_COORDINATE_TOLERANCE);
-		assertEquals(PROJECTED_POINT_CRS84_Y, coordinate.y, CRS84_COORDINATE_TOLERANCE);
+	private static void assertProjectedPointCrs84Envelope(Envelope envelope) {
+		assertEquals(PROJECTED_POINT_CRS84_X, envelope.getMinX(), CRS84_COORDINATE_TOLERANCE);
+		assertEquals(PROJECTED_POINT_CRS84_X, envelope.getMaxX(), CRS84_COORDINATE_TOLERANCE);
+		assertEquals(PROJECTED_POINT_CRS84_Y, envelope.getMinY(), CRS84_COORDINATE_TOLERANCE);
+		assertEquals(PROJECTED_POINT_CRS84_Y, envelope.getMaxY(), CRS84_COORDINATE_TOLERANCE);
+	}
+
+	private static void assertEnvelope(IndexGeometry geometry, double minX, double maxX,
+			double minY, double maxY) {
+		Envelope envelope = geometry.indexEnvelope();
+		assertEquals(minX, envelope.getMinX(), 1e-9);
+		assertEquals(maxX, envelope.getMaxX(), 1e-9);
+		assertEquals(minY, envelope.getMinY(), 1e-9);
+		assertEquals(maxY, envelope.getMaxY(), 1e-9);
 	}
 }

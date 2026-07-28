@@ -14,12 +14,9 @@ import org.slf4j.Logger;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -41,7 +38,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private final long boundObject;
 	private EntityGeometries boundSubjectGeometries;
 	private EntityGeometries boundObjectGeometries;
-	private CloseableIterator<CandidateLookup> candidateIterator;
+	private RelationCandidateTraversal candidateIterator;
 	private final Set<EntityPair> emittedEntityPairs = new HashSet<>();
 
 	private boolean boundPairEvaluated;
@@ -77,10 +74,10 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			return false;
 		}
 
-		CloseableIterator<CandidateLookup> candidates = candidateIterator();
+		RelationCandidateTraversal candidates = candidateIterator();
 		while (candidates.hasNext()) {
-			CandidateLookup candidateLookup = candidates.next();
-			CandidateEntity candidate = candidateLookup.candidateEntity;
+			RelationCandidateTraversal.Candidate candidateLookup = candidates.next();
+			CandidateEntity candidate = candidateLookup.candidateEntity();
 			long candidateEntityId = candidate.entityId();
 			EntityPair entityPair = currentEntityPair(candidateEntityId);
 			if (emittedEntityPairs.contains(entityPair)) {
@@ -89,11 +86,11 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			if (boundSubject == 0) {
 				List<SourceGeometryLiteral> candidateSubjectGeometries =
 						candidate.matchingSourceGeometryLiterals();
-				boolean holds = candidateLookup.boundSourceGeometryLiteral.isEmpty()
+				boolean holds = candidateLookup.boundSourceGeometryLiteral().isEmpty()
 						? relationHolds(candidateSubjectGeometries,
 								boundObjectGeometries().sourceGeometryLiterals())
 						: relationHolds(candidateSubjectGeometries,
-								candidateLookup.boundSourceGeometryLiteral.get());
+								candidateLookup.boundSourceGeometryLiteral().get());
 				if (holds
 						&& emittedEntityPairs.add(entityPair)) {
 					subject = candidateEntityId;
@@ -104,10 +101,10 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			} else {
 				List<SourceGeometryLiteral> candidateObjectGeometries =
 						candidate.matchingSourceGeometryLiterals();
-				boolean holds = candidateLookup.boundSourceGeometryLiteral.isEmpty()
+				boolean holds = candidateLookup.boundSourceGeometryLiteral().isEmpty()
 						? relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
 								candidateObjectGeometries)
-						: relationHolds(candidateLookup.boundSourceGeometryLiteral.get(),
+						: relationHolds(candidateLookup.boundSourceGeometryLiteral().get(),
 								candidateObjectGeometries);
 				if (holds
 						&& emittedEntityPairs.add(entityPair)) {
@@ -142,36 +139,18 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		return true;
 	}
 
-	private CloseableIterator<CandidateLookup> candidateIterator() {
+	private RelationCandidateTraversal candidateIterator() {
 		if (candidateIterator == null) {
 			EntityGeometries boundGeometries;
-			CandidateLookupPolicy candidateLookupPolicy;
 			if (boundSubject == 0) {
 				boundGeometries = boundObjectGeometries();
-				candidateLookupPolicy = relation.getCandidateLookupPolicy();
 			} else {
 				boundGeometries = boundSubjectGeometries();
-				candidateLookupPolicy = relation.getInverseCandidateLookupPolicy();
 			}
-			// The exact relation keeps subject/object argument order. Only the candidate policy changes because
-			// the unknown indexed side changes between object-bound and subject-bound queries.
-			candidateIterator = createCandidateIterator(boundGeometries, candidateLookupPolicy);
+			candidateIterator = new RelationCandidateTraversal(parent.indexer, relation.getCandidateLookupPolicy(),
+					boundGeometries.indexGeometries(), logger);
 		}
 		return candidateIterator;
-	}
-
-	private CloseableIterator<CandidateLookup> createCandidateIterator(EntityGeometries boundGeometries,
-			CandidateLookupPolicy candidateLookupPolicy) {
-		if (candidateLookupPolicy == CandidateLookupPolicy.FULL_SCAN) {
-			return new FullScanCandidateIterator();
-		}
-		if (candidateLookupPolicy == CandidateLookupPolicy.DISJOINT
-				&& boundGeometries.requiresFullScanForDisjoint()) {
-			// Collection envelopes cannot safely exclude disjoint sources, and an empty source cannot form a spatial query.
-			// Once one bound source needs every entity, unioning additional candidate sets cannot enlarge the result.
-			return new FullScanCandidateIterator();
-		}
-		return new SourceCandidateIterator(boundGeometries, candidateLookupPolicy);
 	}
 
 	private EntityPair currentEntityPair(long candidateEntityId) {
@@ -231,7 +210,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 					parent.getIndexGeometryFromLiteral((Literal) value, datatype));
 		}
 
-		CloseableIterator<IndexGeometry> iterator = parent.indexer.getGeometriesFor(entityId);
+		CloseableIterator<SourceGeometryLiteral> iterator = parent.indexer.getSourceGeometryLiteralsFor(entityId);
 		if (iterator == null) {
 			throw new PluginException("Unable to create GeoSPARQL geometry iterator for entity id " + entityId);
 		}
@@ -239,11 +218,11 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		return geometriesFromIterator(iterator);
 	}
 
-	private EntityGeometries geometriesFromIterator(CloseableIterator<IndexGeometry> iterator) {
+	private EntityGeometries geometriesFromIterator(CloseableIterator<SourceGeometryLiteral> iterator) {
 		EntityGeometries geometries = new EntityGeometries();
 		try {
 			while (iterator.hasNext()) {
-				geometries.add(iterator.next());
+				geometries.addSource(iterator.next());
 			}
 		} finally {
 			closeIterator(iterator);
@@ -327,120 +306,16 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			indexGeometriesBySource.putIfAbsent(indexGeometry.sourceGeometryLiteral(), indexGeometry);
 		}
 
+		private void addSource(SourceGeometryLiteral sourceGeometryLiteral) {
+			add(IndexGeometry.fromSourceGeometryLiteral(sourceGeometryLiteral));
+		}
+
 		private Set<SourceGeometryLiteral> sourceGeometryLiterals() {
 			return indexGeometriesBySource.keySet();
 		}
 
-		private boolean requiresFullScanForDisjoint() {
-			for (IndexGeometry indexGeometry : indexGeometriesBySource.values()) {
-				if (indexGeometry.isGenericCollectionSource()) {
-					return true;
-				}
-			}
-			return false;
-		}
-	}
-
-	private static final class CandidateLookup {
-		private final CandidateEntity candidateEntity;
-		private final Optional<SourceGeometryLiteral> boundSourceGeometryLiteral;
-
-		private CandidateLookup(CandidateEntity candidateEntity,
-				Optional<SourceGeometryLiteral> boundSourceGeometryLiteral) {
-			this.candidateEntity = candidateEntity;
-			this.boundSourceGeometryLiteral = boundSourceGeometryLiteral;
-		}
-
-		private static CandidateLookup forFullScan(CandidateEntity candidateEntity) {
-			return new CandidateLookup(candidateEntity, Optional.empty());
-		}
-
-		private static CandidateLookup forBoundSource(CandidateEntity candidateEntity,
-				SourceGeometryLiteral boundSourceGeometryLiteral) {
-			return new CandidateLookup(candidateEntity, Optional.of(boundSourceGeometryLiteral));
-		}
-	}
-
-	private final class FullScanCandidateIterator implements CloseableIterator<CandidateLookup> {
-		private final CloseableIterator<CandidateEntity> entities = parent.indexer.getAllEntities();
-
-		@Override
-		public boolean hasNext() {
-			return entities.hasNext();
-		}
-
-		@Override
-		public CandidateLookup next() {
-			return CandidateLookup.forFullScan(entities.next());
-		}
-
-		@Override
-		public void close() {
-			closeIterator(entities);
-		}
-	}
-
-	private final class SourceCandidateIterator implements CloseableIterator<CandidateLookup> {
-		private final CandidateLookupPolicy candidateLookupPolicy;
-		private final Iterator<IndexGeometry> sourceIndexGeometries;
-		private CloseableIterator<CandidateEntity> currentIterator;
-		private SourceGeometryLiteral currentBoundSourceGeometryLiteral;
-		private CandidateLookup next;
-
-		private SourceCandidateIterator(EntityGeometries geometries,
-				CandidateLookupPolicy candidateLookupPolicy) {
-			this.candidateLookupPolicy = candidateLookupPolicy;
-			this.sourceIndexGeometries = geometries.indexGeometriesBySource.values().iterator();
-		}
-
-		@Override
-		public boolean hasNext() {
-			if (next != null) {
-				return true;
-			}
-			next = loadNextCandidate();
-			return next != null;
-		}
-
-		@Override
-		public CandidateLookup next() {
-			if (!hasNext()) {
-				throw new NoSuchElementException("No more candidate lookups.");
-			}
-			CandidateLookup result = next;
-			next = null;
-			return result;
-		}
-
-		@Override
-		public void close() {
-			closeIterator(currentIterator);
-			currentIterator = null;
-			next = null;
-		}
-
-		private CandidateLookup loadNextCandidate() {
-			while (true) {
-				if (currentIterator != null) {
-					if (currentIterator.hasNext()) {
-						return CandidateLookup.forBoundSource(currentIterator.next(),
-								currentBoundSourceGeometryLiteral);
-					}
-					closeIterator(currentIterator);
-					currentIterator = null;
-				}
-
-				if (!sourceIndexGeometries.hasNext()) {
-					return null;
-				}
-					IndexGeometry boundSourceIndexGeometry = sourceIndexGeometries.next();
-					if (!boundSourceIndexGeometry.isSpatialCandidate()) {
-						continue;
-					}
-					currentBoundSourceGeometryLiteral = boundSourceIndexGeometry.sourceGeometryLiteral();
-					currentIterator = parent.indexer.getCandidatesForSource(boundSourceIndexGeometry,
-							candidateLookupPolicy);
-			}
+		private Collection<IndexGeometry> indexGeometries() {
+			return indexGeometriesBySource.values();
 		}
 	}
 }
