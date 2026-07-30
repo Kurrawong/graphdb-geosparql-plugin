@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import org.eclipse.rdf4j.model.IRI;
+import org.locationtech.jts.geom.Dimension;
 
 import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
 
@@ -11,13 +12,13 @@ import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
  * GeoSPARQL property relations exposed by GraphDB.
  *
  * <p>Every non-disjoint relation uses envelope intersection for conservative candidate lookup. Disjoint relations
- * use a full scan because two geometries may be disjoint even when their envelopes intersect. Jena always performs
- * exact predicate evaluation in subject/object argument order.
+ * partition source documents into envelope-proven matches and uncertain candidates that still require exact
+ * evaluation. Jena exact evaluation always preserves subject/object argument order.
  */
 public enum GeoSparqlPropertyRelation {
 	// Simple Features
 	SF_EQUALS(GEO_SF_EQUALS, GEOF_SF_EQUALS),
-	SF_DISJOINT(GEO_SF_DISJOINT, GEOF_SF_DISJOINT, CandidateLookupPolicy.FULL_SCAN),
+	SF_DISJOINT(GEO_SF_DISJOINT, GEOF_SF_DISJOINT, CandidateLookupPolicy.DISJOINT_PARTITIONED),
 	SF_INTERSECTS(GEO_SF_INTERSECTS, GEOF_SF_INTERSECTS),
 	SF_TOUCHES(GEO_SF_TOUCHES, GEOF_SF_TOUCHES),
 	SF_WITHIN(GEO_SF_WITHIN, GEOF_SF_WITHIN),
@@ -27,7 +28,7 @@ public enum GeoSparqlPropertyRelation {
 
 	// Egenhofer
 	EH_EQUALS(GEO_EH_EQUALS, GEOF_EH_EQUALS),
-	EH_DISJOINT(GEO_EH_DISJOINT, GEOF_EH_DISJOINT, CandidateLookupPolicy.FULL_SCAN),
+	EH_DISJOINT(GEO_EH_DISJOINT, GEOF_EH_DISJOINT, CandidateLookupPolicy.DISJOINT_PARTITIONED),
 	EH_MEET(GEO_EH_MEET, GEOF_EH_MEET),
 	EH_OVERLAP(GEO_EH_OVERLAP, GEOF_EH_OVERLAP),
 	EH_COVERS(GEO_EH_COVERS, GEOF_EH_COVERS),
@@ -37,7 +38,7 @@ public enum GeoSparqlPropertyRelation {
 
 	// RCC8
 	RCC8_EQ(GEO_RCC8_EQ, GEOF_RCC8_EQ),
-	RCC8_DC(GEO_RCC8_DC, GEOF_RCC8_DC, CandidateLookupPolicy.FULL_SCAN),
+	RCC8_DC(GEO_RCC8_DC, GEOF_RCC8_DC, CandidateLookupPolicy.DISJOINT_PARTITIONED),
 	RCC8_EC(GEO_RCC8_EC, GEOF_RCC8_EC),
 	RCC8_PO(GEO_RCC8_PO, GEOF_RCC8_PO),
 	RCC8_TPPI(GEO_RCC8_TPPI, GEOF_RCC8_TPPI),
@@ -66,6 +67,33 @@ public enum GeoSparqlPropertyRelation {
 
 	public CandidateLookupPolicy getCandidateLookupPolicy() {
 		return candidateLookupPolicy;
+	}
+
+	/**
+	 * Returns whether two separated, non-empty index envelopes prove this relation for the supplied source dimensions.
+	 *
+	 * <p>Simple Features and Egenhofer disjoint have no dimensional precondition. RCC8 relations apply only to
+	 * area/area pairs, so envelope separation is a definite RCC8 disconnected match only for two area sources.
+	 */
+	boolean envelopeDisjointIsDefiniteMatch(int candidateTopologicalDimension,
+			int boundTopologicalDimension) {
+		if (candidateLookupPolicy != CandidateLookupPolicy.DISJOINT_PARTITIONED) {
+			return false;
+		}
+		return this != RCC8_DC
+				|| candidateTopologicalDimension == Dimension.A
+				&& boundTopologicalDimension == Dimension.A;
+	}
+
+	/**
+	 * Returns whether a non-empty bound source can participate in this relation's disjoint envelope partition.
+	 *
+	 * <p>RCC8 disconnected applies only to area/area pairs. A non-area bound source therefore cannot match any
+	 * candidate and does not need either a definite or uncertain Lucene lookup.
+	 */
+	boolean boundSourceCanParticipateInDisjointPartition(int boundTopologicalDimension) {
+		return candidateLookupPolicy == CandidateLookupPolicy.DISJOINT_PARTITIONED
+				&& (this != RCC8_DC || boundTopologicalDimension == Dimension.A);
 	}
 
 	public boolean evaluate(SourceGeometryLiteral argument1, SourceGeometryLiteral argument2) {

@@ -146,6 +146,17 @@ public class GeoSparqlFullIndexerTest {
 		}
 
 		@Override
+		public CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+				IndexGeometry boundSourceIndexGeometry) {
+			return null;
+		}
+
+		@Override
+		public CloseableIterator<CandidateEntity> getNonSpatialCandidates() {
+			return null;
+		}
+
+		@Override
 		public CloseableIterator<CandidateEntity> getAllEntities() {
 			return null;
 		}

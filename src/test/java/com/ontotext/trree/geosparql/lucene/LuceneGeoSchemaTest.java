@@ -132,6 +132,18 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
+    public void testMissingStoredTopologicalDimensionRequiresReindex() {
+        Document document = currentSchemaDocument(1L, sampleGeometry);
+        document.removeFields(LuceneGeoDocumentSchema.FIELD_SOURCE_TOPOLOGICAL_DIMENSION);
+
+        PluginException exception = assertThrows(PluginException.class,
+                () -> LuceneGeoDocumentSchema.sourceGeometryLiteral(
+                        document, new SourceGeometryLiteralResolver()));
+
+        assertForceReindexMessage(exception);
+    }
+
+    @Test
     public void testMalformedSourceWkbRequiresForceReindex() throws Exception {
         Path malformedDataDir = tmpFolder.getRoot().toPath().resolve("malformed-source-wkb");
         Files.createDirectories(malformedDataDir);
@@ -225,6 +237,20 @@ public class LuceneGeoSchemaTest {
 
         PluginException exception = assertThrows(PluginException.class,
                 () -> indexer.getSourceGeometryLiteralsFor(0));
+
+        assertForceReindexMessage(exception);
+    }
+
+    @Test
+    public void testEnvelopeLayoutWithoutPresenceMarkerRequiresReindex() throws Exception {
+        Path developmentV2DataDir = tmpFolder.getRoot().toPath().resolve("development-v2-without-envelope-marker");
+        Files.createDirectories(developmentV2DataDir);
+        writeEnvelopeLayoutWithoutPresenceMarker(developmentV2DataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
+
+        PluginException exception = assertThrows(PluginException.class,
+                indexer::getNonSpatialCandidates);
 
         assertForceReindexMessage(exception);
     }
@@ -518,6 +544,23 @@ public class LuceneGeoSchemaTest {
                     LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
             commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
                     "doc-values-source-wkb-collection-envelope");
+            writer.setLiveCommitData(commitData.entrySet());
+        }
+    }
+
+    private void writeEnvelopeLayoutWithoutPresenceMarker(Path dataDir) throws Exception {
+        Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
+        Files.createDirectories(indexDir);
+        try (FSDirectory dir = FSDirectory.open(indexDir);
+             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+            Document document = currentSchemaDocument(1L, sampleGeometry);
+            document.removeFields(LuceneGeoDocumentSchema.FIELD_HAS_ENVELOPE);
+            writer.addDocument(document);
+            Map<String, String> commitData = new HashMap<>();
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_KEY,
+                    LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
+                    "prefix-envelope-source-wkb");
             writer.setLiveCommitData(commitData.entrySet());
         }
     }

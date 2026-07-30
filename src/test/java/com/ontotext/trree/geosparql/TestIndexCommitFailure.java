@@ -85,6 +85,17 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		}
 
 		@Override
+		public CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+				IndexGeometry boundSourceIndexGeometry) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public CloseableIterator<CandidateEntity> getNonSpatialCandidates() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
 		public CloseableIterator<CandidateEntity> getAllEntities() {
 			throw new UnsupportedOperationException();
 		}

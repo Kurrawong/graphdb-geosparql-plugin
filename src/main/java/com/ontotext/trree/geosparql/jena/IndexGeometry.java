@@ -9,19 +9,24 @@ import org.locationtech.jts.geom.Envelope;
  * Associates a source geometry literal with its derived Lucene index envelope.
  *
  * <p>The complete source geometry is transformed to CRS84 before its envelope is derived. The envelope is used only
- * for coarse Lucene candidate lookup. Exact GeoSPARQL evaluation uses the source geometry literal, including its
- * datatype and effective source CRS. An empty source has a null envelope and is represented by a non-spatial Lucene
- * document so full scans can still reconstruct it.
+ * for coarse Lucene lookup and conservative envelope-separation proofs. Exact GeoSPARQL evaluation uses the source
+ * geometry literal, including its datatype and effective source CRS. An empty source has a null envelope and is
+ * represented by a non-spatial Lucene document so exact traversal can still reconstruct it.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
 
 	private final SourceGeometryLiteral sourceGeometryLiteral;
 	private final Envelope indexEnvelope;
+	// Cache the bound source dimension derived during index-geometry construction,
+	// so relation traversal does not need to navigate Jena geometry metadata.
+	private final int sourceTopologicalDimension;
 
-	private IndexGeometry(SourceGeometryLiteral sourceGeometryLiteral, Envelope indexEnvelope) {
+	private IndexGeometry(SourceGeometryLiteral sourceGeometryLiteral, Envelope indexEnvelope,
+			int sourceTopologicalDimension) {
 		this.sourceGeometryLiteral = sourceGeometryLiteral;
 		this.indexEnvelope = new Envelope(indexEnvelope);
+		this.sourceTopologicalDimension = sourceTopologicalDimension;
 	}
 
 	public static IndexGeometry fromSourceGeometryLiteral(SourceGeometryLiteral sourceGeometryLiteral) {
@@ -31,7 +36,8 @@ public final class IndexGeometry {
 					? sourceWrapper
 					: sourceWrapper.transform(INDEX_CRS);
 			Geometry transformed = indexWrapper.getXYGeometry();
-			return new IndexGeometry(sourceGeometryLiteral, transformed.getEnvelopeInternal());
+			return new IndexGeometry(sourceGeometryLiteral, transformed.getEnvelopeInternal(),
+					sourceWrapper.getDimensionInfo().getTopological());
 		} catch (JenaGeoSparqlException e) {
 			throw e;
 		} catch (Exception e) {
@@ -50,6 +56,11 @@ public final class IndexGeometry {
 
 	public String indexCrs() {
 		return INDEX_CRS;
+	}
+
+	/** Returns the cached source topological dimension used for candidate classification. */
+	public int sourceTopologicalDimension() {
+		return sourceTopologicalDimension;
 	}
 
 	public boolean isSpatialCandidate() {

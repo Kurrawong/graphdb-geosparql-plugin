@@ -219,7 +219,7 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 	}
 
 	@Test
-	public void fullScanRelationReturnsOneRowWhenMultipleGeometryDocumentsMatchSameEntityPair() throws Exception {
+	public void partitionedDisjointReturnsOneRowWhenMultipleGeometryDocumentsMatchSameEntityPair() throws Exception {
 		executeSparqlUpdateQuery(PREFIXES
 				+ "INSERT DATA {\n"
 				+ "  ex:container a geo:Feature ; geo:hasDefaultGeometry ex:containerGeom .\n"
@@ -239,7 +239,7 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 	}
 
 	@Test
-	public void disjointFullScanRetainsOverlappingEnvelopePairInBothBindingDirections() throws Exception {
+	public void partitionedDisjointRetainsOverlappingEnvelopePairInBothBindingDirections() throws Exception {
 		executeSparqlUpdateQuery(PREFIXES
 				+ "INSERT DATA {\n"
 				+ "  ex:holedArea a geo:Feature ; geo:hasDefaultGeometry ex:holedAreaGeom .\n"

@@ -35,6 +35,19 @@ public interface GeoSparqlIndexer {
 	 */
 	CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry);
 
+	/**
+	 * Returns one lightweight result per source document whose non-empty CRS84 index envelope is absent from the
+	 * conservative envelope-intersection result for the supplied bound source.
+	 *
+	 * @param boundSourceIndexGeometry derived index envelope for one non-empty bound source geometry literal
+	 * @return source-document metadata for envelope-proven disjoint candidates
+	 */
+	CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+			IndexGeometry boundSourceIndexGeometry);
+
+	/** Returns entities represented by non-spatial empty-sentinel source documents for exact evaluation. */
+	CloseableIterator<CandidateEntity> getNonSpatialCandidates();
+
 	/** Returns every indexed entity, including entities represented only by non-spatial empty sentinels. */
 	CloseableIterator<CandidateEntity> getAllEntities();
 

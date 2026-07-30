@@ -3,6 +3,7 @@ package com.ontotext.trree.geosparql.lucene;
 import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.trree.geosparql.CandidateEntity;
 import com.ontotext.trree.geosparql.CloseableIterator;
+import com.ontotext.trree.geosparql.EnvelopeDisjointCandidate;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
 import com.ontotext.trree.geosparql.TestIndexGeometries;
@@ -12,24 +13,39 @@ import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.sdk.PluginException;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FilterDirectoryReader;
+import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.NoMergePolicy;
+import org.apache.lucene.index.NumericDocValues;
+import org.apache.lucene.index.StoredFieldVisitor;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.DocValues;
+import org.apache.lucene.search.ConstantScoreScorer;
+import org.apache.lucene.search.ConstantScoreWeight;
+import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.PrefixQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TwoPhaseIterator;
+import org.apache.lucene.search.Weight;
 import org.apache.lucene.spatial.SpatialStrategy;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
@@ -55,9 +71,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -197,6 +215,8 @@ public class LuceneGeoIndexerTest {
                 doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_DATATYPE));
         assertEquals(IndexGeometry.INDEX_CRS, doc.get(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS));
         assertEquals(IndexGeometry.INDEX_CRS, doc.get(LuceneGeoDocumentSchema.FIELD_INDEX_CRS));
+        assertEquals(LuceneGeoDocumentSchema.HAS_ENVELOPE_VALUE,
+                doc.get(LuceneGeoDocumentSchema.FIELD_HAS_ENVELOPE));
         assertEquals(1, doc.getField(LuceneGeoDocumentSchema.FIELD_SOURCE_GEOMETRY)
                 .binaryValue().bytes[doc.getField(LuceneGeoDocumentSchema.FIELD_SOURCE_GEOMETRY)
                 .binaryValue().offset]);
@@ -209,6 +229,8 @@ public class LuceneGeoIndexerTest {
                     LuceneGeoDocumentSchema.FIELD_SPATIAL_PREFIX);
             assertNotNull(prefixField);
             assertTrue(prefixField.getIndexOptions() != IndexOptions.NONE);
+            assertEquals(DocValuesType.NUMERIC, leaf.reader().getFieldInfos().fieldInfo(
+                    LuceneGeoDocumentSchema.FIELD_SOURCE_TOPOLOGICAL_DIMENSION).getDocValuesType());
             assertNull(leaf.reader().getFieldInfos().fieldInfo("geoData2"));
             assertNull(leaf.reader().getFieldInfos().fieldInfo("geoIndexBuildMode"));
         }
@@ -638,6 +660,173 @@ public class LuceneGeoIndexerTest {
         }
     }
 
+    @Test
+    public void envelopeDisjointCandidateIteratorReadsOnlyLightweightMetadata() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.fromWkt(
+                "POLYGON((0 0,0 2,2 2,2 0,0 0))");
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(7L, geometry));
+            writer.commit();
+
+            DirectoryReader delegate = DirectoryReader.open(directory);
+            IndexReader reader = new NoStoredFieldsDirectoryReader(delegate);
+            assertThrows(AssertionError.class, () -> reader.document(0));
+            LuceneEnvelopeDisjointCandidateIterator iterator =
+                    new LuceneEnvelopeDisjointCandidateIterator(
+                            new IndexSearcher(reader), new MatchAllDocsQuery());
+            try {
+                EnvelopeDisjointCandidate candidate = iterator.next();
+                assertEquals(7L, candidate.entityId());
+                assertEquals(2, candidate.sourceTopologicalDimension());
+                assertFalse(iterator.hasNext());
+                assertEquals(0, reader.getRefCount());
+                assertThrows(NoSuchElementException.class, iterator::next);
+            } finally {
+                iterator.close();
+                iterator.close();
+            }
+            assertEquals(0, reader.getRefCount());
+            assertEquals(0, delegate.getRefCount());
+        }
+    }
+
+    @Test
+    public void envelopeDisjointCandidateIteratorStreamsAcrossLeavesWithoutSearchPages() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.fromWkt("POINT(0 0)");
+        IndexWriterConfig config = new IndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE);
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, config)) {
+            for (long entityId = 1; entityId <= 3; entityId++) {
+                writer.addDocument(currentSchemaDocument(entityId, geometry));
+                writer.commit();
+            }
+
+            IndexReader reader = DirectoryReader.open(directory);
+            assertEquals(3, reader.leaves().size());
+            CountingIndexSearcher searcher = new CountingIndexSearcher(reader);
+            LuceneEnvelopeDisjointCandidateIterator iterator =
+                    new LuceneEnvelopeDisjointCandidateIterator(searcher, new MatchAllDocsQuery());
+            Set<Long> entityIds = new HashSet<>();
+            while (iterator.hasNext()) {
+                entityIds.add(iterator.next().entityId());
+            }
+
+            assertEquals(Set.of(1L, 2L, 3L), entityIds);
+            assertEquals(0, searcher.searchCount());
+            assertEquals(0, reader.getRefCount());
+        }
+    }
+
+    @Test
+    public void envelopeDisjointCandidateIteratorExcludesDeletedDocuments() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.fromWkt("POINT(0 0)");
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(1L, geometry));
+            writer.addDocument(currentSchemaDocument(2L, geometry));
+            writer.addDocument(currentSchemaDocument(3L, geometry));
+            writer.commit();
+            writer.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(2L));
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            LuceneEnvelopeDisjointCandidateIterator iterator =
+                    new LuceneEnvelopeDisjointCandidateIterator(
+                            new IndexSearcher(reader), new MatchAllDocsQuery());
+            Set<Long> entityIds = new HashSet<>();
+            while (iterator.hasNext()) {
+                entityIds.add(iterator.next().entityId());
+            }
+
+            assertEquals(Set.of(1L, 3L), entityIds);
+            assertEquals(0, reader.getRefCount());
+        }
+    }
+
+    @Test
+    public void envelopeDisjointCandidateIteratorAppliesTwoPhaseMatches() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.fromWkt("POINT(0 0)");
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            for (long entityId = 1; entityId <= 4; entityId++) {
+                writer.addDocument(currentSchemaDocument(entityId, geometry));
+            }
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            LuceneEnvelopeDisjointCandidateIterator iterator =
+                    new LuceneEnvelopeDisjointCandidateIterator(
+                            new IndexSearcher(reader), new EvenEntityIdTwoPhaseQuery());
+            Set<Long> entityIds = new HashSet<>();
+            while (iterator.hasNext()) {
+                entityIds.add(iterator.next().entityId());
+            }
+
+            assertEquals(Set.of(2L, 4L), entityIds);
+            assertEquals(0, reader.getRefCount());
+        }
+    }
+
+    @Test
+    public void envelopeDisjointCandidateIteratorClosesReaderOnEarlyClose() throws Exception {
+        IndexGeometry geometry = TestIndexGeometries.fromWkt("POINT(0 0)");
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(1L, geometry));
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            LuceneEnvelopeDisjointCandidateIterator iterator =
+                    new LuceneEnvelopeDisjointCandidateIterator(
+                            new IndexSearcher(reader), new MatchAllDocsQuery());
+            assertTrue(iterator.hasNext());
+
+            iterator.close();
+            iterator.close();
+
+            assertFalse(iterator.hasNext());
+            assertEquals(0, reader.getRefCount());
+        }
+    }
+
+    @Test
+    public void envelopeDisjointCandidateIteratorRejectsMissingNumericDocValues() throws Exception {
+        assertMissingEnvelopeDisjointDocValues(
+                true, false, LuceneGeoDocumentSchema.FIELD_SOURCE_TOPOLOGICAL_DIMENSION);
+        assertMissingEnvelopeDisjointDocValues(
+                false, true, LuceneGeoDocumentSchema.FIELD_ID);
+    }
+
+    private void assertMissingEnvelopeDisjointDocValues(
+            boolean includeEntityId, boolean includeSourceTopologicalDimension, String missingField)
+            throws Exception {
+        try (Directory directory = new ByteBuffersDirectory();
+             IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig())) {
+            Document document = new Document();
+            if (includeEntityId) {
+                document.add(new NumericDocValuesField(LuceneGeoDocumentSchema.FIELD_ID, 7L));
+            }
+            if (includeSourceTopologicalDimension) {
+                document.add(new NumericDocValuesField(
+                        LuceneGeoDocumentSchema.FIELD_SOURCE_TOPOLOGICAL_DIMENSION, 2));
+            }
+            writer.addDocument(document);
+            writer.commit();
+
+            IndexReader reader = DirectoryReader.open(directory);
+            LuceneEnvelopeDisjointCandidateIterator iterator =
+                    new LuceneEnvelopeDisjointCandidateIterator(
+                            new IndexSearcher(reader), new MatchAllDocsQuery());
+
+            PluginException failure = assertThrows(PluginException.class, iterator::hasNext);
+
+            assertTrue(failure.getMessage().contains(missingField));
+            assertTrue(failure.getMessage().contains("full GeoSPARQL reindex"));
+            assertEquals(0, reader.getRefCount());
+        }
+    }
+
     private void assertFullScanReturnsDocumentCount(int documentCount) throws Exception {
         IndexGeometry geometry = TestIndexGeometries.fromWkt("POINT(0 0)");
         try (Directory directory = new ByteBuffersDirectory();
@@ -734,6 +923,54 @@ public class LuceneGeoIndexerTest {
         }
     }
 
+    private static final class EvenEntityIdTwoPhaseQuery extends Query {
+        @Override
+        public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) {
+            return new ConstantScoreWeight(this, boost) {
+                @Override
+                public Scorer scorer(LeafReaderContext context) throws IOException {
+                    NumericDocValues entityIds = DocValues.getNumeric(
+                            context.reader(), LuceneGeoDocumentSchema.FIELD_ID);
+                    TwoPhaseIterator twoPhase = new TwoPhaseIterator(
+                            DocIdSetIterator.all(context.reader().maxDoc())) {
+                        @Override
+                        public boolean matches() throws IOException {
+                            int documentId = approximation().docID();
+                            return entityIds.advanceExact(documentId)
+                                    && entityIds.longValue() % 2 == 0;
+                        }
+
+                        @Override
+                        public float matchCost() {
+                            return 1.0f;
+                        }
+                    };
+                    return new ConstantScoreScorer(this, score(), scoreMode, twoPhase);
+                }
+
+                @Override
+                public boolean isCacheable(LeafReaderContext context) {
+                    return false;
+                }
+            };
+        }
+
+        @Override
+        public String toString(String field) {
+            return "evenEntityIdTwoPhase";
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return sameClassAs(other);
+        }
+
+        @Override
+        public int hashCode() {
+            return classHash();
+        }
+    }
+
     private static final class CountingIndexSearcher extends IndexSearcher {
         private int searchCount;
 
@@ -755,6 +992,50 @@ public class LuceneGeoIndexerTest {
 
         private int searchCount() {
             return searchCount;
+        }
+    }
+
+    private static final class NoStoredFieldsDirectoryReader extends FilterDirectoryReader {
+        private static final SubReaderWrapper NO_STORED_FIELDS = new SubReaderWrapper() {
+            @Override
+            public LeafReader wrap(LeafReader reader) {
+                return new NoStoredFieldsLeafReader(reader);
+            }
+        };
+
+        private NoStoredFieldsDirectoryReader(DirectoryReader reader) throws IOException {
+            super(reader, NO_STORED_FIELDS);
+        }
+
+        @Override
+        protected DirectoryReader doWrapDirectoryReader(DirectoryReader reader) throws IOException {
+            return new NoStoredFieldsDirectoryReader(reader);
+        }
+
+        @Override
+        public CacheHelper getReaderCacheHelper() {
+            return in.getReaderCacheHelper();
+        }
+    }
+
+    private static final class NoStoredFieldsLeafReader extends FilterLeafReader {
+        private NoStoredFieldsLeafReader(LeafReader reader) {
+            super(reader);
+        }
+
+        @Override
+        public void document(int docId, StoredFieldVisitor visitor) {
+            throw new AssertionError("Envelope-disjoint candidates must not load stored fields.");
+        }
+
+        @Override
+        public CacheHelper getCoreCacheHelper() {
+            return in.getCoreCacheHelper();
+        }
+
+        @Override
+        public CacheHelper getReaderCacheHelper() {
+            return in.getReaderCacheHelper();
         }
     }
 

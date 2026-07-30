@@ -95,8 +95,9 @@ public class GeoSparqlRelationIteratorTest {
 		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
 		plugin.indexer = new ScriptedGeoSparqlIndexer(singletonList(polygon),
-				singletonList(emptyCollection), singletonList(emptyCollection),
-				candidateIterator(SUBJECT, singletonList(emptyCollection)));
+				List.of(), List.of());
+		((ScriptedGeoSparqlIndexer) plugin.indexer).nonSpatialCandidates =
+				candidateIterator(SUBJECT, singletonList(emptyCollection));
 
 		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
 				GeoSparqlPropertyRelation.SF_DISJOINT, 0, PREDICATE, OBJECT, entities);
@@ -106,10 +107,37 @@ public class GeoSparqlRelationIteratorTest {
 			assertEquals(OBJECT, iterator.object);
 			assertFalse(iterator.next());
 			ScriptedGeoSparqlIndexer indexer = (ScriptedGeoSparqlIndexer) plugin.indexer;
-			assertEquals(0, indexer.envelopeLookupCount);
-			assertEquals(1, indexer.allEntitiesLookupCount);
+			assertEquals(1, indexer.envelopeLookupCount);
+			assertEquals(1, indexer.nonSpatialLookupCount);
+			assertEquals(0, indexer.allEntitiesLookupCount);
 		} finally {
 			iterator.close();
+		}
+	}
+
+	@Test
+	public void envelopeProvenDisjointMatchNeedsNoCandidateSourceGeometry() throws Exception {
+		IndexGeometry polygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
+		IndexGeometry separatedPoint = indexGeometry("POINT(10 10)");
+
+		FakeEntities entities = new FakeEntities();
+		entities.add(SUBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/separated"));
+		entities.add(OBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/polygon"));
+
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
+		plugin.indexer = new ScriptedGeoSparqlIndexer(singletonList(polygon), List.of(), List.of());
+		((ScriptedGeoSparqlIndexer) plugin.indexer).definiteCandidates = iterator(List.of(
+				new EnvelopeDisjointCandidate(SUBJECT, separatedPoint.sourceTopologicalDimension())));
+
+		GeoSparqlRelationIterator relationIterator = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_DISJOINT, 0, PREDICATE, OBJECT, entities);
+		try {
+			assertTrue(relationIterator.next());
+			assertEquals(SUBJECT, relationIterator.subject);
+			assertEquals(OBJECT, relationIterator.object);
+		} finally {
+			relationIterator.close();
 		}
 	}
 
@@ -171,7 +199,7 @@ public class GeoSparqlRelationIteratorTest {
 	}
 
 	@Test
-	public void boundNonEmptyGenericCollectionUsesOneFullScanForDisjointRelation() throws Exception {
+	public void boundNonEmptyGenericCollectionUsesPartitionedDisjointLookup() throws Exception {
 		IndexGeometry polygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
 		IndexGeometry collection = IndexGeometry.fromSourceGeometryLiteral(
 				SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION(POINT(10 10),POINT(20 20))"));
@@ -193,8 +221,8 @@ public class GeoSparqlRelationIteratorTest {
 			assertTrue(iterator.next());
 			assertFalse(iterator.next());
 			ScriptedGeoSparqlIndexer indexer = (ScriptedGeoSparqlIndexer) plugin.indexer;
-			assertEquals(1, indexer.allEntitiesLookupCount);
-			assertEquals(0, indexer.envelopeLookupCount);
+			assertEquals(0, indexer.allEntitiesLookupCount);
+			assertEquals(2, indexer.envelopeLookupCount);
 		} finally {
 			iterator.close();
 		}
@@ -296,8 +324,11 @@ public class GeoSparqlRelationIteratorTest {
 		private final List<IndexGeometry> firstCandidateGeometries;
 		private final List<IndexGeometry> secondCandidateGeometries;
 		private final CloseableIterator<CandidateEntity> allCandidates;
+		private CloseableIterator<CandidateEntity> nonSpatialCandidates = emptyIterator();
+		private CloseableIterator<EnvelopeDisjointCandidate> definiteCandidates = emptyIterator();
 		private final long candidateEntityId;
 		private int envelopeLookupCount;
+		private int nonSpatialLookupCount;
 		private int allEntitiesLookupCount;
 
 		private ScriptedGeoSparqlIndexer(List<IndexGeometry> boundObjectGeometries,
@@ -348,6 +379,18 @@ public class GeoSparqlRelationIteratorTest {
 						? emptyIterator() : candidateIterator(candidateEntityId, secondCandidateGeometries);
 			}
 			return emptyIterator();
+		}
+
+		@Override
+		public CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+				IndexGeometry boundSourceIndexGeometry) {
+			return definiteCandidates;
+		}
+
+		@Override
+		public CloseableIterator<CandidateEntity> getNonSpatialCandidates() {
+			nonSpatialLookupCount++;
+			return nonSpatialCandidates;
 		}
 
 		@Override

@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.lucene;
 
 import com.ontotext.trree.geosparql.CandidateEntity;
 import com.ontotext.trree.geosparql.CloseableIterator;
+import com.ontotext.trree.geosparql.EnvelopeDisjointCandidate;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
@@ -199,8 +200,37 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getCandidateEntitiesForQuery(new MatchNoDocsQuery("Empty source has no envelope intersections."));
 		}
-		return getCandidateEntitiesForQuery(strategy.makeQuery(
-				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(boundSourceIndexGeometry))));
+		Query envelopeIntersections = strategy.makeQuery(
+				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(boundSourceIndexGeometry)));
+		return getCandidateEntitiesForQuery(envelopeIntersections);
+	}
+
+	@Override
+	public CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+			IndexGeometry boundSourceIndexGeometry) {
+		assertReadableCurrentSchema();
+		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
+			return getEnvelopeDisjointCandidatesForQuery(
+					new MatchNoDocsQuery("Empty source has no envelope-disjoint partition."));
+		}
+		Query envelopeIntersections = strategy.makeQuery(
+				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(boundSourceIndexGeometry)));
+		/*
+		 * Prefix-tree Intersects is conservative for indexed envelopes: approximation may retain false positives,
+		 * but does not omit an envelope that intersects the bound. Its complement therefore contains only
+		 * envelope-separated source documents, which the relation traversal can classify without source payloads.
+		 */
+		Query envelopeDisjoint = new BooleanQuery.Builder()
+				.add(LuceneGeoDocumentSchema.hasEnvelopeQuery(true), BooleanClause.Occur.FILTER)
+				.add(envelopeIntersections, BooleanClause.Occur.MUST_NOT)
+				.build();
+		return getEnvelopeDisjointCandidatesForQuery(envelopeDisjoint);
+	}
+
+	@Override
+	public CloseableIterator<CandidateEntity> getNonSpatialCandidates() {
+		assertReadableCurrentSchema();
+		return getCandidateEntitiesForQuery(LuceneGeoDocumentSchema.hasEnvelopeQuery(false));
 	}
 
 	@Override
@@ -254,6 +284,16 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			return new LuceneCandidateEntityIterator(indexSearcher, query);
 		} catch (IOException e) {
 			throw new PluginException("Unable to execute Lucene query.", e);
+		}
+	}
+
+	private CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidatesForQuery(Query query) {
+		try {
+			IndexReader indexReader = openReader();
+			IndexSearcher indexSearcher = new IndexSearcher(indexReader);
+			return new LuceneEnvelopeDisjointCandidateIterator(indexSearcher, query);
+		} catch (IOException e) {
+			throw new PluginException("Unable to execute envelope-disjoint candidate query.", e);
 		}
 	}
 

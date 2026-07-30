@@ -11,6 +11,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.junit.Before;
 import org.junit.Test;
+import org.locationtech.jts.geom.Dimension;
 import org.locationtech.jts.geom.Envelope;
 
 import static org.junit.Assert.*;
@@ -246,6 +247,17 @@ public class JenaGeometryAdapterTest {
 		assertEnvelope(multiPoint, 1.0, 5.0, 2.0, 6.0);
 		assertEnvelope(multiLine, 1.0, 5.0, 1.0, 6.0);
 		assertEnvelope(multiPolygon, 1.0, 5.0, 2.0, 6.0);
+	}
+
+	@Test
+	public void indexGeometryRetainsSourceTopologicalDimension() {
+		assertEquals(Dimension.P, IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("POINT(1 2)")).sourceTopologicalDimension());
+		assertEquals(Dimension.L, IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("LINESTRING(1 2,3 4)")).sourceTopologicalDimension());
+		assertEquals(Dimension.A, IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt("POLYGON((0 0,0 1,1 1,1 0,0 0))"))
+				.sourceTopologicalDimension());
 	}
 
 	@Test

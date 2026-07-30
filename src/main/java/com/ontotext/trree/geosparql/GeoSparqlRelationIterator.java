@@ -17,17 +17,20 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * Produces statement matches for a GeoSPARQL property relation.
  *
- * <p>With one side bound, Lucene supplies grouped candidate entities and Jena evaluates the relation against their
- * source geometry literal snapshots. Full-scan policies evaluate the complete source sets; spatial lookups evaluate
- * only sources represented by matching Lucene documents. A fully bound pair bypasses candidate lookup.
+ * <p>With one side bound, Lucene supplies either envelope-proven entity ids or grouped uncertain candidates.
+ * Envelope-proven disjoint matches need no source payload; uncertain candidates are evaluated against their source
+ * geometry literal snapshots. The internal empty-bound fallback evaluates complete source sets, and a fully bound
+ * pair bypasses candidate lookup.
  *
- * <p>Multiple source-document hits and repeated bound-geometry lookups may encounter the same pair, so accepted entity
- * pairs are emitted once. Closing the statement iterator also closes the active Lucene reader.
+ * <p>One side is fixed for every candidate traversal, so the candidate entity id uniquely identifies the resulting
+ * entity pair. Repeated source-document hits and bound-source lookups emit that candidate entity once. Closing the
+ * statement iterator also closes the active Lucene reader.
  */
 class GeoSparqlRelationIterator extends StatementIterator {
 	private final GeoSparqlPlugin parent;
@@ -39,7 +42,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private EntityGeometries boundSubjectGeometries;
 	private EntityGeometries boundObjectGeometries;
 	private RelationCandidateTraversal candidateIterator;
-	private final Set<EntityPair> emittedEntityPairs = new HashSet<>();
+	private final Set<Long> emittedCandidateEntityIds = new HashSet<>();
 
 	private boolean boundPairEvaluated;
 
@@ -77,40 +80,43 @@ class GeoSparqlRelationIterator extends StatementIterator {
 		RelationCandidateTraversal candidates = candidateIterator();
 		while (candidates.hasNext()) {
 			RelationCandidateTraversal.Candidate candidateLookup = candidates.next();
-			CandidateEntity candidate = candidateLookup.candidateEntity();
-			long candidateEntityId = candidate.entityId();
-			EntityPair entityPair = currentEntityPair(candidateEntityId);
-			if (emittedEntityPairs.contains(entityPair)) {
+			long candidateEntityId = candidateLookup.entityId();
+			if (emittedCandidateEntityIds.contains(candidateEntityId)) {
 				continue;
 			}
+			if (candidateLookup.matchCertainty()
+					== RelationCandidateTraversal.MatchCertainty.DEFINITE_MATCH) {
+				emittedCandidateEntityIds.add(candidateEntityId);
+				setCurrentMatch(candidateEntityId);
+				return true;
+			}
+			CandidateEntity candidate = candidateLookup.exactCandidateEntity();
+			Optional<SourceGeometryLiteral> boundSourceGeometryLiteral =
+					candidateLookup.boundSourceGeometryLiteral();
 			if (boundSubject == 0) {
 				List<SourceGeometryLiteral> candidateSubjectGeometries =
 						candidate.matchingSourceGeometryLiterals();
-				boolean holds = candidateLookup.boundSourceGeometryLiteral().isEmpty()
+				boolean holds = boundSourceGeometryLiteral.isEmpty()
 						? relationHolds(candidateSubjectGeometries,
 								boundObjectGeometries().sourceGeometryLiterals())
 						: relationHolds(candidateSubjectGeometries,
-								candidateLookup.boundSourceGeometryLiteral().get());
+								boundSourceGeometryLiteral.get());
 				if (holds
-						&& emittedEntityPairs.add(entityPair)) {
-					subject = candidateEntityId;
-					object = boundObject;
-					logMatch();
+						&& emittedCandidateEntityIds.add(candidateEntityId)) {
+					setCurrentMatch(candidateEntityId);
 					return true;
 				}
 			} else {
 				List<SourceGeometryLiteral> candidateObjectGeometries =
 						candidate.matchingSourceGeometryLiterals();
-				boolean holds = candidateLookup.boundSourceGeometryLiteral().isEmpty()
+				boolean holds = boundSourceGeometryLiteral.isEmpty()
 						? relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
 								candidateObjectGeometries)
-						: relationHolds(candidateLookup.boundSourceGeometryLiteral().get(),
+						: relationHolds(boundSourceGeometryLiteral.get(),
 								candidateObjectGeometries);
 				if (holds
-						&& emittedEntityPairs.add(entityPair)) {
-					subject = boundSubject;
-					object = candidateEntityId;
-					logMatch();
+						&& emittedCandidateEntityIds.add(candidateEntityId)) {
+					setCurrentMatch(candidateEntityId);
 					return true;
 				}
 			}
@@ -147,17 +153,21 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			} else {
 				boundGeometries = boundSubjectGeometries();
 			}
-			candidateIterator = new RelationCandidateTraversal(parent.indexer, relation.getCandidateLookupPolicy(),
+			candidateIterator = new RelationCandidateTraversal(parent.indexer, relation,
 					boundGeometries.indexGeometries(), logger);
 		}
 		return candidateIterator;
 	}
 
-	private EntityPair currentEntityPair(long candidateEntityId) {
+	private void setCurrentMatch(long candidateEntityId) {
 		if (boundSubject == 0) {
-			return new EntityPair(candidateEntityId, boundObject);
+			subject = candidateEntityId;
+			object = boundObject;
+		} else {
+			subject = boundSubject;
+			object = candidateEntityId;
 		}
-		return new EntityPair(boundSubject, candidateEntityId);
+		logMatch();
 	}
 
 	private boolean relationHolds(Collection<SourceGeometryLiteral> subjectGeometries,
@@ -258,35 +268,6 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private void logMatch() {
 		if (logger.isDebugEnabled()) {
 			logger.debug("GeoSPARQL relation match: {} -> {}", entities.get(subject), entities.get(object));
-		}
-	}
-
-	private static final class EntityPair {
-		private final long subject;
-		private final long object;
-
-		private EntityPair(long subject, long object) {
-			this.subject = subject;
-			this.object = object;
-		}
-
-		@Override
-		public boolean equals(Object other) {
-			if (this == other) {
-				return true;
-			}
-			if (!(other instanceof EntityPair)) {
-				return false;
-			}
-			EntityPair that = (EntityPair) other;
-			return subject == that.subject && object == that.object;
-		}
-
-		@Override
-		public int hashCode() {
-			int result = Long.hashCode(subject);
-			result = 31 * result + Long.hashCode(object);
-			return result;
 		}
 	}
 

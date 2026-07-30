@@ -8,9 +8,12 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.spatial.SpatialStrategy;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.locationtech.jts.geom.Envelope;
@@ -47,18 +50,22 @@ final class LuceneGeoDocumentSchema {
 	static final String FIELD_SOURCE_COORDINATE_DIMENSION = "geoSourceCoordinateDimension";
 	/** Stored source spatial dimension used with the coordinate dimension to distinguish XYZ from XYM. */
 	static final String FIELD_SOURCE_SPATIAL_DIMENSION = "geoSourceSpatialDimension";
-	/** Stored source topological dimension used to preserve point, line, area, and collection semantics. */
+	/** Stored and doc-valued source topological dimension preserving relation-family applicability. */
 	static final String FIELD_SOURCE_TOPOLOGICAL_DIMENSION = "geoSourceTopologicalDimension";
 	/** Stored CRS URI used to derive the index envelope in geoData1; currently always CRS84. */
 	static final String FIELD_INDEX_CRS = "geoIndexCrs";
+	/** Indexed and stored marker separating spatial envelope documents from non-spatial empty sentinels. */
+	static final String FIELD_HAS_ENVELOPE = "geoHasEnvelope";
+	static final String HAS_ENVELOPE_VALUE = "1";
+	static final String NO_ENVELOPE_VALUE = "0";
 	/** Commit metadata key used for the constant-time index-level schema compatibility check. */
 	static final String COMMIT_SCHEMA_VERSION_KEY = "geosparql.luceneSchemaVersion";
 	/** Commit metadata value written by the final unpublished schema-v2 layout. */
 	static final String COMMIT_SCHEMA_VERSION_VALUE = Integer.toString(SCHEMA_VERSION);
 	/** Commit metadata key distinguishing the final unpublished layout from earlier development-v2 indexes. */
 	static final String COMMIT_SCHEMA_LAYOUT_KEY = "geosparql.luceneSchemaLayout";
-	/** Commit metadata value requiring prefix-tree envelopes and native-CRS source WKB. */
-	static final String COMMIT_SCHEMA_LAYOUT_VALUE = "prefix-envelope-source-wkb";
+	/** Commit metadata value requiring envelope markers, topological-dimension doc values, and native source WKB. */
+	static final String COMMIT_SCHEMA_LAYOUT_VALUE = "prefix-envelope-source-wkb-envelope-marker-topology-dv";
 	static final String SCHEMA_MISMATCH_MESSAGE = "Existing GeoSPARQL Lucene index does not match current schema v2. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
 			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
@@ -98,6 +105,8 @@ final class LuceneGeoDocumentSchema {
 				doc.add(field);
 			}
 		}
+		doc.add(new StringField(FIELD_HAS_ENVELOPE,
+				geometry.isSpatialCandidate() ? HAS_ENVELOPE_VALUE : NO_ENVELOPE_VALUE, Field.Store.YES));
 		// Empty source geometry literals still need an entity-bearing document so full scans can reconstruct
 		// them for exact predicate evaluation. Their sentinel document deliberately has no Lucene spatial fields.
 
@@ -109,6 +118,7 @@ final class LuceneGeoDocumentSchema {
 		doc.add(new StoredField(FIELD_SOURCE_COORDINATE_DIMENSION, dimensions.getCoordinate()));
 		doc.add(new StoredField(FIELD_SOURCE_SPATIAL_DIMENSION, dimensions.getSpatial()));
 		doc.add(new StoredField(FIELD_SOURCE_TOPOLOGICAL_DIMENSION, dimensions.getTopological()));
+		doc.add(new NumericDocValuesField(FIELD_SOURCE_TOPOLOGICAL_DIMENSION, dimensions.getTopological()));
 		doc.add(new StoredField(FIELD_INDEX_CRS, geometry.indexCrs()));
 
 		return doc;
@@ -146,6 +156,7 @@ final class LuceneGeoDocumentSchema {
 				&& numericFieldValue(doc, FIELD_SOURCE_COORDINATE_DIMENSION) != null
 				&& numericFieldValue(doc, FIELD_SOURCE_SPATIAL_DIMENSION) != null
 				&& numericFieldValue(doc, FIELD_SOURCE_TOPOLOGICAL_DIMENSION) != null
+				&& hasValidEnvelopeMarker(doc)
 				&& IndexGeometry.INDEX_CRS.equals(doc.get(FIELD_INDEX_CRS));
 	}
 
@@ -181,6 +192,11 @@ final class LuceneGeoDocumentSchema {
 		return new MatchAllDocsQuery();
 	}
 
+	static Query hasEnvelopeQuery(boolean hasEnvelope) {
+		return new TermQuery(new Term(FIELD_HAS_ENVELOPE,
+				hasEnvelope ? HAS_ENVELOPE_VALUE : NO_ENVELOPE_VALUE));
+	}
+
 	private static DimensionInfo sourceDimensionInfo(Document doc) {
 		Number coordinate = numericFieldValue(doc, FIELD_SOURCE_COORDINATE_DIMENSION);
 		Number spatial = numericFieldValue(doc, FIELD_SOURCE_SPATIAL_DIMENSION);
@@ -193,6 +209,11 @@ final class LuceneGeoDocumentSchema {
 		} catch (RuntimeException e) {
 			throw new PluginException(SCHEMA_MISMATCH_MESSAGE, e);
 		}
+	}
+
+	private static boolean hasValidEnvelopeMarker(Document doc) {
+		String value = doc.get(FIELD_HAS_ENVELOPE);
+		return HAS_ENVELOPE_VALUE.equals(value) || NO_ENVELOPE_VALUE.equals(value);
 	}
 
 	private static Number numericFieldValue(Document doc, String fieldName) {
