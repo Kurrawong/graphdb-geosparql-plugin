@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginException;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.DoublePoint;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
@@ -11,6 +12,8 @@ import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
@@ -36,6 +39,14 @@ final class LuceneGeoDocumentSchema {
 	static final String FIELD_ID = "id";
 	/** Indexed terms for one CRS84 source envelope; absent on empty sentinels. */
 	static final String FIELD_SPATIAL_PREFIX = "geoData1";
+	/** Indexed exact lower X bound used only for safe envelope-containment pruning. */
+	static final String FIELD_ENVELOPE_MIN_X = "geoEnvelopeMinX";
+	/** Indexed exact upper X bound used only for safe envelope-containment pruning. */
+	static final String FIELD_ENVELOPE_MAX_X = "geoEnvelopeMaxX";
+	/** Indexed exact lower Y bound used only for safe envelope-containment pruning. */
+	static final String FIELD_ENVELOPE_MIN_Y = "geoEnvelopeMinY";
+	/** Indexed exact upper Y bound used only for safe envelope-containment pruning. */
+	static final String FIELD_ENVELOPE_MAX_Y = "geoEnvelopeMaxY";
 	/** Stored WKB for the complete native-CRS source geometry used to construct Jena exact-evaluation input. */
 	static final String FIELD_SOURCE_GEOMETRY = "geoData";
 	/** Stored per-document schema number used for defensive validation after the commit-level check. */
@@ -64,8 +75,9 @@ final class LuceneGeoDocumentSchema {
 	static final String COMMIT_SCHEMA_VERSION_VALUE = Integer.toString(SCHEMA_VERSION);
 	/** Commit metadata key distinguishing the final unpublished layout from earlier development-v2 indexes. */
 	static final String COMMIT_SCHEMA_LAYOUT_KEY = "geosparql.luceneSchemaLayout";
-	/** Commit metadata value requiring envelope markers, topological-dimension doc values, and native source WKB. */
-	static final String COMMIT_SCHEMA_LAYOUT_VALUE = "prefix-envelope-source-wkb-envelope-marker-topology-dv";
+	/** Commit metadata value requiring exact envelope bounds in addition to lightweight disjoint metadata. */
+	static final String COMMIT_SCHEMA_LAYOUT_VALUE =
+			"prefix-envelope-source-wkb-envelope-marker-topology-dv-envelope-points";
 	static final String SCHEMA_MISMATCH_MESSAGE = "Existing GeoSPARQL Lucene index does not match current schema v2. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
 			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
@@ -104,6 +116,10 @@ final class LuceneGeoDocumentSchema {
 			for (Field field : strategy.createIndexableFields(shape)) {
 				doc.add(field);
 			}
+			doc.add(new DoublePoint(FIELD_ENVELOPE_MIN_X, envelope.getMinX()));
+			doc.add(new DoublePoint(FIELD_ENVELOPE_MAX_X, envelope.getMaxX()));
+			doc.add(new DoublePoint(FIELD_ENVELOPE_MIN_Y, envelope.getMinY()));
+			doc.add(new DoublePoint(FIELD_ENVELOPE_MAX_Y, envelope.getMaxY()));
 		}
 		doc.add(new StringField(FIELD_HAS_ENVELOPE,
 				geometry.isSpatialCandidate() ? HAS_ENVELOPE_VALUE : NO_ENVELOPE_VALUE, Field.Store.YES));
@@ -195,6 +211,23 @@ final class LuceneGeoDocumentSchema {
 	static Query hasEnvelopeQuery(boolean hasEnvelope) {
 		return new TermQuery(new Term(FIELD_HAS_ENVELOPE,
 				hasEnvelope ? HAS_ENVELOPE_VALUE : NO_ENVELOPE_VALUE));
+	}
+
+	static Query envelopeWithinQuery(Envelope boundEnvelope) {
+		return new BooleanQuery.Builder()
+				.add(DoublePoint.newRangeQuery(FIELD_ENVELOPE_MIN_X,
+						boundEnvelope.getMinX(), Double.POSITIVE_INFINITY),
+						BooleanClause.Occur.FILTER)
+				.add(DoublePoint.newRangeQuery(FIELD_ENVELOPE_MAX_X,
+						Double.NEGATIVE_INFINITY, boundEnvelope.getMaxX()),
+						BooleanClause.Occur.FILTER)
+				.add(DoublePoint.newRangeQuery(FIELD_ENVELOPE_MIN_Y,
+						boundEnvelope.getMinY(), Double.POSITIVE_INFINITY),
+						BooleanClause.Occur.FILTER)
+				.add(DoublePoint.newRangeQuery(FIELD_ENVELOPE_MAX_Y,
+						Double.NEGATIVE_INFINITY, boundEnvelope.getMaxY()),
+						BooleanClause.Occur.FILTER)
+				.build();
 	}
 
 	private static DimensionInfo sourceDimensionInfo(Document doc) {

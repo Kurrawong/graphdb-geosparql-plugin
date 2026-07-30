@@ -36,6 +36,21 @@ public interface GeoSparqlIndexer {
 	CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry);
 
 	/**
+	 * Returns uncertain candidates for one bound source in a partitioned disjoint traversal.
+	 *
+	 * <p>Adapters may safely remove candidates whose exact envelope metadata proves they cannot be disjoint. The
+	 * returned candidates carry complete source payloads. Callers own and must close the iterator. Implementations
+	 * without a definite-non-match proof retain ordinary conservative envelope intersections.
+	 *
+	 * @param boundSourceIndexGeometry derived index envelope for one bound source geometry literal
+	 * @return a closeable iterator over uncertain entity groups and their matching source geometry literal snapshots
+	 */
+	default CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
+			IndexGeometry boundSourceIndexGeometry) {
+		return getEnvelopeIntersections(boundSourceIndexGeometry);
+	}
+
+	/**
 	 * Returns one lightweight result per source document whose non-empty CRS84 index envelope is absent from the
 	 * conservative envelope-intersection result for the supplied bound source.
 	 *

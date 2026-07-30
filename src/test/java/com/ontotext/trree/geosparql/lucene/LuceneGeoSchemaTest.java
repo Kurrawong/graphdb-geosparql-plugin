@@ -256,6 +256,22 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
+    public void testPreviousPartitionedDisjointLayoutWithoutExactEnvelopePointsRequiresReindex()
+            throws Exception {
+        Path developmentV2DataDir = tmpFolder.getRoot().toPath()
+                .resolve("development-v2-without-envelope-points");
+        Files.createDirectories(developmentV2DataDir);
+        writePreviousPartitionedDisjointLayout(developmentV2DataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
+
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getEnvelopeIntersections(sampleGeometry));
+
+        assertForceReindexMessage(exception);
+    }
+
+    @Test
     public void testMarkedCurrentSchemaV2IndexPassesStartupGate() throws Exception {
         Path markedDataDir = tmpFolder.getRoot().toPath().resolve("marked-schema-v2");
         Files.createDirectories(markedDataDir);
@@ -561,6 +577,26 @@ public class LuceneGeoSchemaTest {
                     LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
             commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
                     "prefix-envelope-source-wkb");
+            writer.setLiveCommitData(commitData.entrySet());
+        }
+    }
+
+    private void writePreviousPartitionedDisjointLayout(Path dataDir) throws Exception {
+        Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
+        Files.createDirectories(indexDir);
+        try (FSDirectory dir = FSDirectory.open(indexDir);
+             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+            Document document = currentSchemaDocument(1L, sampleGeometry);
+            document.removeFields(LuceneGeoDocumentSchema.FIELD_ENVELOPE_MIN_X);
+            document.removeFields(LuceneGeoDocumentSchema.FIELD_ENVELOPE_MAX_X);
+            document.removeFields(LuceneGeoDocumentSchema.FIELD_ENVELOPE_MIN_Y);
+            document.removeFields(LuceneGeoDocumentSchema.FIELD_ENVELOPE_MAX_Y);
+            writer.addDocument(document);
+            Map<String, String> commitData = new HashMap<>();
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_KEY,
+                    LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
+                    "prefix-envelope-source-wkb-envelope-marker-topology-dv");
             writer.setLiveCommitData(commitData.entrySet());
         }
     }

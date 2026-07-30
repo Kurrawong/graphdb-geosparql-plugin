@@ -200,9 +200,34 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getCandidateEntitiesForQuery(new MatchNoDocsQuery("Empty source has no envelope intersections."));
 		}
-		Query envelopeIntersections = strategy.makeQuery(
-				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(boundSourceIndexGeometry)));
+		Query envelopeIntersections = envelopeIntersectionsQuery(boundSourceIndexGeometry);
 		return getCandidateEntitiesForQuery(envelopeIntersections);
+	}
+
+	@Override
+	public CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
+			IndexGeometry boundSourceIndexGeometry) {
+		assertReadableCurrentSchema();
+		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
+			return getCandidateEntitiesForQuery(
+					new MatchNoDocsQuery("Empty source has no uncertain disjoint candidates."));
+		}
+		Query envelopeIntersections = envelopeIntersectionsQuery(boundSourceIndexGeometry);
+		if (!boundSourceIndexGeometry.isEnvelopeCoveringRectangle()) {
+			return getCandidateEntitiesForQuery(envelopeIntersections);
+		}
+		/*
+		 * Every source geometry lies inside its exact index envelope. When the bound source fills its own envelope,
+		 * a candidate envelope wholly inside that rectangle proves the source pair cannot be disjoint. The inclusive
+		 * ranges also remove boundary-contained sources: touching the closed bound still makes sfDisjoint,
+		 * ehDisjoint, and rcc8dc false.
+		 */
+		Query uncertain = new BooleanQuery.Builder()
+				.add(envelopeIntersections, BooleanClause.Occur.FILTER)
+				.add(LuceneGeoDocumentSchema.envelopeWithinQuery(
+						boundSourceIndexGeometry.indexEnvelope()), BooleanClause.Occur.MUST_NOT)
+				.build();
+		return getCandidateEntitiesForQuery(uncertain);
 	}
 
 	@Override
@@ -213,8 +238,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			return getEnvelopeDisjointCandidatesForQuery(
 					new MatchNoDocsQuery("Empty source has no envelope-disjoint partition."));
 		}
-		Query envelopeIntersections = strategy.makeQuery(
-				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(boundSourceIndexGeometry)));
+		Query envelopeIntersections = envelopeIntersectionsQuery(boundSourceIndexGeometry);
 		/*
 		 * Prefix-tree Intersects is conservative for indexed envelopes: approximation may retain false positives,
 		 * but does not omit an envelope that intersects the bound. Its complement therefore contains only
@@ -275,6 +299,11 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		Envelope envelope = indexGeometry.indexEnvelope();
 		return ctx.getShapeFactory().rect(
 				envelope.getMinX(), envelope.getMaxX(), envelope.getMinY(), envelope.getMaxY());
+	}
+
+	private Query envelopeIntersectionsQuery(IndexGeometry indexGeometry) {
+		return strategy.makeQuery(
+				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(indexGeometry)));
 	}
 
 	private CloseableIterator<CandidateEntity> getCandidateEntitiesForQuery(Query query) {

@@ -195,6 +195,7 @@ public class LuceneCandidateLookupTest {
 				List.of(geometry("GEOMETRYCOLLECTION EMPTY")));
 		indexer.indexGeometryList(6L, id -> "mixed",
 				List.of(geometry("POINT(2 2)"), geometry("LINESTRING(10 10,12 12)")));
+		indexer.indexGeometryList(7L, id -> "boundary touch", List.of(geometry("POINT(0 2)")));
 		indexer.commit();
 
 		List<EnvelopeDisjointCandidate> definite =
@@ -202,8 +203,10 @@ public class LuceneCandidateLookupTest {
 		assertEquals(Set.of(
 				new EnvelopeDisjointCandidate(3L, 0),
 				new EnvelopeDisjointCandidate(6L, 1)), new HashSet<>(definite));
-		assertArrayEquals(new long[]{1L, 2L, 6L},
+		assertArrayEquals(new long[]{1L, 2L, 6L, 7L},
 				collectEntityIds(indexer.getEnvelopeIntersections(bound)));
+		assertArrayEquals(new long[]{2L},
+				collectEntityIds(indexer.getEnvelopeDisjointUncertainCandidates(bound)));
 		assertArrayEquals(new long[]{4L, 5L},
 				collectEntityIds(indexer.getNonSpatialCandidates()));
 	}
@@ -324,8 +327,8 @@ public class LuceneCandidateLookupTest {
 	}
 
 	@Test
-	public void fullScanKeepsOverlappingEnvelopeDisjointCandidatesDiscoverable() throws Exception {
-		LuceneGeoIndexer indexer = createIndexer("disjoint-full-scan");
+	public void ineligibleHoledBoundKeepsOverlappingEnvelopeDisjointCandidatesUncertain() throws Exception {
+		LuceneGeoIndexer indexer = createIndexer("disjoint-holed-bound");
 		IndexGeometry holedPolygon = geometry(
 				"POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,6 4,6 6,4 6,4 4))");
 		IndexGeometry pointInHole = geometry("POINT(5 5)");
@@ -337,7 +340,8 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "point in hole", List.of(pointInHole));
 		indexer.commit();
 
-		assertArrayEquals(new long[]{1L}, collectEntityIds(indexer.getAllEntities()));
+		assertArrayEquals(new long[]{1L},
+				collectEntityIds(indexer.getEnvelopeDisjointUncertainCandidates(holedPolygon)));
 	}
 
 	@Test

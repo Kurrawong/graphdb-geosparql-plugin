@@ -116,6 +116,32 @@ public class GeoSparqlDisjointDifferentialTest {
 	}
 
 	@Test
+	public void rectangularContainmentPruningMatchesExhaustiveReferenceForAllFamiliesAndBindingDirections()
+			throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new HashMap<>();
+		sources.put(BOUND, geometries("POLYGON((0 0,0 10,10 10,10 0,0 0))"));
+		sources.put(1L, geometries("POINT(5 5)"));
+		sources.put(2L, geometries("POINT(0 5)"));
+		sources.put(3L, geometries("POLYGON((8 8,8 12,12 12,12 8,8 8))"));
+		sources.put(4L, geometries("POLYGON((2 2,2 4,4 4,4 2,2 2))"));
+		sources.put(5L, geometries("POINT(20 20)"));
+		sources.put(6L, geometries("POLYGON((20 20,20 22,22 22,22 20,20 20))"));
+		Fixture fixture = createFixture("rectangular-containment-pruning", sources);
+
+		for (GeoSparqlPropertyRelation relation : List.of(
+				GeoSparqlPropertyRelation.SF_DISJOINT,
+				GeoSparqlPropertyRelation.EH_DISJOINT,
+				GeoSparqlPropertyRelation.RCC8_DC)) {
+			assertEquals(relation + " rectangular object-bound",
+					runReference(fixture, relation, 0, BOUND),
+					runPartitioned(fixture, relation, 0, BOUND));
+			assertEquals(relation + " rectangular subject-bound",
+					runReference(fixture, relation, BOUND, 0),
+					runPartitioned(fixture, relation, BOUND, 0));
+		}
+	}
+
+	@Test
 	public void partitionedTraversalEmitsOneRowWhenEntityMatchesAcrossCandidatePhases() throws Exception {
 		Map<Long, List<IndexGeometry>> sources = new HashMap<>();
 		sources.put(BOUND, geometries(

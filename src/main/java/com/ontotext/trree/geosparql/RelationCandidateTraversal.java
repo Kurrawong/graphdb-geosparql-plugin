@@ -15,7 +15,8 @@ import java.util.Optional;
  *
  * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation. Full-scan traversal returns
  * complete candidate source sets. Partitioned disjoint traversal first returns source documents whose envelopes prove
- * a match, then uncertain envelope intersections, and finally non-spatial empty sentinels.
+ * a match, then exact-evaluates uncertain envelope intersections after removing eligible envelope-contained definite
+ * non-matches, and finally evaluates non-spatial empty sentinels.
  *
  * <p>The traversal owns its active Lucene iterator. It closes every phase before opening the next and closes the
  * active iterator when traversal ends early.
@@ -237,7 +238,9 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 					&& !boundSourceCanParticipateInDisjointPartition(currentBoundIndexGeometry)) {
 				continue;
 			}
-			currentExactCandidates = indexer.getEnvelopeIntersections(currentBoundIndexGeometry);
+			currentExactCandidates = phase == TraversalPhase.UNCERTAIN_CANDIDATES
+					? indexer.getEnvelopeDisjointUncertainCandidates(currentBoundIndexGeometry)
+					: indexer.getEnvelopeIntersections(currentBoundIndexGeometry);
 			return true;
 		}
 		return false;
