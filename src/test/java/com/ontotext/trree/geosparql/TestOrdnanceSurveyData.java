@@ -13,9 +13,11 @@ import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Some tests with Ordnance Survey data.
@@ -24,6 +26,10 @@ import static org.junit.Assert.assertTrue;
  */
 @RunWith(Parameterized.class)
 public class TestOrdnanceSurveyData extends AbstractGeoSparqlPluginTest {
+	private static final Set<String> EXPECTED_RESULTS = Set.of(
+			"http://data.ordnancesurvey.co.uk/id/geometry/41543-6",
+			"http://data.ordnancesurvey.co.uk/id/7000000000041543");
+
 	@Parameterized.Parameters
 	public static Iterable<Object[]> params() {
 		return Arrays.asList(new Object[][]{ {false}, {true} });
@@ -63,13 +69,13 @@ public class TestOrdnanceSurveyData extends AbstractGeoSparqlPluginTest {
 		String query = "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n" +
 				"SELECT *\n" +
 				"WHERE { <http://data.ordnancesurvey.co.uk/id/7000000000041323> geo:rcc8tpp ?f }";
-		List<String> results = new ArrayList<String>();
+		List<String> results = new ArrayList<>();
 		try (TupleQueryResult tqr = connection.prepareTupleQuery(QueryLanguage.SPARQL, query).evaluate()) {
 			while(tqr.hasNext()) {
 				results.add(tqr.next().getValue("f").stringValue());
 			}
 		}
-		assertTrue(results.contains("http://data.ordnancesurvey.co.uk/id/geometry/41543-6"));
-		assertTrue(results.contains("http://data.ordnancesurvey.co.uk/id/7000000000041543"));
+		assertEquals(EXPECTED_RESULTS.size(), results.size());
+		assertEquals(EXPECTED_RESULTS, new HashSet<>(results));
 	}
 }
