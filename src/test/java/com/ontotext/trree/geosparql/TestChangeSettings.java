@@ -25,6 +25,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
@@ -52,9 +53,11 @@ public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
 
     private void assertQuery() throws Exception {
         List<Value> result = executeExampleQuery("1i");
-        assertEquals(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#B"), result.get(0));
-        assertEquals(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#F"), result.get(1));
         assertEquals(2, result.size());
+        assertEquals(Set.of(
+                SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#B"),
+                SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#F")),
+                new HashSet<>(result));
     }
 
     private String getSetting(String settingName) {

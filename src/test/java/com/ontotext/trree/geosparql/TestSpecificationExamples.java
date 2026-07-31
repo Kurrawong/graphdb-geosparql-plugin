@@ -7,7 +7,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Uses sample data and sample queries from Annex B of the GeoSPARQL specification.
@@ -28,17 +30,21 @@ public class TestSpecificationExamples extends AbstractGeoSparqlPluginTest {
 	@Test
 	public void testExample1() throws Exception {
 		List<Value> result = executeExampleQuery("1");
-		Assert.assertEquals(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#B"), result.get(0));
-		Assert.assertEquals(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#F"), result.get(1));
 		Assert.assertEquals(2, result.size());
+		Assert.assertEquals(Set.of(
+				SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#B"),
+				SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#F")),
+				new HashSet<>(result));
 	}
 
 	@Test
 	public void testExample1i() throws Exception {
 		List<Value> result = executeExampleQuery("1i");
-		Assert.assertEquals(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#B"), result.get(0));
-		Assert.assertEquals(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#F"), result.get(1));
 		Assert.assertEquals(2, result.size());
+		Assert.assertEquals(Set.of(
+				SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#B"),
+				SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#F")),
+				new HashSet<>(result));
 	}
 
 	@Test
