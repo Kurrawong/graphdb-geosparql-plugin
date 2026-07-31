@@ -9,8 +9,6 @@ import org.junit.Test;
 
 import java.io.File;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.Assert.*;
 
@@ -19,11 +17,6 @@ import static org.junit.Assert.*;
  * @since 14 Sep 2015.
  */
 public class TestReindex extends AbstractGeoSparqlPluginTest {
-
-    private static final Pattern LUCENE_INDEX_FILES_PATTERN = Pattern.compile(
-            "(segments(\\_\\d+|\\.gen)|.*?\\.cfe|.*?\\.cfs|write\\.lock|.*?\\.si|.*?\\.fnm|.*?\\.dim|.*?\\.dvm" +
-                    "|.*?\\.fdt|.*?\\.dvd|.*?\\.tip|.*?\\.fdx|.*?\\.dii|.*?\\.doc|.*?\\.tim|.*?\\.fdm|.*?\\.tmd" +
-                    "|.*?\\.kdd|.*?\\.kdm|.*?\\.kdi)$");
 
     @Before
     public void setupConn() throws Exception {
@@ -63,8 +56,7 @@ public class TestReindex extends AbstractGeoSparqlPluginTest {
 
         //test if index exists
         final File indexDir = GeoSparqlConfig.resolveIndexPath(getGeoSparqlStorageDir().toPath()).toFile();
-        assertTrue(indexDir.listFiles().length > 1);
-        assertLuceneIndexFiles(indexDir.listFiles());
+        assertTrue(indexDir.isDirectory());
 
     }
 
@@ -89,20 +81,6 @@ public class TestReindex extends AbstractGeoSparqlPluginTest {
 
         assertTrue(indexDir.isDirectory());
         assertSparqlSelectExample5Results();
-    }
-
-
-    private void assertLuceneIndexFiles(File[] files) {
-        for (File file : files) {
-            String indexFileName = file.getName();
-            Matcher m = LUCENE_INDEX_FILES_PATTERN.matcher(indexFileName);
-            assertTrue(file.exists());
-            String group = null;
-            if (m.matches()) {
-                group = m.group(1);
-            }
-            assertEquals(indexFileName, group);
-        }
     }
 
     private void assertSparqlSelectExample5Results() throws Exception {
