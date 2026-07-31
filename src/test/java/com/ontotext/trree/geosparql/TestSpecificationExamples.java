@@ -6,39 +6,19 @@ import org.eclipse.rdf4j.rio.RDFFormat;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
-import java.util.Arrays;
 import java.util.List;
 
 /**
  * Uses sample data and sample queries from Annex B of the GeoSPARQL specification.
  */
-@RunWith(Parameterized.class)
 public class TestSpecificationExamples extends AbstractGeoSparqlPluginTest {
-	@Parameterized.Parameters
-	public static Iterable<Object[]> params() {
-		return Arrays.asList(new Object[][]{{false}, {true}});
-	}
-
-	private boolean forceRebuild;
-
-	public TestSpecificationExamples(boolean forceRebuild) {
-		this.forceRebuild = forceRebuild;
-	}
-
 	@Before
 	public void setupConn() throws Exception {
 		importData("simple_features_geometries.rdf", RDFFormat.RDFXML);
         importData("geosparql-example.rdf", RDFFormat.RDFXML);
 
 		enablePlugin();
-
-		if (forceRebuild) {
-			restartRepositoryAndDeleteIndex();
-			enablePlugin();
-		}
 	}
 
 	private List<Value> executeExampleQuery(String number) throws Exception {
@@ -109,6 +89,15 @@ public class TestSpecificationExamples extends AbstractGeoSparqlPluginTest {
 		 * but that isn't true as the sfOverlaps relation requires geometries of the same
 		 * dimension. Geometry A is 2D (polygon), while E is 1D (a line).
 		 */
+		assertExample5Results();
+
+		restartRepositoryAndDeleteIndex();
+		enablePlugin();
+
+		assertExample5Results();
+	}
+
+	private void assertExample5Results() throws Exception {
 		List<Value> result = executeExampleQuery("5");
         Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#D")));
 		Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#DExactGeom")));
