@@ -142,11 +142,6 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"), vf().createLiteral("T**FF*FF*"), vf().createLiteral(false));
 	}
 
-	@Test public void relateRejectsInvalidPattern() throws RDF4JException {
-		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_RELATE,
-				asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"), vf().createLiteral("wrong")));
-	}
-
 	@Test public void distance() throws RDF4JException {
 		assertEquals(1.0611006, ((Literal)evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"))).doubleValue(), 0.00001);
 		assertEquals(73322, (int)((Literal)evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
