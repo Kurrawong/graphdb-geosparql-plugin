@@ -8,6 +8,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.hamcrest.CoreMatchers;
@@ -285,60 +286,48 @@ public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
     @Test
     public void testThrowPluginExceptionOnInvalidPrecisionAndGEOHASHPrefixTree() {
 		setSetting("prefixTree", "geohash");
-        try {
-			setSetting("precision", "25");
-            fail("Should throw PluginException, which will be wrapped to RepositoryException");
-        } catch (Exception e) {
-            assertThat(e.getMessage(),
-                    CoreMatchers.containsString("GEOHASH prefix tree requires precision values between 1 and " + GeohashPrefixTree.getMaxLevelsPossible()));
-        }
+		RepositoryException exception = assertThrows(RepositoryException.class,
+				() -> setSetting("precision", "25"));
+		assertThat(exception.getMessage(),
+				CoreMatchers.containsString("GEOHASH prefix tree requires precision values between 1 and "
+						+ GeohashPrefixTree.getMaxLevelsPossible()));
     }
 
     @Test
     public void testThrowPluginExceptionOnInvalidPrecisionAndQuadPrefixTree() {
 		setSetting("prefixTree", "quad");
-        try {
-			setSetting("precision", "51");
-            fail("Should throw PluginException, which will be wrapped to RepositoryException");
-        } catch (Exception e) {
-            assertThat(e.getMessage(),
-                    CoreMatchers.containsString("QUAD prefix tree requires precision values between 1 and " + QuadPrefixTree.MAX_LEVELS_POSSIBLE));
-        }
+		RepositoryException exception = assertThrows(RepositoryException.class,
+				() -> setSetting("precision", "51"));
+		assertThat(exception.getMessage(),
+				CoreMatchers.containsString("QUAD prefix tree requires precision values between 1 and "
+						+ QuadPrefixTree.MAX_LEVELS_POSSIBLE));
     }
 
     @Test
     public void testThrowPluginExceptionOnStoredInvalidPrecisionAndGEOHASHPrefixTree() {
 		setSetting("precision", "25");
-        try {
-			setSetting("prefixTree", "geohash");
-            fail("Should throw PluginException, which will be wrapped to RepositoryException");
-        } catch (Exception e) {
-            assertThat(e.getMessage(),
-                    CoreMatchers.containsString("GEOHASH prefix tree requires precision values between 1 and " + GeohashPrefixTree.getMaxLevelsPossible()));
-        }
+		RepositoryException exception = assertThrows(RepositoryException.class,
+				() -> setSetting("prefixTree", "geohash"));
+		assertThat(exception.getMessage(),
+				CoreMatchers.containsString("GEOHASH prefix tree requires precision values between 1 and "
+						+ GeohashPrefixTree.getMaxLevelsPossible()));
     }
 
     @Test
     public void testThrowPluginExceptionOnNegativePrecision() {
-        try {
-			setSetting("precision", "-1");
-            fail("Should throw PluginException, which will be wrapped to RepositoryException");
-        } catch (Exception e) {
-            assertThat(e.getMessage(),
-                    CoreMatchers.containsString("QUAD prefix tree requires precision values between 1 and " + QuadPrefixTree.MAX_LEVELS_POSSIBLE));
-        }
+		RepositoryException exception = assertThrows(RepositoryException.class,
+				() -> setSetting("precision", "-1"));
+		assertThat(exception.getMessage(),
+				CoreMatchers.containsString("QUAD prefix tree requires precision values between 1 and "
+						+ QuadPrefixTree.MAX_LEVELS_POSSIBLE));
     }
 
 	@Test
-	public void shouldProperlySetMultipleSettings() {
-		try {
-			setMultipleSettings("prefixTree", "quad", "precision", "25");
-			setMultipleSettings("prefixTree", "geohash", "precision", "20");
+	public void multipleSettingsUpdatePrefixTreeAndPrecision() throws Exception {
+		setMultipleSettings("prefixTree", "quad", "precision", "25");
+		setMultipleSettings("prefixTree", "geohash", "precision", "20");
 
-			assertSetting("prefixTree", "prefixtree", "geohash");
-			assertSetting("precision", "precision", "20");
-		} catch (Exception e) {
-			fail("Should properly change prefix tree from quad with higher precision to geohash with correct one");
-		}
+		assertSetting("prefixTree", "prefixtree", "geohash");
+		assertSetting("precision", "precision", "20");
 	}
 }

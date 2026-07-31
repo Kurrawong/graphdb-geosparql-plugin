@@ -110,7 +110,6 @@ public class TestSpecificationExamples extends AbstractGeoSparqlPluginTest {
 		 * dimension. Geometry A is 2D (polygon), while E is 1D (a line).
 		 */
 		List<Value> result = executeExampleQuery("5");
-        System.out.println(result.size());
         Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#D")));
 		Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#DExactGeom")));
 		Assert.assertEquals(2, result.size());

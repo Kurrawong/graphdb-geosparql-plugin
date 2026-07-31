@@ -44,7 +44,7 @@ public class TestExtraWithExampleData extends AbstractGeoSparqlPluginTest {
 
 	// Test query that provides the geometry as a literal in a pattern (custom extension)
 	@Test
-	public void testLiteral() throws Exception {
+	public void literalPropertyRelationReturnsExpectedFeatures() throws Exception {
 		List<Value> result = executeSparqlQueryWithResultFromFile("testLiteral", "f");
 		Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#D")));
 		Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#DExactGeom")));
@@ -53,14 +53,14 @@ public class TestExtraWithExampleData extends AbstractGeoSparqlPluginTest {
 
 	// Test disjoint no match using index
 	@Test
-	public void testDisjoint1() throws Exception {
+	public void disjointPropertyRelationReturnsNoMatchForOverlappingGeometry() throws Exception {
 		List<Value> result = executeSparqlQueryWithResultFromFile("testDisjoint1", "f");
 		Assert.assertTrue(result.isEmpty());
 	}
 
 	// Test disjoint match using index
 	@Test
-	public void testDisoint2() throws Exception {
+	public void disjointPropertyRelationReturnsEverySeparatedFeature() throws Exception {
 		List<Value> result = executeSparqlQueryWithResultFromFile("testDisjoint2", "f");
 		Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#B")));
 		Assert.assertTrue(result.contains(SimpleValueFactory.getInstance().createIRI("http://example.org/ApplicationSchema#D")));

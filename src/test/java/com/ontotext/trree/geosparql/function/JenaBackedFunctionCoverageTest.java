@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class JenaBackedFunctionCoverageTest {
@@ -185,9 +186,10 @@ public class JenaBackedFunctionCoverageTest {
 				111195.07973436874, 1e-6);
 	}
 
-	@Test(expected = ValueExprEvaluationException.class)
+	@Test
 	public void relateInvalidPatternThrowsEvaluationException() throws Exception {
-		evaluate(GeoConstants.GEOF_RELATE, wkt("POINT(0 0)"), wkt("POINT(0 0)"), VF.createLiteral("wrong"));
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_RELATE,
+				wkt("POINT(0 0)"), wkt("POINT(0 0)"), VF.createLiteral("wrong")));
 	}
 
 	@Test

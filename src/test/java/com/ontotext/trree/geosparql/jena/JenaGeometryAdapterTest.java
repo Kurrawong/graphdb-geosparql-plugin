@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -311,51 +312,34 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
-	public void collectionCrossesPermitsPointLineButRejectsLinePoint() throws Exception {
-		SourceGeometryLiteral points = SourceGeometryLiteral.fromWkt(
-				"GEOMETRYCOLLECTION(MULTIPOINT((1 0),(1 1)))");
-		SourceGeometryLiteral line = SourceGeometryLiteral.fromWkt("LINESTRING(0 0,2 0)");
+	public void collectionCrossesAppliesToOrderedDimensionPairs() throws Exception {
+		Object[][] cases = {
+				{"point-line",
+						"GEOMETRYCOLLECTION(MULTIPOINT((1 0),(1 1)))",
+						"LINESTRING(0 0,2 0)", true, false},
+				{"point-area",
+						"GEOMETRYCOLLECTION(MULTIPOINT((1 1),(3 3)))",
+						"POLYGON((0 0,0 2,2 2,2 0,0 0))", true, false},
+				{"line-area",
+						"GEOMETRYCOLLECTION(LINESTRING(-1 1,3 1))",
+						"POLYGON((0 0,0 2,2 2,2 0,0 0))", true, false},
+				{"line-line",
+						"GEOMETRYCOLLECTION(LINESTRING(0 0,2 2))",
+						"LINESTRING(0 2,2 0)", true, null}
+		};
 
-		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
-				points, line));
-		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
-				line, points));
-	}
+		for (Object[] testCase : cases) {
+			String label = (String) testCase[0];
+			SourceGeometryLiteral left = SourceGeometryLiteral.fromWkt((String) testCase[1]);
+			SourceGeometryLiteral right = SourceGeometryLiteral.fromWkt((String) testCase[2]);
 
-	@Test
-	public void collectionCrossesPermitsPointAreaButRejectsAreaPoint() throws Exception {
-		SourceGeometryLiteral points = SourceGeometryLiteral.fromWkt(
-				"GEOMETRYCOLLECTION(MULTIPOINT((1 1),(3 3)))");
-		SourceGeometryLiteral area = SourceGeometryLiteral.fromWkt(
-				"POLYGON((0 0,0 2,2 2,2 0,0 0))");
-
-		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
-				points, area));
-		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
-				area, points));
-	}
-
-	@Test
-	public void collectionCrossesPermitsLineAreaButRejectsAreaLine() throws Exception {
-		SourceGeometryLiteral line = SourceGeometryLiteral.fromWkt(
-				"GEOMETRYCOLLECTION(LINESTRING(-1 1,3 1))");
-		SourceGeometryLiteral area = SourceGeometryLiteral.fromWkt(
-				"POLYGON((0 0,0 2,2 2,2 0,0 0))");
-
-		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
-				line, area));
-		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
-				area, line));
-	}
-
-	@Test
-	public void collectionCrossesPermitsLineLine() throws Exception {
-		SourceGeometryLiteral first = SourceGeometryLiteral.fromWkt(
-				"GEOMETRYCOLLECTION(LINESTRING(0 0,2 2))");
-		SourceGeometryLiteral second = SourceGeometryLiteral.fromWkt("LINESTRING(0 2,2 0)");
-
-		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_CROSSES.stringValue(),
-				first, second));
+			assertEquals(label, testCase[3], JenaFunctionEvaluator.evaluateTopological(
+					GeoConstants.GEOF_SF_CROSSES.stringValue(), left, right));
+			if (testCase[4] != null) {
+				assertEquals(label + " reverse", testCase[4], JenaFunctionEvaluator.evaluateTopological(
+						GeoConstants.GEOF_SF_CROSSES.stringValue(), right, left));
+			}
+		}
 	}
 
 	@Test
@@ -475,23 +459,30 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
-	public void rcc8DisconnectedRequiresAreaTopology() throws Exception {
-		SourceGeometryLiteral left = SourceGeometryLiteral.fromWkt("POINT(1 1)");
-		SourceGeometryLiteral right = SourceGeometryLiteral.fromWkt("POINT(2 2)");
+	public void rcc8RelationsRequireAreaTopology() throws Exception {
+		Object[][] cases = {
+				{"disconnected points", "POINT(1 1)", "POINT(2 2)",
+						GeoConstants.GEOF_SF_DISJOINT, GeoConstants.GEOF_RCC8_DC,
+						GeoSparqlPropertyRelation.RCC8_DC},
+				{"externally connected lines", "LINESTRING(0 0, 1 1)", "LINESTRING(1 1, 2 2)",
+						GeoConstants.GEOF_SF_TOUCHES, GeoConstants.GEOF_RCC8_EC,
+						GeoSparqlPropertyRelation.RCC8_EC}
+		};
 
-		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(), left, right));
-		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_RCC8_DC.stringValue(), left, right));
-		assertFalse(GeoSparqlPropertyRelation.RCC8_DC.evaluate(left, right));
-	}
+		for (Object[] testCase : cases) {
+			String label = (String) testCase[0];
+			SourceGeometryLiteral left = SourceGeometryLiteral.fromWkt((String) testCase[1]);
+			SourceGeometryLiteral right = SourceGeometryLiteral.fromWkt((String) testCase[2]);
+			IRI simpleFeaturesFunction = (IRI) testCase[3];
+			IRI rcc8Function = (IRI) testCase[4];
+			GeoSparqlPropertyRelation propertyRelation = (GeoSparqlPropertyRelation) testCase[5];
 
-	@Test
-	public void rcc8ExternallyConnectedRequiresAreaTopology() throws Exception {
-		SourceGeometryLiteral left = SourceGeometryLiteral.fromWkt("LINESTRING(0 0, 1 1)");
-		SourceGeometryLiteral right = SourceGeometryLiteral.fromWkt("LINESTRING(1 1, 2 2)");
-
-		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_TOUCHES.stringValue(), left, right));
-		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_RCC8_EC.stringValue(), left, right));
-		assertFalse(GeoSparqlPropertyRelation.RCC8_EC.evaluate(left, right));
+			assertTrue(label, JenaFunctionEvaluator.evaluateTopological(
+					simpleFeaturesFunction.stringValue(), left, right));
+			assertFalse(label, JenaFunctionEvaluator.evaluateTopological(
+					rcc8Function.stringValue(), left, right));
+			assertFalse(label, propertyRelation.evaluate(left, right));
+		}
 	}
 
 	private static String legacyGmlWithDoubleQuotedNamespaceAndCrs() {

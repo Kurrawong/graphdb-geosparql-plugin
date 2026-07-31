@@ -21,13 +21,11 @@ public class GeoSparqlUtilsTest {
     public TemporaryFolder tmpFolder = new TemporaryFolder();
 
     @Test
-    public void testCanSaveAndRead1() {
-        test(true, GeoSparqlConfig.PrefixTree.QUAD, 10, GeoSparqlConfig.PrefixTree.GEOHASH, 5, true);
-    }
-
-    @Test
-    public void testCanSaveAndRead2() {
-        test(false, GeoSparqlConfig.PrefixTree.GEOHASH, 7, GeoSparqlConfig.PrefixTree.QUAD, 12, false);
+    public void configRoundTripPreservesAllSettings() {
+        assertConfigRoundTrip(true, GeoSparqlConfig.PrefixTree.QUAD, 10,
+                GeoSparqlConfig.PrefixTree.GEOHASH, 5, true);
+        assertConfigRoundTrip(false, GeoSparqlConfig.PrefixTree.GEOHASH, 7,
+                GeoSparqlConfig.PrefixTree.QUAD, 12, false);
     }
 
     @Test
@@ -55,7 +53,7 @@ public class GeoSparqlUtilsTest {
         assertTrue(migrated.isIgnoreErrors());
     }
 
-    private void test(boolean enabled, GeoSparqlConfig.PrefixTree prefixTree, int precision,
+    private void assertConfigRoundTrip(boolean enabled, GeoSparqlConfig.PrefixTree prefixTree, int precision,
                       GeoSparqlConfig.PrefixTree currentPrefixTree, int currentPrecision, boolean ignoreErrors) {
         GeoSparqlConfig config1 = new GeoSparqlConfig();
 

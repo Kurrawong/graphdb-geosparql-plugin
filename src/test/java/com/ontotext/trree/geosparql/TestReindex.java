@@ -33,8 +33,8 @@ public class TestReindex extends AbstractGeoSparqlPluginTest {
         enablePlugin();
     }
 
-    @Test(expected = RuntimeException.class)
-    public void testFailedQueryAfterDeletedIndex() throws Exception {
+    @Test
+    public void queryFailsAfterIndexIsDeleted() throws Exception {
         //test with select query
         assertSparqlSelectExample5Results();
 
@@ -43,11 +43,11 @@ public class TestReindex extends AbstractGeoSparqlPluginTest {
         assertFalse(getGeoSparqlStorageDir().exists());
 
         // select query should fail
-        assertSparqlSelectExample5Results();
+        assertThrows(RuntimeException.class, this::assertSparqlSelectExample5Results);
     }
 
     @Test
-    public void testReindexThroughSparqlPredicate() throws Exception {
+    public void forceReindexPredicateRebuildsDeletedIndex() throws Exception {
         //test with select query
         assertSparqlSelectExample5Results();
 
@@ -69,7 +69,7 @@ public class TestReindex extends AbstractGeoSparqlPluginTest {
     }
 
     @Test
-    public void testNoReindexThroughRepositoryReinit() throws Exception {
+    public void repositoryRestartDoesNotRebuildDeletedIndex() throws Exception {
         FileUtil.deleteDir(getGeoSparqlStorageDir());
         assertTrue(!getGeoSparqlStorageDir().exists());
 

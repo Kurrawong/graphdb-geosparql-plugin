@@ -81,19 +81,19 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		return result;
 	}
 
-	@Test public void unaryOneArg() throws RDF4JException {
+	@Test public void areaFunctionReturnsResultForOneGeometryArgument() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL, "SELECT ?dist WHERE { <u:1> <u:1> ?value . FILTER(<" + GeoConstants.EXT_AREA + ">(?value) = 0)}");
 		assertEquals(1, count(tq.evaluate()));
 	}
 
-	@Test public void unaryTwoArgs() throws RDF4JException {
+	@Test public void areaFunctionTypeErrorsOnExtraArgumentInFilter() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL, "SELECT ?dist WHERE { <u:1> <u:1> ?value . FILTER(<" + GeoConstants.EXT_AREA + ">(?value,?value) = 0)}");
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void binaryGeometryArgs() throws RDF4JException {
+	@Test public void distanceFunctionFiltersGeometryArguments() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createLiteral("POINT(1 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
@@ -106,7 +106,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void binaryRelateGeometryArgs() throws RDF4JException {
+	@Test public void relationFunctionAcceptsLegacyOptimizationArgument() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:3"), vf().createLiteral("POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))", GeoConstants.XMLSCHEMA_OGC_WKT));
@@ -121,19 +121,20 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void binaryOneArg() throws RDF4JException {
+	@Test public void distanceFunctionTypeErrorsOnMissingArgumentInFilter() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createIRI("u:1"));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL, "SELECT ?dist WHERE { <u:1> <u:1> ?value . FILTER(<" + GeoConstants.GEOF_DISTANCE + ">(?value) > 0)}");
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test(expected = ValueExprEvaluationException.class) public void relateOneArg() throws RDF4JException {
-		evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"));
+	@Test public void relateRejectsOneArgument() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)")));
 	}
 
-	@Test(expected = ValueExprEvaluationException.class) public void relateTwoArgs() throws RDF4JException {
-		//uses a different code patrh as oneArg, (AbstractBooleanBinaryFunction throws for < 2 args, or Relate throws for < 3 args)
-		evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"));
+	@Test public void relateRejectsTwoArguments() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)")));
 	}
 
 	@Test public void relateFourArgs() throws RDF4JException {
@@ -141,8 +142,9 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"), vf().createLiteral("T**FF*FF*"), vf().createLiteral(false));
 	}
 
-	@Test(expected = ValueExprEvaluationException.class) public void relateInvalidPattern() throws RDF4JException {
-		evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"), vf().createLiteral("wrong"));
+	@Test public void relateRejectsInvalidPattern() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_RELATE,
+				asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"), vf().createLiteral("wrong")));
 	}
 
 	@Test public void distance() throws RDF4JException {
@@ -153,23 +155,30 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 				GeoSparqlUnits.URI_KILOMETRE)).doubleValue(), 0.00001);
 	}
 
-	@Test(expected = ValueExprEvaluationException.class) public void distanceInvalidUnitOfMeasure() throws RDF4JException {
-		evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"), SimpleValueFactory.getInstance().createIRI("u:unknownMeasure"));
+	@Test public void distanceRejectsUnknownUnitOfMeasure() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_DISTANCE,
+				asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
+				SimpleValueFactory.getInstance().createIRI("u:unknownMeasure")));
 	}
 
-	@Test(expected = ValueExprEvaluationException.class) public void distanceUnitOfMeasureNotAnUri() throws RDF4JException {
-		evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"), vf().createLiteral("not_a_measure"));
+	@Test public void distanceRejectsLiteralUnitOfMeasure() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_DISTANCE,
+				asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
+				vf().createLiteral("not_a_measure")));
 	}
 
-	@Test(expected = ValueExprEvaluationException.class) public void distanceUnitOfMeasureFourArgs() throws RDF4JException {
-		evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"), GeoSparqlUnits.URI_METRE, vf().createLiteral(""));
+	@Test public void distanceRejectsFourthArgument() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_DISTANCE,
+				asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
+				GeoSparqlUnits.URI_METRE, vf().createLiteral("")));
 	}
 
-	@Test(expected = ValueExprEvaluationException.class) public void distanceInvalidGeometry() throws RDF4JException {
-		evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(200 200)"), asLiteral("POINT(300 300)"), GeoSparqlUnits.URI_METRE);
+	@Test public void distanceRejectsCoordinatesOutsideCrsDomain() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_DISTANCE,
+				asLiteral("POINT(200 200)"), asLiteral("POINT(300 300)"), GeoSparqlUnits.URI_METRE));
 	}
 
-	@Test public void binaryThreeArgs() throws RDF4JException {
+	@Test public void distanceFunctionAcceptsUnitArgumentInFilter() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createLiteral("POINT(1 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL, "SELECT ?value1 ?value2 WHERE { <u:1> <u:1> ?value1 . <u:1> <u:2> ?value2 . "
@@ -177,7 +186,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(1, count(tq.evaluate()));
 	}
 
-	@Test public void binaryNonGeometryArgs() throws RDF4JException {
+	@Test public void distanceFunctionTypeErrorsOnNonGeometryLiteral() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("AAP"));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createLiteral("POINT(1 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
@@ -186,7 +195,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void binaryNonLiterals() throws RDF4JException {
+	@Test public void distanceFunctionTypeErrorsOnIriArguments() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createIRI("u:1"));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createIRI("u:1"));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
@@ -195,7 +204,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void geomDouble() throws RDF4JException {
+	@Test public void bufferFunctionAcceptsLexicalDoubleArgument() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
 				"SELECT ?value1 ?value2 WHERE { <u:1> <u:1> ?value1 . " +
@@ -203,7 +212,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(1, count(tq.evaluate()));
 	}
 
-	@Test public void geomDoubleOneArg() throws RDF4JException {
+	@Test public void bufferFunctionTypeErrorsOnMissingDistance() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
 				"SELECT ?value1 ?value2 WHERE { <u:1> <u:1> ?value1 . " +
@@ -211,7 +220,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void geomDoubleNonDouble1() throws RDF4JException {
+	@Test public void bufferFunctionTypeErrorsOnIriDistance() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createIRI("u:1"));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
@@ -220,7 +229,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void geomDoubleNonDouble2() throws RDF4JException {
+	@Test public void bufferFunctionTypeErrorsOnNonNumericDistance() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
 				"SELECT ?value1 ?value2 WHERE { <u:1> <u:1> ?value1 . " +
@@ -259,7 +268,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_TOUCHES, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
 	}
 
-	@Test public void invalidGeos() throws RDF4JException {
+	@Test public void invalidGeometriesReportValidityAndRejectDifference() throws RDF4JException {
 		Literal invalidGeo = asLiteral("POLYGON((2 2, 3 3, 3 2, 2 3, 2 2))");
 		Literal validGeo = asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))");
 		assertFalse(((Literal)evaluate(GeoConstants.EXT_IS_VALID, invalidGeo)).booleanValue());
@@ -270,21 +279,16 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	}
 
 	private void assertDifferenceThrows(Literal geo1, Literal geo2) {
-		ValueExprEvaluationException exc = null;
-		try {
-			evaluate(GeoConstants.GEOF_DIFFERENCE, geo1, geo2);
-		} catch (ValueExprEvaluationException e) {
-			exc = e;
-		}
-		assertNotNull(exc);
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_DIFFERENCE, geo1, geo2));
 	}
 
-	@Test public void isSimple() throws RDF4JException {
+	@Test public void isSimpleFunctionEvaluatesThroughSparql() throws RDF4JException {
 		assertTrue(conn().prepareBooleanQuery(QueryLanguage.SPARQL, "ASK WHERE { FILTER(<" + GeoConstants.GEO_IS_SIMPLE + ">(\"POINT(1 1)\"))}").evaluate());
 		assertFalse(conn().prepareBooleanQuery(QueryLanguage.SPARQL, "ASK WHERE { FILTER(<" + GeoConstants.GEO_IS_SIMPLE + ">(\"LINESTRING(1 1, 3 1, 2 2, 2 0)\"))}").evaluate());
 	}
 
-	@Test public void isValid() throws RDF4JException {
+	@Test public void isValidFunctionEvaluatesThroughSparql() throws RDF4JException {
 		assertTrue(conn().prepareBooleanQuery(QueryLanguage.SPARQL, "ASK WHERE { FILTER(<" + GeoConstants.EXT_IS_VALID + ">(\"POINT(1 1)\"))}").evaluate());
 		assertTrue(conn().prepareBooleanQuery(QueryLanguage.SPARQL, "ASK WHERE { FILTER(<" + GeoConstants.EXT_IS_VALID + ">(\"LINESTRING(1 1, 3 1, 2 2, 2 0)\"))}").evaluate());
 		assertTrue(conn().prepareBooleanQuery(QueryLanguage.SPARQL, "ASK WHERE { FILTER(<" + GeoConstants.EXT_IS_VALID + ">(\"POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))\"))}").evaluate());
@@ -294,7 +298,7 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 				"ASK WHERE { FILTER(<" + GeoConstants.EXT_IS_VALID + ">(\"NOT A GEO\"))}").evaluate());
 	}
 
-	@Test public void dimension() throws RDF4JException {
+	@Test public void dimensionFunctionEvaluatesThroughSparql() throws RDF4JException {
 		assertTrue(conn().prepareBooleanQuery(QueryLanguage.SPARQL, "ASK WHERE { FILTER(<" + GeoConstants.GEO_DIMENSION + ">(\"POINT(1 1)\") = 0)}").evaluate());
 		assertTrue(conn().prepareBooleanQuery(QueryLanguage.SPARQL, "ASK WHERE { FILTER(<" + GeoConstants.GEO_DIMENSION + ">(\"LINESTRING(1 1, 3 1, 2 2, 2 0)\") = 1)}")
 				.evaluate());
