@@ -1052,7 +1052,7 @@ public class LuceneGeoIndexerTest {
     }
 
     private void assertForceReindexMessage(PluginException exception) {
-        assertTrue(exception.getMessage().contains("current schema v2"));
+        assertTrue(exception.getMessage().contains("required schema v2 layout"));
         assertTrue(exception.getMessage().contains("force-reindex"));
     }
 

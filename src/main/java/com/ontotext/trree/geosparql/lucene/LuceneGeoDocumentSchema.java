@@ -33,7 +33,7 @@ import java.util.Map;
  * Lucene GeoSPARQL document schema v2.
  */
 final class LuceneGeoDocumentSchema {
-	/** Per-document schema number; schema v2 remains unpublished and is rebuilt after incompatible iterations. */
+	/** Per-document GeoSPARQL Lucene schema version. */
 	static final int SCHEMA_VERSION = 2;
 	/** GraphDB entity id, stored for reconstruction and indexed/doc-valued for lookup and grouping. */
 	static final String FIELD_ID = "id";
@@ -71,14 +71,15 @@ final class LuceneGeoDocumentSchema {
 	static final String NO_ENVELOPE_VALUE = "0";
 	/** Commit metadata key used for the constant-time index-level schema compatibility check. */
 	static final String COMMIT_SCHEMA_VERSION_KEY = "geosparql.luceneSchemaVersion";
-	/** Commit metadata value written by the final unpublished schema-v2 layout. */
+	/** Commit metadata value for the required schema version. */
 	static final String COMMIT_SCHEMA_VERSION_VALUE = Integer.toString(SCHEMA_VERSION);
-	/** Commit metadata key distinguishing the final unpublished layout from earlier development-v2 indexes. */
+	/** Commit metadata key identifying the concrete field layout within the schema version. */
 	static final String COMMIT_SCHEMA_LAYOUT_KEY = "geosparql.luceneSchemaLayout";
 	/** Commit metadata value requiring exact envelope bounds in addition to lightweight disjoint metadata. */
 	static final String COMMIT_SCHEMA_LAYOUT_VALUE =
 			"prefix-envelope-source-wkb-envelope-marker-topology-dv-envelope-points";
-	static final String SCHEMA_MISMATCH_MESSAGE = "Existing GeoSPARQL Lucene index does not match current schema v2. "
+	static final String SCHEMA_MISMATCH_MESSAGE =
+			"Existing GeoSPARQL Lucene index does not match the required schema v2 layout. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
 			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
 

@@ -214,12 +214,12 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
-    public void testDevelopmentV2IndexMissingFinalLayoutMarkerRequiresReindex() throws Exception {
-        Path developmentV2DataDir = tmpFolder.getRoot().toPath().resolve("development-v2-marker");
-        Files.createDirectories(developmentV2DataDir);
-        writeDevelopmentV2IndexWithoutLayoutMarker(developmentV2DataDir);
+    public void testSchemaVersionMarkerWithoutLayoutMarkerRequiresReindex() throws Exception {
+        Path missingLayoutMarkerDataDir = tmpFolder.getRoot().toPath().resolve("missing-layout-marker");
+        Files.createDirectories(missingLayoutMarkerDataDir);
+        writeIndexWithVersionMarkerWithoutLayoutMarker(missingLayoutMarkerDataDir);
 
-        LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
+        LuceneGeoIndexer indexer = createIndexer(missingLayoutMarkerDataDir.toFile());
 
         PluginException exception = assertThrows(PluginException.class,
                 () -> indexer.getSourceGeometryLiteralsFor(0));
@@ -228,12 +228,13 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
-    public void testEarlierDevelopmentV2CollectionEnvelopeLayoutRequiresReindex() throws Exception {
-        Path developmentV2DataDir = tmpFolder.getRoot().toPath().resolve("development-v2-collection-envelope");
-        Files.createDirectories(developmentV2DataDir);
-        writeEarlierDevelopmentV2CollectionEnvelopeLayout(developmentV2DataDir);
+    public void testMismatchedCollectionEnvelopeLayoutRequiresReindex() throws Exception {
+        Path mismatchedLayoutDataDir = tmpFolder.getRoot().toPath()
+                .resolve("mismatched-collection-envelope-layout");
+        Files.createDirectories(mismatchedLayoutDataDir);
+        writeIndexWithMismatchedCollectionEnvelopeLayout(mismatchedLayoutDataDir);
 
-        LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
+        LuceneGeoIndexer indexer = createIndexer(mismatchedLayoutDataDir.toFile());
 
         PluginException exception = assertThrows(PluginException.class,
                 () -> indexer.getSourceGeometryLiteralsFor(0));
@@ -243,11 +244,12 @@ public class LuceneGeoSchemaTest {
 
     @Test
     public void testEnvelopeLayoutWithoutPresenceMarkerRequiresReindex() throws Exception {
-        Path developmentV2DataDir = tmpFolder.getRoot().toPath().resolve("development-v2-without-envelope-marker");
-        Files.createDirectories(developmentV2DataDir);
-        writeEnvelopeLayoutWithoutPresenceMarker(developmentV2DataDir);
+        Path missingEnvelopeMarkerDataDir = tmpFolder.getRoot().toPath()
+                .resolve("schema-layout-without-envelope-marker");
+        Files.createDirectories(missingEnvelopeMarkerDataDir);
+        writeEnvelopeLayoutWithoutPresenceMarker(missingEnvelopeMarkerDataDir);
 
-        LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
+        LuceneGeoIndexer indexer = createIndexer(missingEnvelopeMarkerDataDir.toFile());
 
         PluginException exception = assertThrows(PluginException.class,
                 indexer::getNonSpatialCandidates);
@@ -256,14 +258,14 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
-    public void testPreviousPartitionedDisjointLayoutWithoutExactEnvelopePointsRequiresReindex()
+    public void testSchemaLayoutWithoutExactEnvelopePointsRequiresReindex()
             throws Exception {
-        Path developmentV2DataDir = tmpFolder.getRoot().toPath()
-                .resolve("development-v2-without-envelope-points");
-        Files.createDirectories(developmentV2DataDir);
-        writePreviousPartitionedDisjointLayout(developmentV2DataDir);
+        Path missingEnvelopePointsDataDir = tmpFolder.getRoot().toPath()
+                .resolve("schema-layout-without-envelope-points");
+        Files.createDirectories(missingEnvelopePointsDataDir);
+        writeSchemaLayoutWithoutExactEnvelopePoints(missingEnvelopePointsDataDir);
 
-        LuceneGeoIndexer indexer = createIndexer(developmentV2DataDir.toFile());
+        LuceneGeoIndexer indexer = createIndexer(missingEnvelopePointsDataDir.toFile());
 
         PluginException exception = assertThrows(PluginException.class,
                 () -> indexer.getEnvelopeIntersections(sampleGeometry));
@@ -465,7 +467,7 @@ public class LuceneGeoSchemaTest {
     }
 
     private void assertForceReindexMessage(PluginException exception) {
-        assertTrue(exception.getMessage().contains("current schema v2"));
+        assertTrue(exception.getMessage().contains("required schema v2 layout"));
         assertTrue(exception.getMessage().contains("force-reindex"));
     }
 
@@ -535,7 +537,7 @@ public class LuceneGeoSchemaTest {
         }
     }
 
-    private void writeDevelopmentV2IndexWithoutLayoutMarker(Path dataDir) throws Exception {
+    private void writeIndexWithVersionMarkerWithoutLayoutMarker(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
         try (FSDirectory dir = FSDirectory.open(indexDir);
@@ -547,7 +549,7 @@ public class LuceneGeoSchemaTest {
         }
     }
 
-    private void writeEarlierDevelopmentV2CollectionEnvelopeLayout(Path dataDir) throws Exception {
+    private void writeIndexWithMismatchedCollectionEnvelopeLayout(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
         try (FSDirectory dir = FSDirectory.open(indexDir);
@@ -581,7 +583,7 @@ public class LuceneGeoSchemaTest {
         }
     }
 
-    private void writePreviousPartitionedDisjointLayout(Path dataDir) throws Exception {
+    private void writeSchemaLayoutWithoutExactEnvelopePoints(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
         Files.createDirectories(indexDir);
         try (FSDirectory dir = FSDirectory.open(indexDir);
