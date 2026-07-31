@@ -1,8 +1,14 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.OwlimSchemaRepository;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.MultiTerms;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
+import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.util.BytesRef;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.query.TupleQuery;
@@ -17,11 +23,12 @@ import org.junit.Test;
 
 import java.io.FileReader;
 import java.io.IOException;
-import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Set;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
@@ -31,6 +38,8 @@ import static org.junit.Assert.*;
  * full indexing operation.
  */
 public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
+    private static final String SPATIAL_PREFIX_FIELD = "geoData1";
+
     @Before
     public void setupConn() throws Exception {
         importData("simple_features_geometries.rdf", RDFFormat.RDFXML);
@@ -93,233 +102,148 @@ public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
 		}
 	}
 
-    private long getIndexSizeOnDisk() throws IOException {
-        Path indexDir = Paths.get(((OwlimSchemaRepository)((SailRepository)repository).getSail()).getStorageFolder(), "GeoSPARQL", "v3", "index");
-        AtomicLong size = new AtomicLong(0);
-        if (Files.isDirectory(indexDir)) {
-            Files.walkFileTree(indexDir, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    size.addAndGet(Files.size(file));
-                    return super.visitFile(file, attrs);
-                }
-            });
+    private void assertPrefixTreeSettings(String requested, String current, boolean persisted) throws IOException {
+        assertSetting("prefixTree", persisted ? "prefixtree" : null, requested);
+        assertSetting("currentPrefixTree", persisted ? "prefixtree.current" : null, current);
+    }
+
+    private void assertPrecisionSettings(String requested, String current, boolean persisted) throws IOException {
+        assertSetting("precision", persisted ? "precision" : null, requested);
+        assertSetting("currentPrecision", persisted ? "precision.current" : null, current);
+    }
+
+    private Set<BytesRef> readSpatialTerms() throws IOException {
+        Path indexPath = GeoSparqlConfig.resolveIndexPath(getGeoSparqlStorageDir().toPath());
+        Set<BytesRef> result = new LinkedHashSet<>();
+        try (FSDirectory directory = FSDirectory.open(indexPath);
+                DirectoryReader reader = DirectoryReader.open(directory)) {
+            Terms terms = MultiTerms.getTerms(reader, SPATIAL_PREFIX_FIELD);
+            assertNotNull("The index must contain spatial prefix terms", terms);
+            TermsEnum termsIterator = terms.iterator();
+            for (BytesRef term = termsIterator.next(); term != null; term = termsIterator.next()) {
+                result.add(BytesRef.deepCopyOf(term));
+            }
         }
-
-        return size.get();
+        assertFalse("The index must contain spatial prefix terms", result.isEmpty());
+        return result;
     }
 
     @Test
-    public void testDefaultQuadPrefixTree() throws Exception {
-        // Initially no config file exists so no checks there
-        assertSetting("prefixTree", null, "quad");
-        assertSetting("currentPrefixTree", null, "quad");
+    public void untouchedDefaultsActivateAndPersistWhenPluginIsEnabled() throws Exception {
+        assertPrefixTreeSettings("quad", "quad", false);
+        assertPrecisionSettings("11", "11", false);
 
-        // Enabling forces indexing and saving the settings to file
         enablePlugin();
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
+        assertPrefixTreeSettings("quad", "quad", true);
+        assertPrecisionSettings("11", "11", true);
+        readSpatialTerms();
 
         restartRepository();
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        setSetting("prefixTree", "geohash");
-        assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        restartRepository();
-        assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
+        assertPrefixTreeSettings("quad", "quad", true);
+        assertPrecisionSettings("11", "11", true);
     }
 
     @Test
-    public void testSetGeohashPrefixTree() throws Exception {
-        // Initially no config file exists so no checks there
-        assertSetting("prefixTree", null, "quad");
-        assertSetting("currentPrefixTree", null, "quad");
+    public void prefixTreeChangesActivateOnIndexBuildAndPersistAcrossRestart() throws Exception {
+        assertPrefixTreeSettings("quad", "quad", false);
 
-        // Setting tree to geohash, only prefixTree should be affected. Settings are written to file.
         setSetting("prefixTree", "geohash");
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
+        assertPrefixTreeSettings("geohash", "quad", true);
 
-        // Enable plugin forces reindex so currentPrefixTree is updated
         enablePlugin();
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "geohash");
+        assertPrefixTreeSettings("geohash", "geohash", true);
+        Set<BytesRef> geohashTerms = readSpatialTerms();
 
         restartRepository();
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "geohash");
+        assertPrefixTreeSettings("geohash", "geohash", true);
 
         setSetting("prefixTree", "quad");
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "geohash");
+        assertPrefixTreeSettings("quad", "geohash", true);
 
         restartRepository();
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "geohash");
-    }
+        assertPrefixTreeSettings("quad", "geohash", true);
+        assertEquals("A pending prefix-tree change must not alter the existing index",
+                geohashTerms, readSpatialTerms());
 
-    @Test
-    public void testSetQuadPrefixTree() throws Exception {
-        // Initially no config file exists so no checks there
-        assertSetting("prefixTree", null, "quad");
-        assertSetting("currentPrefixTree", null, "quad");
-
-        // Setting tree to quad, settings are written to file.
-        setSetting("prefixTree", "quad");
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        enablePlugin();
-        assertQuery();
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        restartRepository();
-        assertQuery();
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        setSetting("prefixTree", "geohash");
-        assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        restartRepository();
-        assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-    }
-
-    @Test
-    public void testChangeTreeAndRebuild() throws Exception {
-        // Initially no config file exists so no checks there
-        assertSetting("prefixTree", null, "quad");
-        assertSetting("currentPrefixTree", null, "quad");
-
-        setSetting("prefixTree", "quad");
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        enablePlugin();
-        assertQuery();
-        assertSetting("prefixTree", "prefixtree", "quad");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
-
-        long sizeWithQuad = getIndexSizeOnDisk();
-
-        setSetting("prefixTree", "geohash");
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "quad");
         forceReindex();
-
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "geohash");
+        assertPrefixTreeSettings("quad", "quad", true);
+        assertNotEquals("Rebuilding with a different prefix tree must change the spatial terms",
+                geohashTerms, readSpatialTerms());
 
         restartRepository();
         assertQuery();
-        assertSetting("prefixTree", "prefixtree", "geohash");
-        assertSetting("currentPrefixTree", "prefixtree.current", "geohash");
-
-        long sizeWithGeohash = getIndexSizeOnDisk();
-
-        assertTrue("quad index size should be smaller than geohash index size",
-                sizeWithQuad < sizeWithGeohash);
+        assertPrefixTreeSettings("quad", "quad", true);
     }
 
     @Test
-    public void testSetPrecision() throws Exception {
-        // This test verifies the default precision and that it can be changed
-
-        // Initially no config file exists so no checks there
-        assertSetting("precision", null, "11");
-        assertSetting("currentPrecision", null, "11");
+    public void precisionChangesActivateOnIndexBuildAndPersistAcrossRestart() throws Exception {
+        assertPrecisionSettings("11", "11", false);
 
         setSetting("precision", "20");
-        assertSetting("precision", "precision", "20");
-        assertSetting("currentPrecision", "precision.current", "11");
+        assertPrecisionSettings("20", "11", true);
 
         enablePlugin();
         assertQuery();
-        assertSetting("precision", "precision", "20");
-        assertSetting("currentPrecision", "precision.current", "20");
+        assertPrecisionSettings("20", "20", true);
+        Set<BytesRef> precision20Terms = readSpatialTerms();
 
         restartRepository();
         assertQuery();
-        assertSetting("precision", "precision", "20");
-        assertSetting("currentPrecision", "precision.current", "20");
-
-        long sizeWith20 = getIndexSizeOnDisk();
+        assertPrecisionSettings("20", "20", true);
 
         setSetting("precision", "15");
         assertQuery();
-        assertSetting("precision", "precision", "15");
-        assertSetting("currentPrecision", "precision.current", "20");
+        assertPrecisionSettings("15", "20", true);
 
         restartRepository();
         assertQuery();
-        assertSetting("precision", "precision", "15");
-        assertSetting("currentPrecision", "precision.current", "20");
+        assertPrecisionSettings("15", "20", true);
+        assertEquals("A pending precision change must not alter the existing index",
+                precision20Terms, readSpatialTerms());
+
         forceReindex();
         assertQuery();
-        assertSetting("precision", "precision", "15");
-        assertSetting("currentPrecision", "precision.current", "15");
+        assertPrecisionSettings("15", "15", true);
+        assertNotEquals("Rebuilding with a different precision must change the spatial terms",
+                precision20Terms, readSpatialTerms());
 
-        long sizeWith15 = getIndexSizeOnDisk();
-
-        assertTrue("index with smaller precision should be smaller than index with higher precisioen",
-                sizeWith15 < sizeWith20);
+        restartRepository();
+        assertQuery();
+        assertPrecisionSettings("15", "15", true);
     }
 
     @Test
-    public void testThrowPluginExceptionOnInvalidPrecisionAndGEOHASHPrefixTree() {
-		setSetting("prefixTree", "geohash");
-		RepositoryException exception = assertThrows(RepositoryException.class,
-				() -> setSetting("precision", "25"));
-		assertThat(exception.getMessage(),
-				CoreMatchers.containsString("GEOHASH prefix tree requires precision values between 1 and "
-						+ GeohashPrefixTree.getMaxLevelsPossible()));
-    }
+    public void invalidPrecisionCombinationsReportApplicablePrefixTreeRange() {
+        Object[][] cases = {
+                {"geohash precision", "prefixTree", "geohash", "precision", "25",
+                        "GEOHASH prefix tree requires precision values between 1 and "
+                                + GeohashPrefixTree.getMaxLevelsPossible()},
+                {"quad precision", "prefixTree", "quad", "precision", "51",
+                        "QUAD prefix tree requires precision values between 1 and "
+                                + QuadPrefixTree.MAX_LEVELS_POSSIBLE},
+                {"stored precision with geohash", "precision", "25", "prefixTree", "geohash",
+                        "GEOHASH prefix tree requires precision values between 1 and "
+                                + GeohashPrefixTree.getMaxLevelsPossible()},
+                {"negative precision", "prefixTree", "quad", "precision", "-1",
+                        "QUAD prefix tree requires precision values between 1 and "
+                                + QuadPrefixTree.MAX_LEVELS_POSSIBLE}
+        };
 
-    @Test
-    public void testThrowPluginExceptionOnInvalidPrecisionAndQuadPrefixTree() {
-		setSetting("prefixTree", "quad");
-		RepositoryException exception = assertThrows(RepositoryException.class,
-				() -> setSetting("precision", "51"));
-		assertThat(exception.getMessage(),
-				CoreMatchers.containsString("QUAD prefix tree requires precision values between 1 and "
-						+ QuadPrefixTree.MAX_LEVELS_POSSIBLE));
-    }
+        for (Object[] testCase : cases) {
+            String label = (String) testCase[0];
+            setSetting((String) testCase[1], (String) testCase[2]);
 
-    @Test
-    public void testThrowPluginExceptionOnStoredInvalidPrecisionAndGEOHASHPrefixTree() {
-		setSetting("precision", "25");
-		RepositoryException exception = assertThrows(RepositoryException.class,
-				() -> setSetting("prefixTree", "geohash"));
-		assertThat(exception.getMessage(),
-				CoreMatchers.containsString("GEOHASH prefix tree requires precision values between 1 and "
-						+ GeohashPrefixTree.getMaxLevelsPossible()));
-    }
-
-    @Test
-    public void testThrowPluginExceptionOnNegativePrecision() {
-		RepositoryException exception = assertThrows(RepositoryException.class,
-				() -> setSetting("precision", "-1"));
-		assertThat(exception.getMessage(),
-				CoreMatchers.containsString("QUAD prefix tree requires precision values between 1 and "
-						+ QuadPrefixTree.MAX_LEVELS_POSSIBLE));
+            RepositoryException exception = assertThrows(label, RepositoryException.class,
+                    () -> setSetting((String) testCase[3], (String) testCase[4]));
+            assertThat(label, exception.getMessage(), CoreMatchers.containsString((String) testCase[5]));
+        }
     }
 
 	@Test
