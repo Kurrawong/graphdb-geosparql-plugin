@@ -237,37 +237,6 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void functions() throws ValueExprEvaluationException {
-		assertEquals("1.0", evaluate(GeoConstants.EXT_HAUSDORFF_DISTANCE, asLiteral("LINESTRING(0 0, 1 1)"), asLiteral("LINESTRING(1 1, 0 0)")).stringValue());
-		assertEquals("MULTIPOINT ((0 0), (1 1))", evaluate(GeoConstants.GEOF_BOUNDARY, asLiteral("LINESTRING(0 0, 1 1)")).stringValue());
-		assertEquals("POINT (1 1)", evaluate(GeoConstants.EXT_CLOSEST_POINT, asLiteral("LINESTRING(0 0, 1 1)"), asLiteral("LINESTRING(1 1, 0 0)")).stringValue());
-		assertEquals("LINESTRING (1 1, 1 1)", evaluate(GeoConstants.EXT_SHORTEST_LINE, asLiteral("LINESTRING(0 0, 1 1)"), asLiteral("LINESTRING(1 1, 0 0)")).stringValue());
-		assertEquals("LINESTRING EMPTY", evaluate(GeoConstants.GEOF_DIFFERENCE, asLiteral("LINESTRING(0 0, 1 1)"), asLiteral("LINESTRING(1 1, 0 0)")).stringValue());
-		assertEquals("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))", evaluate(GeoConstants.GEOF_ENVELOPE, asLiteral("LINESTRING(0 0, 1 1)")).stringValue());
-		assertEquals("LINESTRING (0 0, 1 1)", evaluate(GeoConstants.GEOF_INTERSECTION, asLiteral("LINESTRING(0 0, 1 1)"), asLiteral("LINESTRING(1 1, 0 0)")).stringValue());
-		assertEquals("LINESTRING (0 0, 1 1)", evaluate(GeoConstants.EXT_SIMPLIFY, asLiteral("LINESTRING(0 0, 1 1)"), vf().createLiteral("0.0")).stringValue());
-		assertEquals("LINESTRING (0 0, 1 1)", evaluate(GeoConstants.EXT_SIMPLIFY_PRESERVE_TOPOLOGY, asLiteral("LINESTRING(0 0, 1 1)"), vf().createLiteral("0.0")).stringValue());
-		assertEquals("LINESTRING (0 0, 1 1)", evaluate(GeoConstants.GEOF_UNION, asLiteral("LINESTRING(0 0, 1 1)"), asLiteral("LINESTRING(1 1, 0 0)")).stringValue());
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_WITHIN, asLiteral("POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_WITHIN, asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))"), asLiteral("POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))")));
-		assertEquals(vf().createLiteral(true), evaluate(GeoConstants.GEOF_SF_WITHIN, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false),
-				evaluate(GeoConstants.GEOF_RELATE, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))"), vf().createLiteral("T**FF*FF*")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_CONTAINS, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false),
-				evaluate(GeoConstants.EXT_CONTAINS_PROPERLY, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(true),
-				evaluate(GeoConstants.EXT_CONTAINS_PROPERLY, asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))"), asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))")));
-		assertEquals(vf().createLiteral(true), evaluate(GeoConstants.EXT_COVERED_BY, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.EXT_COVERS, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_CROSSES, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_DISJOINT, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_EQUALS, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(true), evaluate(GeoConstants.GEOF_SF_INTERSECTS, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_OVERLAPS, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-		assertEquals(vf().createLiteral(false), evaluate(GeoConstants.GEOF_SF_TOUCHES, asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))"), asLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))")));
-	}
-
 	@Test public void invalidGeometriesReportValidityAndRejectDifference() throws RDF4JException {
 		Literal invalidGeo = asLiteral("POLYGON((2 2, 3 3, 3 2, 2 3, 2 2))");
 		Literal validGeo = asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))");

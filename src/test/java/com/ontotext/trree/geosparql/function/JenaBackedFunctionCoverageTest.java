@@ -125,6 +125,8 @@ public class JenaBackedFunctionCoverageTest {
 	@Test
 	public void simpleFeaturesFunctionsHaveDirectCoverage() throws Exception {
 		assertTopologicalCases(SIMPLE_FEATURES_CASES);
+		assertBoolean(GeoConstants.GEOF_SF_CROSSES, false, INSIDE_A, INSIDE_B);
+		assertBoolean(GeoConstants.GEOF_SF_OVERLAPS, false, INSIDE_A, INSIDE_B);
 	}
 
 	@Test
@@ -138,10 +140,17 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
-	public void relationAndDistanceFunctionsHaveDirectCoverage() throws Exception {
+	public void relatePatternsReturnBooleanResultsThroughRegisteredFunction() throws Exception {
 		assertEquals(VF.createLiteral(true), evaluate(GeoConstants.GEOF_RELATE,
 				wkt("POINT(0 0)"), wkt("POINT(0 0)"), VF.createLiteral("T********")));
+		assertEquals(VF.createLiteral(false), evaluate(GeoConstants.GEOF_RELATE,
+				wkt("POLYGON((2 2,2 3,3 3,3 2,2 2))"),
+				wkt("POLYGON((1 1,1 4,4 4,4 1,1 1))"),
+				VF.createLiteral("T**FF*FF*")));
+	}
 
+	@Test
+	public void distanceFunctionHasDirectCoverage() throws Exception {
 		Value distance = evaluate(GeoConstants.GEOF_DISTANCE,
 				wkt("POINT(0 0)"), wkt("LINESTRING(10 0, 10 0)"), GeoSparqlUnits.URI_METRE);
 
@@ -266,6 +275,12 @@ public class JenaBackedFunctionCoverageTest {
 		assertWktLiteral(evaluate(GeoConstants.EXT_SIMPLIFY_PRESERVE_TOPOLOGY,
 				wkt("LINESTRING(0 0, 1 0.1, 2 0)"), VF.createLiteral("0.2")),
 				"LINESTRING (0 0, 2 0)");
+		assertWktLiteral(evaluate(GeoConstants.EXT_SIMPLIFY,
+				wkt("LINESTRING(0 0, 1 1)"), VF.createLiteral("0.0")),
+				"LINESTRING (0 0, 1 1)");
+		assertWktLiteral(evaluate(GeoConstants.EXT_SIMPLIFY_PRESERVE_TOPOLOGY,
+				wkt("LINESTRING(0 0, 1 1)"), VF.createLiteral("0.0")),
+				"LINESTRING (0 0, 1 1)");
 		assertEquals(VF.createLiteral(true), evaluate(GeoConstants.EXT_IS_VALID,
 				wkt("POLYGON((2 2,2 3,3 3,3 2,2 2))")));
 		assertEquals(VF.createLiteral(false), evaluate(GeoConstants.EXT_IS_VALID,
