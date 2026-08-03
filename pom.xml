@@ -8,8 +8,8 @@
 
 	<properties>
 		<graphdb.version>11.0-spring-6-TR18</graphdb.version>
-		<jena.version>6.1.0</jena.version>
-		<sis.version>1.4</sis.version>
+		<jena.version>6.2.0</jena.version>
+		<sis.version>1.6</sis.version>
 		<derby.version>10.15.2.0</derby.version>
 		<lucene.version>8.10.1</lucene.version>
 		<jts.version>1.20.0</jts.version>
@@ -433,7 +433,7 @@
 											<version>${sis.version}</version>
 											<type>jar</type>
 											<outputDirectory>${project.build.directory}/packaging-smoke</outputDirectory>
-											<includes>SIS_DATA/**</includes>
+											<includes>SIS-DATA/**</includes>
 										</artifactItem>
 									</artifactItems>
 								</configuration>

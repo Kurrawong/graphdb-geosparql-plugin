@@ -175,6 +175,17 @@ public class JenaBackedFunctionCoverageTest {
 				1.0, 1e-12);
 		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_UNITY),
 				1.0, 1e-12);
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_LIGHT_YEAR),
+				1.1753580241416625e-11, 1e-20);
+	}
+
+	@Test
+	public void epsg4326DistanceUsesGreatCircleDistance() throws Exception {
+		Literal left = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 20.0)");
+		Literal right = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 21.0)");
+
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_KILOMETRE),
+				109.5057, 0.0001);
 	}
 
 	@Test
