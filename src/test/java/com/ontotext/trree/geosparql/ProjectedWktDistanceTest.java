@@ -13,10 +13,10 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Regression coverage for the issue report in
- * {@code docs/issues/GDB-10773/GDB-10773-distance-345.md}.
+ * {@code docs/issues/GDB-10773-distance/GDB-10773-distance-345.md}.
  *
- * <p>The issue report and supplied RDF data are retained verbatim in {@code docs/issues/GDB-10773/}. The executable
- * copy of the supplied data is {@code src/test/resources/issues/epsg-3006-distance-345.ttl}.
+ * <p>The issue report and supplied RDF data are retained verbatim in {@code docs/issues/GDB-10773-distance/}. The
+ * executable copy of the supplied data is {@code src/test/resources/issues/epsg-3006-distance-345.ttl}.
  */
 public class ProjectedWktDistanceTest extends AbstractGeoSparqlPluginTest {
 	/**
