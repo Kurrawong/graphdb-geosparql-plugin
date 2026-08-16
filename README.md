@@ -22,7 +22,8 @@ The built plugin can be found in the `target` directory:
 ### Packaging smoke test
 
 The opt-in packaging smoke test requires Docker. It builds a temporary GraphDB 10.8.12 image with Java 21, installs
-the assembled plugin ZIP, and runs indexed GeoSPARQL property-relation queries for CRS84 and a projected CRS:
+the assembled plugin ZIP, and uses externally supplied Apache SIS data to run an EPSG:3006 GeoSPARQL property relation
+and five-metre distance filter function alongside a CRS84 property relation:
 
 ```bash
 mvn -Pgraphdb-packaging-smoke verify
@@ -66,73 +67,8 @@ update again.
 ## CRS data
 
 The plugin works out of the box for CRS84/default GeoSPARQL geometry data. The default plugin package does not bundle
-the optional Apache SIS `sis-embedded-data` EPSG dataset or national grid-shift files.
+the optional Apache SIS `sis-embedded-data` EPSG dataset or national grid-shift files. CRSes outside the small subset
+built into Apache SIS require CRS data supplied to GraphDB through `SIS_DATA`.
 
-Default supported behavior:
-
-- WKT literals without an explicit SRS URI use the GeoSPARQL default CRS, CRS84:
-  `http://www.opengis.net/def/crs/OGC/1.3/CRS84`.
-- WKT/GML literals that explicitly use CRS84 can be indexed and evaluated without extra Apache SIS data.
-- CRS84-derived index geometry is written to Lucene for candidate lookup.
-- Exact evaluation uses the source geometry literal and the CRS operations available to Apache SIS.
-
-Other CRS support without configuration is inherited from Apache Jena and Apache SIS runtime defaults. Apache Jena
-documents that CRS conversion depends on the local Apache SIS EPSG dataset, and Apache SIS documents that without the
-EPSG geodetic dataset only a small CRS subset is available and coordinate operations may be less accurate or have
-unspecified domains of validity. This plugin's certified default CRS support is CRS84. Projected CRSes, EPSG CRSes
-beyond CRS84, national grids, and datum-shift requirements depend on the Apache SIS data available in the GraphDB
-runtime.
-
-Useful upstream references:
-
-- Apache Jena GeoSPARQL: https://jena.apache.org/documentation/geosparql/
-- Apache SIS EPSG dataset setup: https://sis.apache.org/epsg.html
-
-### Configuring Apache SIS data
-
-To make Apache SIS data available to GraphDB, set the `SIS_DATA` environment variable to a readable Apache SIS data
-directory before starting GraphDB. The environment variable must be visible to the JVM that runs GraphDB. The directory
-contents are managed by Apache SIS, not by this plugin.
-
-### Startup logging
-
-The plugin does not validate arbitrary CRSes at startup and does not fail startup when `SIS_DATA` is missing. Startup
-logging is informational and reports only the Apache SIS data environment visible to GraphDB.
-
-If `SIS_DATA` is unset, the plugin logs an informational message like:
-
-```text
-GeoSPARQL CRS data: SIS_DATA is not set. CRS84/default GeoSPARQL data is supported. Projected/EPSG CRS data may require Apache SIS data and grid files; unsupported CRS will fail indexing/query evaluation.
-```
-
-If `SIS_DATA` is set to a readable directory, the plugin logs an informational message like:
-
-```text
-GeoSPARQL CRS data: SIS_DATA=/opt/graphdb/sis-data is a readable directory. Projected/EPSG CRS support depends on the CRS definitions and grid files available in that directory. Unsupported CRS will fail indexing/query evaluation.
-```
-
-If `SIS_DATA` is set but unusable, the plugin logs a warning like:
-
-```text
-GeoSPARQL CRS data: SIS_DATA=/opt/graphdb/sis-data is not readable. CRS84/default GeoSPARQL data is supported, but CRS data from SIS_DATA will not be available. Unsupported CRS will fail indexing/query evaluation.
-```
-
-The plugin does not create directories, inspect CRS definitions, download data, validate EPSG codes, or block startup
-based on `SIS_DATA`.
-
-### Unsupported CRS behavior
-
-`ignoreErrors` is `false` by default.
-
-When GeoSPARQL is enabled and repository data contains a geometry whose CRS cannot be parsed, resolved, or transformed
-with the deployed CRS data, indexing fails by default with an actionable error. This can happen during incremental
-indexing after inserts or during a full reindex.
-
-If `ignoreErrors=true`, invalid or unsupported repository geometries are skipped during indexing with a warning. This
-does not make those geometries queryable.
-
-`ignoreErrors` does not apply to query-supplied literals. If a SPARQL query supplies a geometry literal with an
-unsupported CRS, query evaluation fails rather than silently treating the coordinates as CRS84 or WGS84.
-
-If the plugin is disabled while data is loaded, unsupported CRS failures are deferred until the plugin is enabled or the
-GeoSPARQL index is rebuilt.
+See [GeoSPARQL CRS Deployment](docs/geosparql-crs-deployment.md) for setup, validation, error handling, and
+troubleshooting.

@@ -31,6 +31,10 @@ public class GraphDbPackagingSmokeIT {
 	private static final String GRAPHDB_IMAGE_PROPERTY = "graphdb.packagingSmoke.graphdbImage";
 	private static final String JAVA_IMAGE_PROPERTY = "graphdb.packagingSmoke.javaImage";
 
+	/*
+	 * The EPSG:3006 points reuse the GDB-10773 3-4-5 metre fixture. The surrounding polygon is the smallest
+	 * additional data needed to exercise an indexed GeoSPARQL property relation with the same external CRS definition.
+	 */
 	private static final String INSERT_GEOMETRIES = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX ex: <http://example.com/packaging-smoke/>\n"
@@ -43,10 +47,13 @@ public class GraphDbPackagingSmokeIT {
 			+ "    geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral .\n"
 			+ "  ex:projectedContainer a geo:Feature ; geo:hasDefaultGeometry ex:projectedContainerGeometry .\n"
 			+ "  ex:projectedContainerGeometry a geo:Geometry ;\n"
-			+ "    geo:asWKT \"POLYGON((24.58 41.39,24.58 41.42,24.60 41.42,24.60 41.39,24.58 41.39))\"^^geo:wktLiteral .\n"
+			+ "    geo:asWKT \"<http://www.opengis.net/def/crs/EPSG/0/3006> "
+			+ "POLYGON((521990 6703990,521990 6704010,522010 6704010,522010 6703990,521990 6703990))\""
+			+ "^^geo:wktLiteral .\n"
 			+ "  ex:projectedThing a geo:Feature ; geo:hasDefaultGeometry ex:projectedThingGeometry .\n"
 			+ "  ex:projectedThingGeometry a geo:Geometry ;\n"
-			+ "    geo:asWKT \"<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(799997.80 4589779.63)\"^^geo:wktLiteral .\n"
+			+ "    geo:asWKT \"<http://www.opengis.net/def/crs/EPSG/0/3006> POINT(522000 6704000)\""
+			+ "^^geo:wktLiteral .\n"
 			+ "}";
 
 	private static final String ENABLE_GEOSPARQL = ""
@@ -58,10 +65,23 @@ public class GraphDbPackagingSmokeIT {
 			+ "PREFIX ex: <http://example.com/packaging-smoke/>\n"
 			+ "ASK { ex:thing geo:sfWithin ex:container }";
 
-	private static final String PROJECTED_WITHIN_QUERY = ""
+	private static final String EPSG_3006_WITHIN_QUERY = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX ex: <http://example.com/packaging-smoke/>\n"
 			+ "ASK { ex:projectedThing geo:sfWithin ex:projectedContainer }";
+
+	private static final String EPSG_3006_DISTANCE_QUERY = ""
+			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
+			+ "PREFIX uom: <http://www.opengis.net/def/uom/OGC/1.0/>\n"
+			+ "ASK {\n"
+			+ "  BIND(geof:distance(\n"
+			+ "    \"<http://www.opengis.net/def/crs/EPSG/0/3006> POINT Z (522000 6704000 100)\"^^geo:wktLiteral,\n"
+			+ "    \"<http://www.opengis.net/def/crs/EPSG/0/3006> POINT Z (522003 6704004 100)\"^^geo:wktLiteral,\n"
+			+ "    uom:metre\n"
+			+ "  ) AS ?distance)\n"
+			+ "  FILTER(abs(?distance - 5.0) < 0.01)\n"
+			+ "}";
 
 	private static final Pattern TRUE_BOOLEAN_RESULT =
 			Pattern.compile("\\\"boolean\\\"\\s*:\\s*true");
@@ -88,13 +108,14 @@ public class GraphDbPackagingSmokeIT {
 			.build();
 
 	@Test
-	public void assembledPluginLoadsAndExecutesIndexedPropertyRelation() throws Exception {
+	public void assembledPluginUsesExternalCrsDataForIndexedPropertyRelationAndDistanceFunction() throws Exception {
 		createRepository();
 		executeUpdate(INSERT_GEOMETRIES, "insert smoke-test geometries");
 		executeUpdate(ENABLE_GEOSPARQL, "enable GeoSPARQL and build its index");
 
 		assertAskTrue(WITHIN_QUERY, "execute indexed geo:sfWithin query");
-		assertAskTrue(PROJECTED_WITHIN_QUERY, "execute projected-CRS indexed geo:sfWithin query");
+		assertAskTrue(EPSG_3006_WITHIN_QUERY, "execute EPSG:3006 indexed geo:sfWithin query");
+		assertAskTrue(EPSG_3006_DISTANCE_QUERY, "evaluate EPSG:3006 five-metre distance function");
 	}
 
 	private void assertAskTrue(String query, String operation) throws Exception {
@@ -105,7 +126,7 @@ public class GraphDbPackagingSmokeIT {
 				.GET()
 				.build(), operation);
 
-		assertTrue(failureMessage("Expected the indexed property relation to return true", response),
+		assertTrue(failureMessage("Expected the ASK query to return true", response),
 				TRUE_BOOLEAN_RESULT.matcher(response.body()).find());
 	}
 
