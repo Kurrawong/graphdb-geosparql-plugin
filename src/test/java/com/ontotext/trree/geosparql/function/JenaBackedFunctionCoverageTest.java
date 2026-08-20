@@ -7,6 +7,7 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
@@ -243,6 +244,7 @@ public class JenaBackedFunctionCoverageTest {
 				wkt("<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(1 2)"));
 
 		assertEquals("http://www.opengis.net/def/crs/OGC/1.3/CRS84", srid.stringValue());
+		assertEquals(XSD.ANYURI, ((Literal) srid).getDatatype());
 	}
 
 	@Test

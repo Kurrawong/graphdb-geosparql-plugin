@@ -14,6 +14,7 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.locationtech.jts.algorithm.match.HausdorffSimilarityMeasure;
 import org.locationtech.jts.geom.Coordinate;
@@ -100,7 +101,7 @@ public final class JenaFunctionEvaluator {
 			}
 			if (GeoConstants.GEOF_GETSRID.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
-				return valueFactory.createLiteral(geometry(args[0]).getSRID());
+				return valueFactory.createLiteral(geometry(args[0]).getSRID(), XSD.ANYURI);
 			}
 			if (GeoConstants.GEO_DIMENSION.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);

@@ -27,7 +27,6 @@ public class JenaGeometryAdapterTest {
 	private static final String PROJECTED_POINT_WKT = "<" + EPSG_32634 + "> POINT(799997.80 4589779.63)";
 	private static final double PROJECTED_POINT_CRS84_X = 24.5887755;
 	private static final double PROJECTED_POINT_CRS84_Y = 41.4035958;
-	private static final double CRS84_COORDINATE_TOLERANCE = 1e-6;
 
 	@Before
 	public void initializeAdapter() {
@@ -152,18 +151,19 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
-	public void projectedWktIsTransformedToCrs84IndexGeometry() {
+	public void projectedWktPreservesSourceCrsAndUsesWorldIndexEnvelope() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
 
 		IndexGeometry index = TestIndexGeometries.fromSource(source);
 
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
-		assertProjectedPointCrs84Envelope(index.indexEnvelope());
+		assertWorldCrs84Envelope(index.indexEnvelope());
+		assertTrue(index.isSpatialCandidate());
 	}
 
 	@Test
-	public void projectedGmlIsTransformedToCrs84IndexGeometry() {
+	public void projectedGmlPreservesSourceCrsAndUsesWorldIndexEnvelope() {
 		String gml = "<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName=\"" + EPSG_32634
 				+ "\"><gml:pos>799997.80 4589779.63</gml:pos></gml:Point>";
 		Literal literal = VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL);
@@ -174,7 +174,8 @@ public class JenaGeometryAdapterTest {
 		assertEquals(EPSG_32634, source.effectiveCrsUri());
 		assertEquals(GeoConstants.GEO_GML_LITERAL, source.datatype());
 		assertEquals(IndexGeometry.INDEX_CRS, index.indexCrs());
-		assertProjectedPointCrs84Envelope(index.indexEnvelope());
+		assertWorldCrs84Envelope(index.indexEnvelope());
+		assertTrue(index.isSpatialCandidate());
 	}
 
 	@Test
@@ -262,19 +263,21 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
-	public void projectedSingleMemberCollectionUsesTransformedPointEnvelope() {
+	public void projectedSingleMemberCollectionUsesWorldIndexEnvelope() {
 		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(
 				"<" + EPSG_32634 + "> GEOMETRYCOLLECTION(POINT(799997.80 4589779.63))"));
 
-		assertProjectedPointCrs84Envelope(envelope.indexEnvelope());
+		assertWorldCrs84Envelope(envelope.indexEnvelope());
+		assertTrue(envelope.isSpatialCandidate());
 	}
 
 	@Test
-	public void axisOrderSensitiveCollectionBuildsEnvelopeAfterCrsTransformation() {
+	public void nonCrs84GeometryUsesWorldIndexEnvelope() {
 		IndexGeometry envelope = IndexGeometry.fromSourceGeometryLiteral(SourceGeometryLiteral.fromWkt(
 				"<" + EPSG_4326 + "> GEOMETRYCOLLECTION(POINT(50 10),POINT(51 11))"));
 
-		assertEnvelope(envelope, 10.0, 11.0, 50.0, 51.0);
+		assertWorldCrs84Envelope(envelope.indexEnvelope());
+		assertTrue(envelope.isSpatialCandidate());
 	}
 
 	@Test
@@ -490,11 +493,11 @@ public class JenaGeometryAdapterTest {
 				+ "\"><gml:pos>1 2</gml:pos></gml:Point>";
 	}
 
-	private static void assertProjectedPointCrs84Envelope(Envelope envelope) {
-		assertEquals(PROJECTED_POINT_CRS84_X, envelope.getMinX(), CRS84_COORDINATE_TOLERANCE);
-		assertEquals(PROJECTED_POINT_CRS84_X, envelope.getMaxX(), CRS84_COORDINATE_TOLERANCE);
-		assertEquals(PROJECTED_POINT_CRS84_Y, envelope.getMinY(), CRS84_COORDINATE_TOLERANCE);
-		assertEquals(PROJECTED_POINT_CRS84_Y, envelope.getMaxY(), CRS84_COORDINATE_TOLERANCE);
+	private static void assertWorldCrs84Envelope(Envelope envelope) {
+		assertEquals(-180.0, envelope.getMinX(), 0.0);
+		assertEquals(180.0, envelope.getMaxX(), 0.0);
+		assertEquals(-90.0, envelope.getMinY(), 0.0);
+		assertEquals(90.0, envelope.getMaxY(), 0.0);
 	}
 
 	private static void assertEnvelope(IndexGeometry geometry, double minX, double maxX,

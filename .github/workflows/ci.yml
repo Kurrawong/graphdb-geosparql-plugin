@@ -3,6 +3,7 @@ name: CI
 on:
   # Run for all branches initially; revise the triggers when this workflow is adopted upstream.
   push:
+  pull_request:
   workflow_dispatch:
 
 permissions:

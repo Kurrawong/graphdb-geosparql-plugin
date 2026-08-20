@@ -11,14 +11,17 @@ import org.locationtech.jts.operation.relateng.RelatePredicate;
 /**
  * Associates a source geometry literal with its derived Lucene index envelope.
  *
- * <p>The complete source geometry is transformed to CRS84 before its envelope is derived. The envelope is used only
- * for coarse Lucene lookup, conservative envelope-separation proofs, and eligible rectangular-envelope containment
- * proofs. Exact GeoSPARQL evaluation uses the source geometry literal, including its datatype and effective source
- * CRS. An empty source has a null envelope and is represented by a non-spatial Lucene document so exact traversal can
- * still reconstruct it.
+ * <p>Native CRS84 sources use their source envelope. Non-empty sources that require a CRS transformation use the
+ * world CRS84 envelope so candidate lookup cannot omit a geometry whose transformed shape extends outside the
+ * envelope of its stored vertices. The envelope is used only for coarse Lucene lookup, conservative
+ * envelope-separation proofs, and eligible rectangular-envelope containment proofs. Exact GeoSPARQL evaluation uses
+ * the source geometry literal, including its datatype and effective source CRS. An empty source has a null envelope
+ * and is represented by a non-spatial Lucene document so exact traversal can still reconstruct it.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
+	private static final ConservativeCrs84EnvelopeProjector ENVELOPE_PROJECTOR =
+			new ConservativeCrs84EnvelopeProjector();
 
 	private final SourceGeometryLiteral sourceGeometryLiteral;
 	private final Envelope indexEnvelope;
@@ -36,11 +39,7 @@ public final class IndexGeometry {
 	public static IndexGeometry fromSourceGeometryLiteral(SourceGeometryLiteral sourceGeometryLiteral) {
 		try {
 			GeometryWrapper sourceWrapper = sourceGeometryLiteral.asGeometryWrapper();
-			GeometryWrapper indexWrapper = INDEX_CRS.equals(sourceWrapper.getSrsURI())
-					? sourceWrapper
-					: sourceWrapper.transform(INDEX_CRS);
-			Geometry transformed = indexWrapper.getXYGeometry();
-			return new IndexGeometry(sourceGeometryLiteral, transformed.getEnvelopeInternal(),
+			return new IndexGeometry(sourceGeometryLiteral, ENVELOPE_PROJECTOR.project(sourceGeometryLiteral),
 					sourceWrapper.getDimensionInfo().getTopological());
 		} catch (JenaGeoSparqlException e) {
 			throw e;

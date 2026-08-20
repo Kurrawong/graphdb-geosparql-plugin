@@ -133,11 +133,35 @@ public class LuceneCandidateLookupTest {
 	}
 
 	@Test
-	public void separatedCrossCrsIndexEnvelopesProveSfAndEhDisjoint() {
+	public void projectedLineAndOnLinePointRemainEnvelopeIntersectionCandidates() throws Exception {
+		LuceneGeoIndexer indexer = createIndexer("projected-nonlinear-transform");
+		IndexGeometry line = geometry(
+				"<" + EPSG_32634 + "> LINESTRING(200000 7000000, 800000 7000000)");
+		IndexGeometry point = geometry("<" + EPSG_32634 + "> POINT(500000 7000000)");
+		IndexGeometry distantCrs84 = geometry("POINT(20 50)");
+
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				line.sourceGeometryLiteral(), point.sourceGeometryLiteral()));
+		assertTrue(line.indexEnvelope().intersects(point.indexEnvelope()));
+		assertTrue(point.indexEnvelope().intersects(distantCrs84.indexEnvelope()));
+
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "line", List.of(line));
+		indexer.indexGeometryList(2L, id -> "distant", List.of(distantCrs84));
+		indexer.commit();
+
+		assertArrayEquals(new long[]{1L, 2L},
+				collectEntityIds(indexer.getEnvelopeIntersections(point)));
+		assertTrue(collectEnvelopeDisjointCandidates(
+				indexer.getEnvelopeDisjointCandidates(point)).isEmpty());
+	}
+
+	@Test
+	public void projectedIndexEnvelopesCannotProveDisjointFromSeparatedTransformedVertices() {
 		IndexGeometry projected = geometry("<" + EPSG_32634 + "> POINT(799997.80 4589779.63)");
 		IndexGeometry crs84 = geometry("POINT(20 50)");
 
-		assertFalse(projected.indexEnvelope().intersects(crs84.indexEnvelope()));
+		assertTrue(projected.indexEnvelope().intersects(crs84.indexEnvelope()));
 		assertTrue(GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(
 				projected.sourceGeometryLiteral(), crs84.sourceGeometryLiteral()));
 		assertTrue(GeoSparqlPropertyRelation.EH_DISJOINT.evaluate(
