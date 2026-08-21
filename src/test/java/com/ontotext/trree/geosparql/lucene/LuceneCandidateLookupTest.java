@@ -210,6 +210,13 @@ public class LuceneCandidateLookupTest {
 				emptyCollection.sourceGeometryLiteral(), polygon.sourceGeometryLiteral()));
 	}
 
+	/**
+	 * World-envelope Lucene behaviour for {@link CandidateBoundsKind#WORLD_FALLBACK}.
+	 *
+	 * <p>Valid-domain source literals in the CRS families under test produce {@link CandidateBoundsKind#TRANSFORMED}
+	 * through the projector. This fixture therefore injects the world envelope so the Lucene path can be checked
+	 * independently of CRS-data availability.
+	 */
 	@Test
 	public void worldFallbackEnvelopeRemainsACandidateAndIsNotADefiniteDisjointMatch() throws Exception {
 		LuceneGeoIndexer indexer = createIndexer("world-fallback-envelope");

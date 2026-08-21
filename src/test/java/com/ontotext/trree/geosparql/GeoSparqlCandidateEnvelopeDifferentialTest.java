@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.test.TemporaryLocalFolder;
+import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
@@ -46,6 +47,8 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	private static final String UTM_34N = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String WEB_MERCATOR = "http://www.opengis.net/def/crs/EPSG/0/3857";
 	private static final String LAMBERT_93 = "http://www.opengis.net/def/crs/EPSG/0/2154";
+	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";
+	private static final String GDA2020_3D = "http://www.opengis.net/def/crs/EPSG/0/7843";
 	private static final Set<GeoSparqlPropertyRelation> DISJOINT_RELATIONS = EnumSet.of(
 			GeoSparqlPropertyRelation.SF_DISJOINT,
 			GeoSparqlPropertyRelation.EH_DISJOINT,
@@ -83,6 +86,67 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 				assertDefiniteMatchesAreExact(fixture, relation, boundEntry.getKey(), boundEntry.getValue());
 			}
 		}
+	}
+
+	@Test
+	public void threeDimensionalGeographicCrsMatchesCrs84And4326ThroughTheIndex() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+		sources.put(1L, geometries("<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)"));
+		sources.put(2L, geometries("POINT(153.03 -27.47)"));
+		sources.put(3L, geometries("<" + EPSG_4326 + "> POLYGON((-28 152,-27 152,-27 154,-28 154,-28 152))"));
+		Fixture fixture = createFixture("wgs84-3d-crs-differential", sources);
+
+		assertEquals(CandidateBoundsKind.TRANSFORMED, sources.get(1L).get(0).candidateBoundsKind());
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(1L).get(0).sourceGeometryLiteral(),
+				sources.get(2L).get(0).sourceGeometryLiteral()));
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(1L).get(0).sourceGeometryLiteral(),
+				sources.get(3L).get(0).sourceGeometryLiteral()));
+		// Bind the 3D literal as the relation subject so Jena evaluates in the 3D CRS. Reducing EPSG:4979
+		// to CRS84 or EPSG:4326 produces a NaN ordinate that Jena precision cleanup rejects.
+		assertEquals(Set.of(1L, 2L, 3L),
+				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
+		assertEquals(Set.of(1L, 2L, 3L),
+				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
+	}
+
+	@Test
+	public void gda2020ThreeDimensionalCrsMatchesGda2020ThroughTheIndex() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+		sources.put(1L, geometries("<" + GDA2020_3D + "> POINT Z(-27.47 153.03 55)"));
+		sources.put(2L, geometries(
+				"<" + GDA2020 + "> POLYGON((-27.6 152.9,-27.3 152.9,-27.3 153.2,-27.6 153.2,-27.6 152.9))"));
+		Fixture fixture = createFixture("gda2020-3d-crs-differential", sources);
+
+		assertEquals(CandidateBoundsKind.TRANSFORMED, sources.get(1L).get(0).candidateBoundsKind());
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(1L).get(0).sourceGeometryLiteral(),
+				sources.get(2L).get(0).sourceGeometryLiteral()));
+		assertEquals(Set.of(1L, 2L),
+				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
+		assertEquals(Set.of(1L, 2L),
+				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
+	}
+
+	@Test
+	public void multiGeometryEntityMatchesWhenAnySourcePairHolds() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+		sources.put(1L, geometries("POINT(-40 -10)", "POINT(5 5)"));
+		sources.put(2L, geometries("POLYGON((0 0,0 10,10 10,10 0,0 0))"));
+		sources.put(3L, geometries("POINT(20 20)"));
+		Fixture fixture = createFixture("multi-geometry-entity-differential", sources);
+
+		assertEquals(Set.of(1L, 2L),
+				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertEquals(Set.of(1L, 2L),
+				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertFalse(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(1L).get(0).sourceGeometryLiteral(),
+				sources.get(2L).get(0).sourceGeometryLiteral()));
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(1L).get(1).sourceGeometryLiteral(),
+				sources.get(2L).get(0).sourceGeometryLiteral()));
 	}
 
 	@Test
@@ -154,6 +218,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		sources.put(15L, geometries("GEOMETRYCOLLECTION(POINT(153.03 -27.47),LINESTRING(152.9 -27.6,153.2 -27.3))"));
 		sources.put(16L, geometries("<" + MGA56 + "> POINT Z(502890 6959800 40)"));
 		sources.put(17L, geometries("GEOMETRYCOLLECTION EMPTY"));
+		sources.put(18L, geometries("POINT(-40 -10)", "<" + GDA2020 + "> POINT(-27.47 153.03)"));
 		return sources;
 	}
 
@@ -227,12 +292,12 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		for (SourceGeometryLiteral subjectSource : subjectSources) {
 			for (SourceGeometryLiteral objectSource : objectSources) {
 				try {
-					evaluated = true;
 					if (relation.evaluate(subjectSource, objectSource)) {
 						return true;
 					}
+					evaluated = true;
 				} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException ignored) {
-					return null;
+					// An unevaluable pair must not hide a later evaluable true match.
 				}
 			}
 		}

@@ -56,7 +56,7 @@ public final class IndexGeometry {
 			IndexGeometry indexGeometry = new IndexGeometry(sourceGeometryLiteral, bounds.envelope(),
 					sourceWrapper.getDimensionInfo().getTopological(), bounds.kind(), bounds.fallbackReason());
 			if (bounds.kind() == CandidateBoundsKind.WORLD_FALLBACK) {
-				LOGGER.info("Using world CRS84 candidate envelope for source CRS {} ({})",
+				LOGGER.debug("Using world CRS84 candidate envelope for source CRS {} ({})",
 						sourceWrapper.getSrsURI(), bounds.fallbackReason());
 			}
 			return indexGeometry;

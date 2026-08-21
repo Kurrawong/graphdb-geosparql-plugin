@@ -43,8 +43,10 @@ import org.opengis.util.FactoryException;
  * non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or transform
  * failure. Unit-in-the-last-place widening does not close a geographically large miss.
  *
- * <p>Candidate lookup may include false positives. It must not include false negatives when the plugin can establish
- * a safe bound, and when it cannot, it uses the world CRS84 envelope.
+ * <p>Candidate lookup may include false positives. It must avoid false negatives. The plugin uses SIS's
+ * curvature-aware {@code CoordinateOperation} envelope transformation for representable results and falls back to the
+ * world envelope for transformation failures or results that cannot be represented as a single Lucene geographic
+ * rectangle. SIS does not provide a formal coverage guarantee for finite transformed envelopes.
  */
 final class ConservativeCrs84EnvelopeProjector {
 	static final String FALLBACK_MISSING_HORIZONTAL_CRS = "missing-horizontal-crs";
