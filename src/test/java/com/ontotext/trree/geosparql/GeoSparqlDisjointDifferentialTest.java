@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class GeoSparqlDisjointDifferentialTest {
 	private static final long BOUND = 100L;
@@ -71,6 +72,25 @@ public class GeoSparqlDisjointDifferentialTest {
 					runReference(fixture, relation, BOUND, 0),
 					runPartitioned(fixture, relation, BOUND, 0));
 		}
+	}
+
+	@Test
+	public void projectedLineAndOnLinePointAreNotEmittedAsDefiniteDisjointMatches() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new HashMap<>();
+		sources.put(BOUND, geometries(
+				"<" + EPSG_32634 + "> LINESTRING(200000 7000000, 800000 7000000)"));
+		sources.put(1L, geometries("<" + EPSG_32634 + "> POINT(500000 7000000)"));
+		Fixture fixture = createFixture("projected-line-midpoint-disjoint", sources);
+
+		assertFalse(GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(
+				sources.get(BOUND).get(0).sourceGeometryLiteral(),
+				sources.get(1L).get(0).sourceGeometryLiteral()));
+		assertEquals(Set.of(),
+				runPartitioned(fixture, GeoSparqlPropertyRelation.SF_DISJOINT, 0, BOUND));
+		assertEquals(Set.of(),
+				runPartitioned(fixture, GeoSparqlPropertyRelation.SF_DISJOINT, BOUND, 0));
+		assertEquals(runReference(fixture, GeoSparqlPropertyRelation.SF_DISJOINT, 0, BOUND),
+				runPartitioned(fixture, GeoSparqlPropertyRelation.SF_DISJOINT, 0, BOUND));
 	}
 
 	@Test

@@ -9,6 +9,7 @@ import org.locationtech.jts.geom.Envelope;
 import org.locationtech.spatial4j.context.SpatialContext;
 import org.locationtech.spatial4j.shape.Rectangle;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.opengis.referencing.cs.CoordinateSystem;
 import org.opengis.referencing.operation.CoordinateOperation;
 import org.opengis.referencing.operation.TransformException;
 import org.opengis.util.FactoryException;
@@ -16,13 +17,15 @@ import org.opengis.util.FactoryException;
 /**
  * Derives a CRS84 index envelope from a source geometry literal.
  *
- * <p>Native CRS84 sources use their source envelope. Other non-empty sources transform the source-CRS bounding box
- * with Apache SIS {@code Envelopes.transform}. SIS documents that this transformation is only approximated: the
- * returned envelope may be bigger than the smallest possible bounding box, but should not be smaller in most cases.
- *
- * <p>If that result cannot be stored as a single Lucene {@code SpatialContext.GEO} rectangle, including wraparound
- * and bounds that extend outside the geographic world, the world CRS84 envelope is used instead. The returned
- * envelope may be larger than the complete source geometry transformed to CRS84.
+ * <p>Candidate bounds for non-CRS84 geometries are derived by conservatively transforming the geometry's source-CRS
+ * envelope using Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}. The transformed bounds are
+ * used only for Lucene candidate lookup; exact evaluation continues to use the source geometry literal and its native
+ * CRS. Apache SIS provides a curvature-aware conservative approximation rather than a formal guarantee for every
+ * possible coordinate operation. The plugin therefore widens the transformed bounds where appropriate and falls back
+ * to the world CRS84 envelope whenever the transformed result cannot be safely represented by the CRS84 Lucene
+ * envelope model. Candidate-envelope optimisation may introduce false positives but must not introduce false
+ * negatives. When safe candidate bounds cannot be established, the implementation uses the world CRS84 envelope and
+ * relies on exact evaluation to determine the relation.
  */
 final class ConservativeCrs84EnvelopeProjector {
 	Envelope project(SourceGeometryLiteral source) {
@@ -42,15 +45,34 @@ final class ConservativeCrs84EnvelopeProjector {
 
 	private static Envelope transformSourceBounds(GeometryWrapper sourceWrapper)
 			throws FactoryException, TransformException {
-		CoordinateReferenceSystem sourceCrs = sourceWrapper.getCRS();
+		CoordinateReferenceSystem sourceCrs = horizontalCrs(sourceWrapper.getCRS());
 		CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
+		GeneralEnvelope sourceEnvelope = createSourceEnvelope(sourceWrapper, sourceCrs);
+		CoordinateOperation operation = CRS.findOperation(sourceCrs, targetCrs, null);
+		org.opengis.geometry.Envelope transformed = Envelopes.transform(operation, sourceEnvelope);
+		return toLuceneGeoEnvelope(transformed);
+	}
+
+	private static CoordinateReferenceSystem horizontalCrs(CoordinateReferenceSystem sourceCrs)
+			throws TransformException {
+		CoordinateReferenceSystem horizontal = CRS.getHorizontalComponent(sourceCrs);
+		if (horizontal == null) {
+			throw new TransformException("Source CRS has no two-dimensional horizontal component.");
+		}
+		CoordinateSystem coordinateSystem = horizontal.getCoordinateSystem();
+		if (coordinateSystem == null || coordinateSystem.getDimension() != 2) {
+			throw new TransformException("Source CRS horizontal component is not two-dimensional.");
+		}
+		return horizontal;
+	}
+
+	private static GeneralEnvelope createSourceEnvelope(GeometryWrapper sourceWrapper,
+			CoordinateReferenceSystem sourceCrs) {
 		Envelope sourceBounds = sourceWrapper.getParsingGeometry().getEnvelopeInternal();
 		GeneralEnvelope sourceEnvelope = new GeneralEnvelope(sourceCrs);
 		sourceEnvelope.setRange(0, sourceBounds.getMinX(), sourceBounds.getMaxX());
 		sourceEnvelope.setRange(1, sourceBounds.getMinY(), sourceBounds.getMaxY());
-		CoordinateOperation operation = CRS.findOperation(sourceCrs, targetCrs, null);
-		org.opengis.geometry.Envelope transformed = Envelopes.transform(operation, sourceEnvelope);
-		return toLuceneGeoEnvelope(transformed);
+		return sourceEnvelope;
 	}
 
 	static Envelope toLuceneGeoEnvelope(org.opengis.geometry.Envelope transformed) {
@@ -79,7 +101,7 @@ final class ConservativeCrs84EnvelopeProjector {
 		return new Envelope(minX, maxX, minY, maxY);
 	}
 
-	private static Envelope worldCrs84Envelope() {
+	static Envelope worldCrs84Envelope() {
 		Rectangle world = SpatialContext.GEO.getWorldBounds();
 		return new Envelope(world.getMinX(), world.getMaxX(), world.getMinY(), world.getMaxY());
 	}
