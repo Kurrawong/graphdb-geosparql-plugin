@@ -11,14 +11,12 @@ import org.locationtech.jts.operation.relateng.RelatePredicate;
 /**
  * Associates a source geometry literal with its derived Lucene index envelope.
  *
- * <p>Candidate bounds for non-CRS84 geometries are derived by conservatively transforming the geometry's source-CRS
- * envelope using Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}. The transformed bounds are
- * used only for Lucene candidate lookup; exact evaluation continues to use the source geometry literal and its native
- * CRS. Apache SIS provides a curvature-aware conservative approximation rather than a formal guarantee for every
- * possible coordinate operation. Transformed bounds are widened where appropriate, and the world CRS84 envelope is
- * used when the result cannot be safely represented by the CRS84 Lucene envelope model. Candidate-envelope
- * optimisation may introduce false positives but must not introduce false negatives. An empty source has a null
- * envelope and is represented by a non-spatial Lucene document so exact traversal can still reconstruct it.
+ * <p>Native CRS84 sources use their source envelope. Non-CRS84 sources use an Apache SIS envelope transform of the
+ * source bounding box, used only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and
+ * its native CRS. SIS does not prove that transform is never smaller than the complete CRS84 image. The world CRS84
+ * envelope is used only when that result cannot be stored as one Lucene geographic rectangle. A representable SIS
+ * rectangle is indexed as-is. An empty source has a null envelope and is represented by a non-spatial Lucene document
+ * so exact traversal can still reconstruct it.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;

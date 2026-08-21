@@ -17,15 +17,22 @@ import org.opengis.util.FactoryException;
 /**
  * Derives a CRS84 index envelope from a source geometry literal.
  *
- * <p>Candidate bounds for non-CRS84 geometries are derived by conservatively transforming the geometry's source-CRS
- * envelope using Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}. The transformed bounds are
- * used only for Lucene candidate lookup; exact evaluation continues to use the source geometry literal and its native
- * CRS. Apache SIS provides a curvature-aware conservative approximation rather than a formal guarantee for every
- * possible coordinate operation. The plugin therefore widens the transformed bounds where appropriate and falls back
- * to the world CRS84 envelope whenever the transformed result cannot be safely represented by the CRS84 Lucene
- * envelope model. Candidate-envelope optimisation may introduce false positives but must not introduce false
- * negatives. When safe candidate bounds cannot be established, the implementation uses the world CRS84 envelope and
- * relies on exact evaluation to determine the relation.
+ * <p>Native CRS84 sources use their source envelope. Empty sources yield a null envelope. Other non-empty sources
+ * transform the source-CRS bounding box with Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}.
+ * That result is used only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its
+ * native CRS.
+ *
+ * <p>SIS documents this transform as a curvature-aware approximation: the result may be larger than the complete
+ * CRS84 image, and should not be smaller in most cases. That is not a proof that the bound covers every transformed
+ * point.
+ *
+ * <p>The world CRS84 envelope is used only when that SIS result cannot be stored as one Lucene geographic rectangle:
+ * wraparound, non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or
+ * transform failure. A finite, ordered, in-range SIS rectangle is indexed as-is. World fallback does not run for that
+ * result, so candidate lookup can omit a pair that exact evaluation would accept.
+ *
+ * <p>Candidate lookup may include false positives. It must not include false negatives when the plugin can establish
+ * a safe bound, and when it cannot, it uses the world CRS84 envelope.
  */
 final class ConservativeCrs84EnvelopeProjector {
 	Envelope project(SourceGeometryLiteral source) {
@@ -75,6 +82,12 @@ final class ConservativeCrs84EnvelopeProjector {
 		return sourceEnvelope;
 	}
 
+	/**
+	 * Adapts a transformed envelope to one Lucene geographic rectangle, or returns the world CRS84 envelope.
+	 *
+	 * <p>This path trusts a finite, ordered, in-range SIS rectangle after unit-in-the-last-place widening. It does
+	 * not prove that rectangle covers the complete transformed geometry.
+	 */
 	static Envelope toLuceneGeoEnvelope(org.opengis.geometry.Envelope transformed) {
 		if (transformed == null || transformed.getDimension() < 2) {
 			return worldCrs84Envelope();

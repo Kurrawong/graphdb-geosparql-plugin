@@ -20,7 +20,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Verifies that index envelopes remain conservative candidate bounds for CRS84 lookup.
+ * Verifies CRS84, empty, SIS, and world-fallback index-envelope behaviour, including that a representable SIS
+ * rectangle is used without substituting the world CRS84 envelope.
  */
 public class ConservativeCrs84EnvelopeProjectorTest {
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
