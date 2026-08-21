@@ -46,6 +46,8 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 
 		assertTrue(sentinel.indexEnvelope().isNull());
 		assertFalse(sentinel.isSpatialCandidate());
+		assertEquals(CandidateBoundsKind.EMPTY, sentinel.candidateBoundsKind());
+		assertTrue(sentinel.candidateBoundsFallbackReason().isEmpty());
 		assertTrue(PROJECTOR.project(sentinel.sourceGeometryLiteral()).isNull());
 	}
 
@@ -57,8 +59,26 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 
 		assertEquals(new Envelope(1.0, 5.0, 2.0, 6.0), PROJECTOR.project(source));
 		assertEquals(new Envelope(1.0, 5.0, 2.0, 6.0), index.indexEnvelope());
+		assertEquals(CandidateBoundsKind.NATIVE_CRS84, index.candidateBoundsKind());
+		assertTrue(index.candidateBoundsFallbackReason().isEmpty());
 		assertTrue(index.isSpatialCandidate());
 		assertFalse(worldEnvelope().equals(index.indexEnvelope()));
+	}
+
+	@Test
+	public void gda2020PolygonUsesTransformedSelectiveBoundsRatherThanWorldFallback() {
+		IndexGeometry brisbane = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt(
+						"<http://www.opengis.net/def/crs/EPSG/0/7844> "
+								+ "POLYGON((-27.6 152.9,-27.3 152.9,-27.3 153.2,-27.6 153.2,-27.6 152.9))"));
+
+		assertEquals(CandidateBoundsKind.TRANSFORMED, brisbane.candidateBoundsKind());
+		assertTrue(brisbane.candidateBoundsFallbackReason().isEmpty());
+		assertTrue(brisbane.isSpatialCandidate());
+		assertFalse(worldEnvelope().equals(brisbane.indexEnvelope()));
+		assertTrue(brisbane.indexEnvelope().getWidth() < 1.0);
+		assertTrue(brisbane.indexEnvelope().getHeight() < 1.0);
+		assertTrue(brisbane.indexEnvelope().contains(153.03, -27.47));
 	}
 
 	@Test
@@ -68,6 +88,7 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 						"<" + EPSG_32634 + "> POINT(799997.80 4589779.63)"));
 
 		assertTrue(point.isSpatialCandidate());
+		assertEquals(CandidateBoundsKind.TRANSFORMED, point.candidateBoundsKind());
 		assertFalse(worldEnvelope().equals(point.indexEnvelope()));
 		assertTrue(point.indexEnvelope().getWidth() < 1.0);
 		assertTrue(point.indexEnvelope().getHeight() < 1.0);
@@ -171,6 +192,10 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 	public void invertedOrOutOfRangeEnvelopesUseTheWorldFallback() {
 		assertEquals(worldEnvelope(),
 				ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(range(170, -170, 10, 20)));
+		assertEquals(CandidateBoundsKind.WORLD_FALLBACK,
+				ConservativeCrs84EnvelopeProjector.toLuceneGeoBounds(range(170, -170, 10, 20)).kind());
+		assertEquals(ConservativeCrs84EnvelopeProjector.FALLBACK_UNREPRESENTABLE_RECTANGLE,
+				ConservativeCrs84EnvelopeProjector.toLuceneGeoBounds(range(170, -170, 10, 20)).fallbackReason());
 		assertEquals(worldEnvelope(),
 				ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(range(170, 190, 10, 20)));
 		assertEquals(worldEnvelope(),

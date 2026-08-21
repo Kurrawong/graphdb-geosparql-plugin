@@ -22,44 +22,59 @@ import org.opengis.util.FactoryException;
  * That result is used only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its
  * native CRS.
  *
- * <p>SIS documents this transform as a curvature-aware approximation: the result may be larger than the complete
- * CRS84 image, and should not be smaller in most cases. That is not a proof that the bound covers every transformed
- * point.
+ * <p>The plugin relies on the SIS {@code CoordinateOperation} overload: it samples envelope corners, edge midpoints
+ * and center, uses transform derivatives to locate cubic-curve extrema, and accounts for poles and wraparound.
+ * SIS documents the result as a curvature-aware approximation that may be larger than the complete CRS84 image and
+ * should not be smaller in most cases. That wording is not a coverage proof. The plugin does not use the weaker
+ * {@code MathTransform} overload, which SIS documents as able to under-cover poles.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
- * used only when the result still cannot be stored as one Lucene geographic rectangle: inverted lower/upper ordering,
+ * used when the result still cannot be stored as one Lucene geographic rectangle: inverted lower/upper ordering,
  * non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or transform
- * failure. A finite, ordered, in-range SIS rectangle is indexed as-is. World fallback does not run for that result,
- * so candidate lookup can omit a pair that exact evaluation would accept.
+ * failure.
  *
  * <p>Candidate lookup may include false positives. It must not include false negatives when the plugin can establish
  * a safe bound, and when it cannot, it uses the world CRS84 envelope.
  */
 final class ConservativeCrs84EnvelopeProjector {
+	static final String FALLBACK_MISSING_HORIZONTAL_CRS = "missing-horizontal-crs";
+	static final String FALLBACK_TRANSFORM_FAILURE = "transform-failure";
+	static final String FALLBACK_UNREPRESENTABLE_RECTANGLE = "unrepresentable-rectangle";
+
 	Envelope project(SourceGeometryLiteral source) {
+		return projectBounds(source).envelope();
+	}
+
+	ProjectedCandidateBounds projectBounds(SourceGeometryLiteral source) {
 		GeometryWrapper sourceWrapper = source.asGeometryWrapper();
 		if (sourceWrapper.isEmpty()) {
-			return new Envelope();
+			return ProjectedCandidateBounds.empty();
 		}
 		if (IndexGeometry.INDEX_CRS.equals(sourceWrapper.getSrsURI())) {
-			return new Envelope(sourceWrapper.getXYGeometry().getEnvelopeInternal());
+			return ProjectedCandidateBounds.nativeCrs84(
+					new Envelope(sourceWrapper.getXYGeometry().getEnvelopeInternal()));
 		}
 		try {
 			return transformSourceBounds(sourceWrapper);
 		} catch (FactoryException | TransformException | RuntimeException ignored) {
-			return worldCrs84Envelope();
+			return ProjectedCandidateBounds.worldFallback(FALLBACK_TRANSFORM_FAILURE);
 		}
 	}
 
-	private static Envelope transformSourceBounds(GeometryWrapper sourceWrapper)
+	private static ProjectedCandidateBounds transformSourceBounds(GeometryWrapper sourceWrapper)
 			throws FactoryException, TransformException {
-		CoordinateReferenceSystem sourceCrs = horizontalCrs(sourceWrapper.getCRS());
+		CoordinateReferenceSystem sourceCrs;
+		try {
+			sourceCrs = horizontalCrs(sourceWrapper.getCRS());
+		} catch (TransformException e) {
+			return ProjectedCandidateBounds.worldFallback(FALLBACK_MISSING_HORIZONTAL_CRS);
+		}
 		CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
 		GeneralEnvelope sourceEnvelope = createSourceEnvelope(sourceWrapper, sourceCrs);
 		CoordinateOperation operation = CRS.findOperation(sourceCrs, targetCrs, null);
 		org.opengis.geometry.Envelope transformed = Envelopes.transform(operation, sourceEnvelope);
-		return toLuceneGeoEnvelope(transformed);
+		return toLuceneGeoBounds(transformed);
 	}
 
 	private static CoordinateReferenceSystem horizontalCrs(CoordinateReferenceSystem sourceCrs)
@@ -95,8 +110,12 @@ final class ConservativeCrs84EnvelopeProjector {
 	 * not prove that rectangle covers the complete transformed geometry.
 	 */
 	static Envelope toLuceneGeoEnvelope(org.opengis.geometry.Envelope transformed) {
+		return toLuceneGeoBounds(transformed).envelope();
+	}
+
+	static ProjectedCandidateBounds toLuceneGeoBounds(org.opengis.geometry.Envelope transformed) {
 		if (transformed == null || transformed.getDimension() < 2) {
-			return worldCrs84Envelope();
+			return ProjectedCandidateBounds.worldFallback(FALLBACK_UNREPRESENTABLE_RECTANGLE);
 		}
 		double minX = transformed.getMinimum(0);
 		double maxX = transformed.getMaximum(0);
@@ -108,16 +127,16 @@ final class ConservativeCrs84EnvelopeProjector {
 				|| minX > maxX || minY > maxY
 				|| minX < world.getMinX() || maxX > world.getMaxX()
 				|| minY < world.getMinY() || maxY > world.getMaxY()) {
-			return worldCrs84Envelope();
+			return ProjectedCandidateBounds.worldFallback(FALLBACK_UNREPRESENTABLE_RECTANGLE);
 		}
 		minX = Math.max(world.getMinX(), Math.nextDown(minX));
 		maxX = Math.min(world.getMaxX(), Math.nextUp(maxX));
 		minY = Math.max(world.getMinY(), Math.nextDown(minY));
 		maxY = Math.min(world.getMaxY(), Math.nextUp(maxY));
 		if (minX > maxX || minY > maxY) {
-			return worldCrs84Envelope();
+			return ProjectedCandidateBounds.worldFallback(FALLBACK_UNREPRESENTABLE_RECTANGLE);
 		}
-		return new Envelope(minX, maxX, minY, maxY);
+		return ProjectedCandidateBounds.transformed(new Envelope(minX, maxX, minY, maxY));
 	}
 
 	static Envelope worldCrs84Envelope() {

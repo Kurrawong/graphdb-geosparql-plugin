@@ -8,6 +8,7 @@ import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.TestIndexGeometries;
+import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.IndexGeometryFixtures;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
@@ -215,10 +216,11 @@ public class LuceneCandidateLookupTest {
 		IndexGeometry localBound = rectangle(-1, 1, -1, 1);
 		IndexGeometry fallback = IndexGeometryFixtures.withIndexEnvelope(
 				SourceGeometryLiteral.fromWkt("<" + EPSG_32634 + "> POINT(500000 7000000)"),
-				worldCrs84Envelope());
+				worldCrs84Envelope(), CandidateBoundsKind.WORLD_FALLBACK, "unrepresentable-rectangle");
 		IndexGeometry separated = geometry("POINT(20 20)");
 
 		assertFalse(fallback.isEnvelopeCoveringRectangle());
+		assertEquals(CandidateBoundsKind.WORLD_FALLBACK, fallback.candidateBoundsKind());
 		assertEquals(worldCrs84Envelope(), fallback.indexEnvelope());
 
 		indexer.begin();

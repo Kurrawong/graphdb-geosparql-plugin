@@ -7,19 +7,25 @@ import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.operation.relateng.RelateNG;
 import org.locationtech.jts.operation.relateng.RelatePredicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Optional;
 
 /**
  * Associates a source geometry literal with its derived Lucene index envelope.
  *
  * <p>Native CRS84 sources use their source envelope. Non-CRS84 sources use an Apache SIS envelope transform of the
- * source bounding box, used only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and
- * its native CRS. SIS does not prove that transform is never smaller than the complete CRS84 image. Wraparound may
- * broaden that envelope, potentially to full longitude. The world CRS84 envelope is used only when the result still
- * cannot be stored as one Lucene geographic rectangle. A representable SIS rectangle is indexed as-is. An empty source
- * has a null envelope and is represented by a non-spatial Lucene document so exact traversal can still reconstruct it.
+ * source bounding box. That envelope is used only for Lucene candidate lookup. Exact evaluation uses the source
+ * geometry literal and its native CRS. SIS does not prove that transform is never smaller than the complete CRS84
+ * image. Wraparound may broaden that envelope, potentially to full longitude. The world CRS84 envelope is used when
+ * the result still cannot be stored as one Lucene geographic rectangle. A representable SIS rectangle is indexed
+ * as-is. An empty source has a null envelope and is represented by a non-spatial Lucene document so exact traversal
+ * can still reconstruct it.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
+	private static final Logger LOGGER = LoggerFactory.getLogger(IndexGeometry.class);
 	private static final ConservativeCrs84EnvelopeProjector ENVELOPE_PROJECTOR =
 			new ConservativeCrs84EnvelopeProjector();
 
@@ -28,19 +34,30 @@ public final class IndexGeometry {
 	// Cache the bound source dimension derived during index-geometry construction,
 	// so relation traversal does not need to navigate Jena geometry metadata.
 	private final int sourceTopologicalDimension;
+	private final CandidateBoundsKind candidateBoundsKind;
+	private final String candidateBoundsFallbackReason;
 
 	IndexGeometry(SourceGeometryLiteral sourceGeometryLiteral, Envelope indexEnvelope,
-			int sourceTopologicalDimension) {
+			int sourceTopologicalDimension, CandidateBoundsKind candidateBoundsKind,
+			String candidateBoundsFallbackReason) {
 		this.sourceGeometryLiteral = sourceGeometryLiteral;
 		this.indexEnvelope = new Envelope(indexEnvelope);
 		this.sourceTopologicalDimension = sourceTopologicalDimension;
+		this.candidateBoundsKind = candidateBoundsKind;
+		this.candidateBoundsFallbackReason = candidateBoundsFallbackReason;
 	}
 
 	public static IndexGeometry fromSourceGeometryLiteral(SourceGeometryLiteral sourceGeometryLiteral) {
 		try {
 			GeometryWrapper sourceWrapper = sourceGeometryLiteral.asGeometryWrapper();
-			return new IndexGeometry(sourceGeometryLiteral, ENVELOPE_PROJECTOR.project(sourceGeometryLiteral),
-					sourceWrapper.getDimensionInfo().getTopological());
+			ProjectedCandidateBounds bounds = ENVELOPE_PROJECTOR.projectBounds(sourceGeometryLiteral);
+			IndexGeometry indexGeometry = new IndexGeometry(sourceGeometryLiteral, bounds.envelope(),
+					sourceWrapper.getDimensionInfo().getTopological(), bounds.kind(), bounds.fallbackReason());
+			if (bounds.kind() == CandidateBoundsKind.WORLD_FALLBACK) {
+				LOGGER.info("Using world CRS84 candidate envelope for source CRS {} ({})",
+						sourceWrapper.getSrsURI(), bounds.fallbackReason());
+			}
+			return indexGeometry;
 		} catch (JenaGeoSparqlException e) {
 			throw e;
 		} catch (Exception e) {
@@ -64,6 +81,16 @@ public final class IndexGeometry {
 	/** Returns the cached source topological dimension used for candidate classification. */
 	public int sourceTopologicalDimension() {
 		return sourceTopologicalDimension;
+	}
+
+	/** Returns how the CRS84 candidate envelope was produced. */
+	public CandidateBoundsKind candidateBoundsKind() {
+		return candidateBoundsKind;
+	}
+
+	/** Returns why the world CRS84 envelope was selected, when {@link CandidateBoundsKind#WORLD_FALLBACK}. */
+	public Optional<String> candidateBoundsFallbackReason() {
+		return Optional.ofNullable(candidateBoundsFallbackReason);
 	}
 
 	/**
