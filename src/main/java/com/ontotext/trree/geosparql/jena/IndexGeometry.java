@@ -11,12 +11,14 @@ import org.locationtech.jts.operation.relateng.RelatePredicate;
 /**
  * Associates a source geometry literal with its derived Lucene index envelope.
  *
- * <p>Native CRS84 sources use their source envelope. Non-empty sources that require a CRS transformation use the
- * world CRS84 envelope so candidate lookup cannot omit a geometry whose transformed shape extends outside the
- * envelope of its stored vertices. The envelope is used only for coarse Lucene lookup, conservative
- * envelope-separation proofs, and eligible rectangular-envelope containment proofs. Exact GeoSPARQL evaluation uses
- * the source geometry literal, including its datatype and effective source CRS. An empty source has a null envelope
- * and is represented by a non-spatial Lucene document so exact traversal can still reconstruct it.
+ * <p>Native CRS84 sources use their source envelope. Non-empty sources that require a CRS transformation derive a
+ * CRS84 envelope from the source bounding box using Apache SIS envelope transformation, which is documented as only
+ * approximated: the result may be bigger than the smallest possible bounding box, but should not be smaller in most
+ * cases. If that result cannot be stored as a single Lucene geographic rectangle, the world CRS84 envelope is used
+ * instead. The envelope is used only for coarse Lucene lookup, conservative envelope-separation proofs, and eligible
+ * rectangular-envelope containment proofs. Exact GeoSPARQL evaluation uses the source geometry literal, including its
+ * datatype and effective source CRS. An empty source has a null envelope and is represented by a non-spatial Lucene
+ * document so exact traversal can still reconstruct it.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
