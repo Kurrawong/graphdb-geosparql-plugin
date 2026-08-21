@@ -18,21 +18,30 @@ import org.opengis.util.FactoryException;
  * Derives a CRS84 index envelope from a source geometry literal.
  *
  * <p>Native CRS84 sources use their source envelope. Empty sources yield a null envelope. Other non-empty sources
- * transform the source-CRS bounding box with Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}.
- * That result is used only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its
- * native CRS.
+ * transform the source-CRS bounding box with Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}
+ * after {@code CRS.findOperation} on the two-dimensional horizontal CRS. That result is used only for Lucene
+ * candidate lookup. Exact evaluation uses the source geometry literal and its native CRS.
  *
- * <p>The plugin relies on the SIS {@code CoordinateOperation} overload: it samples envelope corners, edge midpoints
+ * <p>The plugin uses the {@code CoordinateOperation} overload because it samples envelope corners, edge midpoints
  * and center, uses transform derivatives to locate cubic-curve extrema, and accounts for poles and wraparound.
- * SIS documents the result as a curvature-aware approximation that may be larger than the complete CRS84 image and
- * should not be smaller in most cases. That wording is not a coverage proof. The plugin does not use the weaker
- * {@code MathTransform} overload, which SIS documents as able to under-cover poles.
+ * The {@code MathTransform} overload is not used: SIS documents that it can under-cover poles and handles longitude
+ * wraparound only when wraparound steps are already in the chain. {@code CRS.findOperation} does not insert those
+ * steps.
+ *
+ * <p>SIS documents the {@code CoordinateOperation} result as a curvature-aware approximation that may be larger than
+ * the complete CRS84 image and should not be smaller in most cases. That wording is not a coverage proof. The
+ * remaining residual is cubic-curve location on nonlinear inverse projections. SIS 1.6 does not identify a
+ * detectably unsafe {@code CoordinateOperation} class among the two-dimensional EPSG-to-CRS84 operations this plugin
+ * constructs, including GDA2020/MGA, UTM, Web Mercator, Lambert conformal conic, polar stereographic, and datum
+ * shifts. Those sources keep a selective transformed envelope. Non-CRS84 geometries are not mapped to the world
+ * envelope. Jacobian failure at an interior point is not treated as an unsafe operation class: pole and wraparound
+ * handling of the {@code CoordinateOperation} overload still apply after sampling.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
- * used when the result still cannot be stored as one Lucene geographic rectangle: inverted lower/upper ordering,
+ * used only when the result still cannot be stored as one Lucene geographic rectangle: inverted lower/upper ordering,
  * non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or transform
- * failure.
+ * failure. Unit-in-the-last-place widening does not close a geographically large miss.
  *
  * <p>Candidate lookup may include false positives. It must not include false negatives when the plugin can establish
  * a safe bound, and when it cannot, it uses the world CRS84 envelope.
@@ -107,7 +116,9 @@ final class ConservativeCrs84EnvelopeProjector {
 	 * only when the result is still unusable as one ordered Lucene geographic rectangle.
 	 *
 	 * <p>This path trusts a finite, ordered, in-range SIS rectangle after unit-in-the-last-place widening. It does
-	 * not prove that rectangle covers the complete transformed geometry.
+	 * not prove that rectangle covers the complete transformed geometry. A representable rectangle, including one that
+	 * spans full longitude, remains {@link CandidateBoundsKind#TRANSFORMED}. World fallback is a representation path
+	 * for an unusable rectangle, not a substitute for an unidentified unsafe {@code CoordinateOperation} class.
 	 */
 	static Envelope toLuceneGeoEnvelope(org.opengis.geometry.Envelope transformed) {
 		return toLuceneGeoBounds(transformed).envelope();

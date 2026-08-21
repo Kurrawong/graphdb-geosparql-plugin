@@ -29,6 +29,9 @@ import static org.junit.Assert.fail;
 /**
  * Falsifies under-covering SIS candidate envelopes by transforming densified source geometries independently
  * of {@code Envelopes.transform}, then checking that every CRS84 image point lies in the candidate envelope.
+ *
+ * <p>Ordinary GDA2020 and MGA2020 geometries must remain {@link CandidateBoundsKind#TRANSFORMED}. The suite does not
+ * treat world fallback as the policy for projected sources.
  */
 public class ConservativeCrs84EnvelopeCoverageTest {
 	private static final String GDA2020 = "http://www.opengis.net/def/crs/EPSG/0/7844";

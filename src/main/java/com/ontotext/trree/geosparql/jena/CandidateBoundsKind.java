@@ -3,6 +3,12 @@ package com.ontotext.trree.geosparql.jena;
 /**
  * How an {@link IndexGeometry} CRS84 candidate envelope was produced.
  *
+ * <p>{@link #EMPTY} is the non-spatial sentinel for an empty source. {@link #NATIVE_CRS84} is the source envelope of
+ * a CRS84 geometry. {@link #TRANSFORMED} is a selective SIS {@code CoordinateOperation} envelope, including ordinary
+ * projected sources such as GDA2020/MGA. {@link #WORLD_FALLBACK} is the geographic world rectangle used only when that
+ * envelope cannot be stored as one Lucene rectangle, the source has no two-dimensional horizontal CRS, or transform
+ * construction fails.
+ *
  * <p>This is indexing diagnostics only. It is not persisted in Lucene.
  */
 public enum CandidateBoundsKind {

@@ -3,7 +3,9 @@ package com.ontotext.trree.geosparql.jena;
 import org.locationtech.jts.geom.Envelope;
 
 /**
- * CRS84 candidate envelope together with the reason it was selected.
+ * CRS84 candidate envelope together with how it was selected.
+ *
+ * <p>{@link CandidateBoundsKind#WORLD_FALLBACK} carries a diagnostic reason. Other kinds have no reason.
  */
 record ProjectedCandidateBounds(Envelope envelope, CandidateBoundsKind kind, String fallbackReason) {
 	static ProjectedCandidateBounds empty() {

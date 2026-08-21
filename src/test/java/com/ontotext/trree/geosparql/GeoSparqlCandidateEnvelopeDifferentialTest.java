@@ -32,7 +32,8 @@ import static org.junit.Assert.fail;
 /**
  * Compares index-backed GeoSPARQL property relations with direct Jena/JTS evaluation.
  *
- * <p>The candidate invariant is {@code exact = true ⇒ index-backed = true}. Disjoint envelope proofs are also
+ * <p>The candidate invariant is {@code exact = true ⇒ index-backed = true} for every GeoSPARQL property relation
+ * family. That is the contract the selective SIS candidate envelope must satisfy. Disjoint envelope proofs are also
  * checked against exact evaluation.
  */
 public class GeoSparqlCandidateEnvelopeDifferentialTest {

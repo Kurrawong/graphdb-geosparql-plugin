@@ -22,6 +22,9 @@ import static org.junit.Assert.assertTrue;
 /**
  * A local GDA2020 or MGA2020 query over Australia-wide features must retrieve a geographically
  * selective candidate subset, not the whole dataset.
+ *
+ * <p>This is the counterpart to the coverage and differential invariants: selective SIS envelopes must remain
+ * selective for ordinary projected Australian data.
  */
 public class GeoSparqlCandidateSelectivityTest {
 	private static final String GDA2020 = "http://www.opengis.net/def/crs/EPSG/0/7844";
