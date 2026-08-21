@@ -9,11 +9,15 @@ import com.ontotext.trree.geosparql.GeoSparqlPlugin;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.IndexGeometryFixtures;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.junit.Rule;
 import org.junit.Test;
+import org.locationtech.jts.geom.Envelope;
+import org.locationtech.spatial4j.context.SpatialContext;
+import org.locationtech.spatial4j.shape.Rectangle;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
@@ -195,14 +199,40 @@ public class LuceneCandidateLookupTest {
 
 		assertFalse(emptyPoint.isSpatialCandidate());
 		assertFalse(emptyCollection.isSpatialCandidate());
-		assertFalse(GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(
+		assertTrue(GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(
 				emptyPoint.sourceGeometryLiteral(), polygon.sourceGeometryLiteral()));
 		assertTrue(GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(
 				emptyCollection.sourceGeometryLiteral(), polygon.sourceGeometryLiteral()));
-		assertFalse(GeoSparqlPropertyRelation.EH_DISJOINT.evaluate(
+		assertTrue(GeoSparqlPropertyRelation.EH_DISJOINT.evaluate(
 				emptyPoint.sourceGeometryLiteral(), polygon.sourceGeometryLiteral()));
 		assertTrue(GeoSparqlPropertyRelation.EH_DISJOINT.evaluate(
 				emptyCollection.sourceGeometryLiteral(), polygon.sourceGeometryLiteral()));
+	}
+
+	@Test
+	public void worldFallbackEnvelopeRemainsACandidateAndIsNotADefiniteDisjointMatch() throws Exception {
+		LuceneGeoIndexer indexer = createIndexer("world-fallback-envelope");
+		IndexGeometry localBound = rectangle(-1, 1, -1, 1);
+		IndexGeometry fallback = IndexGeometryFixtures.withIndexEnvelope(
+				SourceGeometryLiteral.fromWkt("<" + EPSG_32634 + "> POINT(500000 7000000)"),
+				worldCrs84Envelope());
+		IndexGeometry separated = geometry("POINT(20 20)");
+
+		assertFalse(fallback.isEnvelopeCoveringRectangle());
+		assertEquals(worldCrs84Envelope(), fallback.indexEnvelope());
+
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "fallback", List.of(fallback));
+		indexer.indexGeometryList(2L, id -> "separated", List.of(separated));
+		indexer.commit();
+
+		assertArrayEquals(new long[]{1L},
+				collectEntityIds(indexer.getEnvelopeIntersections(localBound)));
+		assertEquals(Set.of(new EnvelopeDisjointCandidate(2L, 0)),
+				new HashSet<>(collectEnvelopeDisjointCandidates(
+						indexer.getEnvelopeDisjointCandidates(localBound))));
+		assertArrayEquals(new long[]{1L},
+				collectEntityIds(indexer.getEnvelopeDisjointUncertainCandidates(localBound)));
 	}
 
 	@Test
@@ -459,6 +489,11 @@ public class LuceneCandidateLookupTest {
 		return geometry(String.format(Locale.ROOT,
 				"POLYGON((%1$f %3$f,%1$f %4$f,%2$f %4$f,%2$f %3$f,%1$f %3$f))",
 				minX, maxX, minY, maxY));
+	}
+
+	private static Envelope worldCrs84Envelope() {
+		Rectangle world = SpatialContext.GEO.getWorldBounds();
+		return new Envelope(world.getMinX(), world.getMaxX(), world.getMinY(), world.getMaxY());
 	}
 
 	private static long[] collectEntityIds(CloseableIterator<CandidateEntity> iterator) throws IOException {

@@ -174,9 +174,6 @@ public final class JenaFunctionEvaluator {
 		GeometryWrapper left = leftSource.asGeometryWrapper();
 		GeometryWrapper right = rightSource.asGeometryWrapper();
 		boolean hasGenericCollection = isGenericCollection(left) || isGenericCollection(right);
-		if (!hasGenericCollection && (left.isEmpty() || right.isEmpty())) {
-			return false;
-		}
 		if (!permittedTopology(functionUri, left.getDimensionInfo(), right.getDimensionInfo())) {
 			return false;
 		}

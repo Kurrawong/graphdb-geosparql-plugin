@@ -26,10 +26,12 @@ import org.opengis.util.FactoryException;
  * CRS84 image, and should not be smaller in most cases. That is not a proof that the bound covers every transformed
  * point.
  *
- * <p>The world CRS84 envelope is used only when that SIS result cannot be stored as one Lucene geographic rectangle:
- * wraparound, non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or
- * transform failure. A finite, ordered, in-range SIS rectangle is indexed as-is. World fallback does not run for that
- * result, so candidate lookup can omit a pair that exact evaluation would accept.
+ * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
+ * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
+ * used only when the result still cannot be stored as one Lucene geographic rectangle: inverted lower/upper ordering,
+ * non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or transform
+ * failure. A finite, ordered, in-range SIS rectangle is indexed as-is. World fallback does not run for that result,
+ * so candidate lookup can omit a pair that exact evaluation would accept.
  *
  * <p>Candidate lookup may include false positives. It must not include false negatives when the plugin can establish
  * a safe bound, and when it cannot, it uses the world CRS84 envelope.
@@ -84,6 +86,10 @@ final class ConservativeCrs84EnvelopeProjector {
 
 	/**
 	 * Adapts a transformed envelope to one Lucene geographic rectangle, or returns the world CRS84 envelope.
+	 *
+	 * <p>SIS wraparound is read through {@code getMinimum}/{@code getMaximum}. A geographic envelope that already
+	 * spans full longitude with a local latitude range is stored as that rectangle. The world CRS84 envelope is used
+	 * only when the result is still unusable as one ordered Lucene geographic rectangle.
 	 *
 	 * <p>This path trusts a finite, ordered, in-range SIS rectangle after unit-in-the-last-place widening. It does
 	 * not prove that rectangle covers the complete transformed geometry.

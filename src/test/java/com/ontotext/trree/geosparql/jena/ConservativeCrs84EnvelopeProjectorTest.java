@@ -168,13 +168,28 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 	}
 
 	@Test
-	public void wraparoundAndOutOfRangeEnvelopesUseTheWorldFallback() {
+	public void invertedOrOutOfRangeEnvelopesUseTheWorldFallback() {
 		assertEquals(worldEnvelope(),
 				ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(range(170, -170, 10, 20)));
 		assertEquals(worldEnvelope(),
 				ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(range(170, 190, 10, 20)));
 		assertEquals(worldEnvelope(),
 				ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(range(10, 20, -100, 80)));
+	}
+
+	@Test
+	public void fullLongitudeWithLocalLatitudeKeepsLatitudeSelectivity() {
+		Envelope envelope = ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(
+				range(-180, 180, 10, 20));
+		Envelope world = worldEnvelope();
+
+		assertEquals(world.getMinX(), envelope.getMinX(), 0.0);
+		assertEquals(world.getMaxX(), envelope.getMaxX(), 0.0);
+		assertTrue(envelope.getMinY() <= 10.0);
+		assertTrue(envelope.getMaxY() >= 20.0);
+		assertTrue(envelope.getMinY() > world.getMinY());
+		assertTrue(envelope.getMaxY() < world.getMaxY());
+		assertFalse(world.equals(envelope));
 	}
 
 	@Test

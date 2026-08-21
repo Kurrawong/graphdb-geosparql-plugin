@@ -13,10 +13,10 @@ import org.locationtech.jts.operation.relateng.RelatePredicate;
  *
  * <p>Native CRS84 sources use their source envelope. Non-CRS84 sources use an Apache SIS envelope transform of the
  * source bounding box, used only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and
- * its native CRS. SIS does not prove that transform is never smaller than the complete CRS84 image. The world CRS84
- * envelope is used only when that result cannot be stored as one Lucene geographic rectangle. A representable SIS
- * rectangle is indexed as-is. An empty source has a null envelope and is represented by a non-spatial Lucene document
- * so exact traversal can still reconstruct it.
+ * its native CRS. SIS does not prove that transform is never smaller than the complete CRS84 image. Wraparound may
+ * broaden that envelope, potentially to full longitude. The world CRS84 envelope is used only when the result still
+ * cannot be stored as one Lucene geographic rectangle. A representable SIS rectangle is indexed as-is. An empty source
+ * has a null envelope and is represented by a non-spatial Lucene document so exact traversal can still reconstruct it.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;
@@ -29,7 +29,7 @@ public final class IndexGeometry {
 	// so relation traversal does not need to navigate Jena geometry metadata.
 	private final int sourceTopologicalDimension;
 
-	private IndexGeometry(SourceGeometryLiteral sourceGeometryLiteral, Envelope indexEnvelope,
+	IndexGeometry(SourceGeometryLiteral sourceGeometryLiteral, Envelope indexEnvelope,
 			int sourceTopologicalDimension) {
 		this.sourceGeometryLiteral = sourceGeometryLiteral;
 		this.indexEnvelope = new Envelope(indexEnvelope);

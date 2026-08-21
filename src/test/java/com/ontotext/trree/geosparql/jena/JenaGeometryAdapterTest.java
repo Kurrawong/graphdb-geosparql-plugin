@@ -416,6 +416,35 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
+	public void emptyOrdinaryGeometriesFollowDe9imDisjointAndIntersects() throws Exception {
+		SourceGeometryLiteral emptyPoint = SourceGeometryLiteral.fromWkt("POINT EMPTY");
+		SourceGeometryLiteral emptyPolygon = SourceGeometryLiteral.fromWkt("POLYGON EMPTY");
+		SourceGeometryLiteral emptyCollection = SourceGeometryLiteral.fromWkt("GEOMETRYCOLLECTION EMPTY");
+		SourceGeometryLiteral point = SourceGeometryLiteral.fromWkt("POINT(1 1)");
+		SourceGeometryLiteral polygon = SourceGeometryLiteral.fromWkt(
+				"POLYGON((0 0,0 3,3 3,3 0,0 0))");
+
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(),
+				emptyPoint, point));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(),
+				point, emptyPoint));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(),
+				emptyPolygon, polygon));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(),
+				emptyPoint, emptyPoint));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_EH_DISJOINT.stringValue(),
+				emptyPoint, point));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_INTERSECTS.stringValue(),
+				emptyPoint, point));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_DISJOINT.stringValue(),
+				emptyCollection, point));
+		assertTrue(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_EH_DISJOINT.stringValue(),
+				emptyCollection, point));
+		assertFalse(JenaFunctionEvaluator.evaluateTopological(GeoConstants.GEOF_SF_INTERSECTS.stringValue(),
+				emptyCollection, point));
+	}
+
+	@Test
 	public void exactEvaluationTransformsMixedCrsArguments() throws Exception {
 		Literal crs84Point = VALUE_FACTORY.createLiteral(
 				"POINT(" + PROJECTED_POINT_CRS84_X + " " + PROJECTED_POINT_CRS84_Y + ")",
