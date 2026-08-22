@@ -6,12 +6,20 @@ import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.sdk.Entities;
+import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
+import org.apache.sis.geometry.GeneralDirectPosition;
+import org.apache.sis.referencing.CRS;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.locationtech.jts.geom.Envelope;
+import org.opengis.geometry.DirectPosition;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.opengis.referencing.operation.CoordinateOperation;
+import org.opengis.referencing.operation.MathTransform;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
@@ -22,6 +30,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -35,7 +44,9 @@ import static org.junit.Assert.fail;
  *
  * <p>The candidate invariant is {@code exact = true ⇒ index-backed = true} for every GeoSPARQL property relation
  * family. That is the contract the selective SIS candidate envelope must satisfy. Disjoint envelope proofs are also
- * checked against exact evaluation.
+ * checked against exact evaluation. A GDA94 3D to GDA2020 3D datum pair additionally checks that dropping
+ * ellipsoidal height in the candidate operation does not omit an exact-true match when the full 3D operation moves
+ * the horizontal coordinates.
  */
 public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	private static final long PREDICATE = 200L;
@@ -49,6 +60,10 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	private static final String LAMBERT_93 = "http://www.opengis.net/def/crs/EPSG/0/2154";
 	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";
 	private static final String GDA2020_3D = "http://www.opengis.net/def/crs/EPSG/0/7843";
+	private static final String GDA94_3D = "http://www.opengis.net/def/crs/EPSG/0/4939";
+	private static final double GDA94_LAT = -27.47;
+	private static final double GDA94_LON = 153.03;
+	private static final double HEIGHT_DEPENDENT_SHIFT_DEGREES = 1e-12;
 	private static final Set<GeoSparqlPropertyRelation> DISJOINT_RELATIONS = EnumSet.of(
 			GeoSparqlPropertyRelation.SF_DISJOINT,
 			GeoSparqlPropertyRelation.EH_DISJOINT,
@@ -127,6 +142,52 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
 		assertEquals(Set.of(1L, 2L),
 				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
+	}
+
+	/**
+	 * GDA94 3D (EPSG:4939) to GDA2020 3D (EPSG:7843) is a geog3D coordinate-frame rotation. The candidate
+	 * projector uses the two-dimensional horizontal operation to CRS84 and therefore ignores ellipsoidal height.
+	 * Exact evaluation uses the full 3D operation. At 3000 m the two CRS84 images differ; Lucene envelope
+	 * intersection must still return the pair. Exact {@code sfIntersects} holds with GDA94 3D as the relation
+	 * subject; {@code sfEquals} does not hold, and the reverse argument order does not.
+	 */
+	@Test
+	public void heightDependentGda94ToGda2020DatumDoesNotOmitExactMatches() throws Exception {
+		Gda94ToGda2020DatumOperations operations = Gda94ToGda2020DatumOperations.resolve();
+		assertEquals("full GDA94 3D → GDA2020 3D operation must consume three dimensions",
+				3, operations.full3d.getMathTransform().getSourceDimensions());
+		assertEquals("full GDA94 3D → GDA2020 3D operation must produce three dimensions",
+				3, operations.full3d.getMathTransform().getTargetDimensions());
+
+		DatumComparison at0 = operations.compare(0);
+		DatumComparison at3000 = operations.compare(3000);
+		assertEquals("candidate projector must ignore ellipsoidal height",
+				at0.sourceEnvelope, at3000.sourceEnvelope);
+		assertTrue("full 3D transform must move horizontal coordinates when only height changes\n" + at3000.dump(),
+				at3000.fullLat != at0.fullLat || at3000.fullLon != at0.fullLon);
+		assertTrue(at3000.dump(), at3000.hypotCrs84Degrees() > HEIGHT_DEPENDENT_SHIFT_DEGREES);
+
+		for (DatumComparison comparison : List.of(at0, at3000)) {
+			assertTrue(comparison.dump(), GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+					comparison.sourceLiteral, comparison.targetLiteral));
+			assertFalse(comparison.dump(), GeoSparqlPropertyRelation.SF_EQUALS.evaluate(
+					comparison.sourceLiteral, comparison.targetLiteral));
+			assertFalse(comparison.dump(), GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+					comparison.targetLiteral, comparison.sourceLiteral));
+			assertEquals(comparison.dump(), CandidateBoundsKind.TRANSFORMED,
+					comparison.sourceIndex.candidateBoundsKind());
+			assertEquals(comparison.dump(), CandidateBoundsKind.TRANSFORMED,
+					comparison.targetIndex.candidateBoundsKind());
+
+			Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+			sources.put(1L, List.of(comparison.sourceIndex));
+			sources.put(2L, List.of(comparison.targetIndex));
+			Fixture fixture = createFixture("gda94-gda2020-3d-h" + (int) comparison.sourceHeight, sources);
+			assertTrue(comparison.dump(),
+					envelopeHits(fixture, comparison.sourceIndex).contains(2L));
+			assertTrue(comparison.dump(),
+					envelopeHits(fixture, comparison.targetIndex).contains(1L));
+		}
 	}
 
 	@Test
@@ -321,6 +382,19 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		}
 	}
 
+	private static Set<Long> envelopeHits(Fixture fixture, IndexGeometry bound) throws Exception {
+		CloseableIterator<CandidateEntity> candidates = fixture.plugin.indexer.getEnvelopeIntersections(bound);
+		try {
+			Set<Long> entityIds = new LinkedHashSet<>();
+			while (candidates.hasNext()) {
+				entityIds.add(candidates.next().entityId());
+			}
+			return entityIds;
+		} finally {
+			candidates.close();
+		}
+	}
+
 	private List<Long> collectCandidateIds(GeoSparqlRelationIterator iterator, long boundSubject) {
 		try {
 			List<Long> entityIds = new ArrayList<>();
@@ -339,6 +413,100 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 
 	private record Fixture(GeoSparqlPlugin plugin, FakeEntities entities,
 			Map<Long, List<IndexGeometry>> sources) {
+	}
+
+	private record Gda94ToGda2020DatumOperations(
+			CoordinateReferenceSystem source3d,
+			CoordinateReferenceSystem source2d,
+			CoordinateReferenceSystem target2d,
+			CoordinateOperation full3d,
+			CoordinateOperation sourceHorizontalToCrs84,
+			CoordinateOperation targetHorizontalToCrs84) {
+
+		static Gda94ToGda2020DatumOperations resolve() throws Exception {
+			CoordinateReferenceSystem source3d = SourceGeometryLiteral.fromWkt(
+					pointWkt(GDA94_3D, GDA94_LAT, GDA94_LON, 0)).asGeometryWrapper().getCRS();
+			CoordinateReferenceSystem target3d = SourceGeometryLiteral.fromWkt(
+					pointWkt(GDA2020_3D, GDA94_LAT, GDA94_LON, 0)).asGeometryWrapper().getCRS();
+			CoordinateReferenceSystem source2d = CRS.getHorizontalComponent(source3d);
+			CoordinateReferenceSystem target2d = CRS.getHorizontalComponent(target3d);
+			CoordinateReferenceSystem crs84 = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
+			return new Gda94ToGda2020DatumOperations(source3d, source2d, target2d,
+					CRS.findOperation(source3d, target3d, null),
+					CRS.findOperation(source2d, crs84, null),
+					CRS.findOperation(target2d, crs84, null));
+		}
+
+		DatumComparison compare(double height) throws Exception {
+			MathTransform fullTransform = full3d.getMathTransform();
+			DirectPosition full3dPosition = transform(fullTransform, source3d, GDA94_LAT, GDA94_LON, height);
+			DirectPosition horizontalCrs84 = transform(sourceHorizontalToCrs84.getMathTransform(), source2d,
+					GDA94_LAT, GDA94_LON);
+			DirectPosition fullThenCrs84 = transform(targetHorizontalToCrs84.getMathTransform(), target2d,
+					full3dPosition.getOrdinate(0), full3dPosition.getOrdinate(1));
+			SourceGeometryLiteral sourceLiteral = SourceGeometryLiteral.fromWkt(
+					pointWkt(GDA94_3D, GDA94_LAT, GDA94_LON, height));
+			SourceGeometryLiteral targetLiteral = SourceGeometryLiteral.fromWkt(
+					pointWkt(GDA2020_3D, full3dPosition.getOrdinate(0), full3dPosition.getOrdinate(1),
+							full3dPosition.getOrdinate(2)));
+			IndexGeometry sourceIndex = IndexGeometry.fromSourceGeometryLiteral(sourceLiteral);
+			IndexGeometry targetIndex = IndexGeometry.fromSourceGeometryLiteral(targetLiteral);
+			return new DatumComparison(height, sourceLiteral, targetLiteral, sourceIndex, targetIndex,
+					horizontalCrs84.getOrdinate(0), horizontalCrs84.getOrdinate(1),
+					full3dPosition.getOrdinate(0), full3dPosition.getOrdinate(1), full3dPosition.getOrdinate(2),
+					fullThenCrs84.getOrdinate(0), fullThenCrs84.getOrdinate(1),
+					sourceIndex.indexEnvelope(), targetIndex.indexEnvelope());
+		}
+
+		private static DirectPosition transform(MathTransform transform, CoordinateReferenceSystem crs,
+				double... ordinates) throws Exception {
+			GeneralDirectPosition source = new GeneralDirectPosition(crs);
+			for (int i = 0; i < ordinates.length; i++) {
+				source.setOrdinate(i, ordinates[i]);
+			}
+			return transform.transform(source, null);
+		}
+
+		private static String pointWkt(String crsUri, double lat, double lon, double height) {
+			return String.format(Locale.US, "<%s> POINT Z(%.16f %.16f %.16f)", crsUri, lat, lon, height);
+		}
+	}
+
+	private record DatumComparison(
+			double sourceHeight,
+			SourceGeometryLiteral sourceLiteral,
+			SourceGeometryLiteral targetLiteral,
+			IndexGeometry sourceIndex,
+			IndexGeometry targetIndex,
+			double horizontalLon84,
+			double horizontalLat84,
+			double fullLat,
+			double fullLon,
+			double fullHeight,
+			double fullLon84,
+			double fullLat84,
+			Envelope sourceEnvelope,
+			Envelope targetEnvelope) {
+
+		double hypotCrs84Degrees() {
+			return Math.hypot(fullLon84 - horizontalLon84, fullLat84 - horizontalLat84);
+		}
+
+		String dump() {
+			return """
+					source:              lat=%s, lon=%s, h=%s
+					horizontal-only:     lon84=%s, lat84=%s
+					full-3D transformed: lat'=%s, lon'=%s, h'=%s
+					full-3D then CRS84:  lon84'=%s, lat84'=%s
+					difference:          Δlon84=%s, Δlat84=%s, hypot=%s
+					candidate envelopes: source=%s target=%s intersect=%s
+					""".formatted(GDA94_LAT, GDA94_LON, sourceHeight,
+					horizontalLon84, horizontalLat84,
+					fullLat, fullLon, fullHeight,
+					fullLon84, fullLat84,
+					fullLon84 - horizontalLon84, fullLat84 - horizontalLat84, hypotCrs84Degrees(),
+					sourceEnvelope, targetEnvelope, sourceEnvelope.intersects(targetEnvelope));
+		}
 	}
 
 	private static final class FakeEntities implements Entities {
