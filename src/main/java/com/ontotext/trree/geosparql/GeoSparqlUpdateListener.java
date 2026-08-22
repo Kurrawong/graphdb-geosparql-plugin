@@ -140,6 +140,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 
     @Override
     public void transactionCompleted(PluginConnection pluginConnection) {
+		cleanupAfterTransaction();
 		if (hasIndexTransaction()) {
 			try {
 				parent.indexer.complete();

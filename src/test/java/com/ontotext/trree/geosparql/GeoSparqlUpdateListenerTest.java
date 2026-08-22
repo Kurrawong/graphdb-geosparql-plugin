@@ -3,6 +3,7 @@ package com.ontotext.trree.geosparql;
 import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
+import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginConnection;
 import com.ontotext.trree.sdk.PluginException;
@@ -17,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongFunction;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -201,6 +204,49 @@ public class GeoSparqlUpdateListenerTest {
 		LuceneGeoIndexer restarted = new LuceneGeoIndexer(pluginFromPersistedConfig(dataDir));
 		restarted.initialize();
 		assertPendingTransactionFailure(restarted);
+	}
+
+	@Test
+	public void disablingPluginDuringTransactionDiscardsAccumulatedUpdateIds() throws Exception {
+		Path dataDir = tmpFolder.newFolder("disable-accumulators").toPath();
+		GeoSparqlPlugin plugin = enabledPlugin(dataDir);
+		AtomicInteger indexedCount = new AtomicInteger();
+		plugin.indexer = new LuceneGeoIndexer(plugin) {
+			@Override
+			public void begin() {}
+
+			@Override
+			public void commit() {}
+
+			@Override
+			public void complete() {}
+
+			@Override
+			public void indexGeometryList(long entityId, LongFunction<String> uriMapper,
+										  List<IndexGeometry> geometries) {
+				indexedCount.incrementAndGet();
+			}
+		};
+
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		PluginConnection connection = emptyPluginConnection();
+
+		// Transaction 1: spatial statements are added while enabled, then plugin is disabled before commit
+		listener.transactionStarted(connection);
+		listener.statementAdded(10L, 1L, 20L, 0L, true, connection);
+		listener.statementAdded(11L, 3L, 21L, 0L, true, connection);
+
+		plugin.getConfig().setEnabled(false);
+		listener.transactionCommit(connection);
+		listener.transactionCompleted(connection);
+
+		// Transaction 2: plugin is re-enabled, transaction runs with no modifications
+		plugin.getConfig().setEnabled(true);
+		listener.transactionStarted(connection);
+		listener.transactionCommit(connection);
+		listener.transactionCompleted(connection);
+
+		assertEquals(0, indexedCount.get());
 	}
 
 	private GeoSparqlPlugin enabledPlugin(Path dataDir) {
