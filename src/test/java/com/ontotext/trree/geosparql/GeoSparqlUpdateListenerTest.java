@@ -19,7 +19,7 @@ import java.nio.file.Path;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.LongFunction;
+import java.util.function.Function;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -222,7 +222,7 @@ public class GeoSparqlUpdateListenerTest {
 			public void complete() {}
 
 			@Override
-			public void indexGeometryList(long entityId, LongFunction<String> uriMapper,
+			public void indexGeometryList(long entityId, Function<Long, String> uriMapper,
 										  List<IndexGeometry> geometries) {
 				indexedCount.incrementAndGet();
 			}
