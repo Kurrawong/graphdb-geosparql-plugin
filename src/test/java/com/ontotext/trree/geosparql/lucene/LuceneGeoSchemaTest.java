@@ -274,6 +274,22 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
+    public void testSchemaLayoutWithoutOrdinatePreservingSourceWkbRequiresReindex()
+            throws Exception {
+        Path missingSourceOrdinatesDataDir = tmpFolder.getRoot().toPath()
+                .resolve("schema-layout-without-source-ordinates");
+        Files.createDirectories(missingSourceOrdinatesDataDir);
+        writeSchemaLayoutWithoutOrdinatePreservingSourceWkb(missingSourceOrdinatesDataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(missingSourceOrdinatesDataDir.toFile());
+
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
+
+        assertForceReindexMessage(exception);
+    }
+
+    @Test
     public void testMarkedCurrentSchemaV2IndexPassesStartupGate() throws Exception {
         Path markedDataDir = tmpFolder.getRoot().toPath().resolve("marked-schema-v2");
         Files.createDirectories(markedDataDir);
@@ -599,6 +615,21 @@ public class LuceneGeoSchemaTest {
                     LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
             commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
                     "prefix-envelope-source-wkb-envelope-marker-topology-dv");
+            writer.setLiveCommitData(commitData.entrySet());
+        }
+    }
+
+    private void writeSchemaLayoutWithoutOrdinatePreservingSourceWkb(Path dataDir) throws Exception {
+        Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
+        Files.createDirectories(indexDir);
+        try (FSDirectory dir = FSDirectory.open(indexDir);
+             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(1L, sampleGeometry));
+            Map<String, String> commitData = new HashMap<>();
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_KEY,
+                    LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
+                    "prefix-envelope-source-wkb-envelope-marker-topology-dv-envelope-points");
             writer.setLiveCommitData(commitData.entrySet());
         }
     }

@@ -75,9 +75,9 @@ final class LuceneGeoDocumentSchema {
 	static final String COMMIT_SCHEMA_VERSION_VALUE = Integer.toString(SCHEMA_VERSION);
 	/** Commit metadata key identifying the concrete field layout within the schema version. */
 	static final String COMMIT_SCHEMA_LAYOUT_KEY = "geosparql.luceneSchemaLayout";
-	/** Commit metadata value requiring exact envelope bounds in addition to lightweight disjoint metadata. */
+	/** Commit metadata value requiring ordinate-preserving source WKB and exact envelope bounds. */
 	static final String COMMIT_SCHEMA_LAYOUT_VALUE =
-			"prefix-envelope-source-wkb-envelope-marker-topology-dv-envelope-points";
+			"prefix-envelope-ordinate-preserving-source-wkb-envelope-marker-topology-dv-envelope-points";
 	static final String SCHEMA_MISMATCH_MESSAGE =
 			"Existing GeoSPARQL Lucene index does not match the required schema v2 layout. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "

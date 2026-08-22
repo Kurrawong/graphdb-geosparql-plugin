@@ -5,6 +5,7 @@ import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.sis.geometry.Envelopes;
 import org.apache.sis.geometry.GeneralEnvelope;
 import org.apache.sis.referencing.CRS;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.spatial4j.context.SpatialContext;
 import org.locationtech.spatial4j.shape.Rectangle;
@@ -18,9 +19,10 @@ import org.opengis.util.FactoryException;
  * Derives a CRS84 index envelope from a source geometry literal.
  *
  * <p>Native CRS84 sources use their source envelope. Empty sources yield a null envelope. Other non-empty sources
- * transform the source-CRS bounding box with Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}
- * after {@code CRS.findOperation} on the two-dimensional horizontal CRS. That result is used only for Lucene
- * candidate lookup. Exact evaluation uses the source geometry literal and its native CRS.
+ * transform the source-CRS bounding box with Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}.
+ * Sources with a three-dimensional CRS retain their vertical range through a full operation to WGS 84 3D before
+ * reduction to CRS84. Other sources use an operation on their two-dimensional horizontal CRS. The result is used
+ * only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its native CRS.
  *
  * <p>The plugin uses the {@code CoordinateOperation} overload because it samples envelope corners, edge midpoints
  * and center, uses transform derivatives to locate cubic-curve extrema, and accounts for poles and wraparound.
@@ -49,6 +51,7 @@ import org.opengis.util.FactoryException;
  * rectangle. SIS does not provide a formal coverage guarantee for finite transformed envelopes.
  */
 final class ConservativeCrs84EnvelopeProjector {
+	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";
 	static final String FALLBACK_MISSING_HORIZONTAL_CRS = "missing-horizontal-crs";
 	static final String FALLBACK_TRANSFORM_FAILURE = "transform-failure";
 	static final String FALLBACK_UNREPRESENTABLE_RECTANGLE = "unrepresentable-rectangle";
@@ -75,12 +78,35 @@ final class ConservativeCrs84EnvelopeProjector {
 
 	private static ProjectedCandidateBounds transformSourceBounds(GeometryWrapper sourceWrapper)
 			throws FactoryException, TransformException {
-		CoordinateReferenceSystem sourceCrs;
+		CoordinateReferenceSystem sourceCrs = sourceWrapper.getCRS();
+		CoordinateSystem sourceCoordinateSystem = sourceCrs.getCoordinateSystem();
+		if (sourceCoordinateSystem != null && sourceCoordinateSystem.getDimension() == 3) {
+			return transformThreeDimensionalSourceBounds(sourceWrapper, sourceCrs);
+		}
+		CoordinateReferenceSystem horizontal;
 		try {
-			sourceCrs = horizontalCrs(sourceWrapper.getCRS());
+			horizontal = horizontalCrs(sourceCrs);
 		} catch (TransformException e) {
 			return ProjectedCandidateBounds.worldFallback(FALLBACK_MISSING_HORIZONTAL_CRS);
 		}
+		return transformHorizontalSourceBounds(sourceWrapper, horizontal);
+	}
+
+	private static ProjectedCandidateBounds transformThreeDimensionalSourceBounds(
+			GeometryWrapper sourceWrapper, CoordinateReferenceSystem sourceCrs)
+			throws FactoryException, TransformException {
+		CoordinateReferenceSystem target3d = SRSRegistry.getCRS(WGS84_3D);
+		GeneralEnvelope sourceEnvelope = createThreeDimensionalSourceEnvelope(sourceWrapper, sourceCrs);
+		CoordinateOperation full3dOperation = CRS.findOperation(sourceCrs, target3d, null);
+		org.opengis.geometry.Envelope target3dEnvelope = Envelopes.transform(full3dOperation, sourceEnvelope);
+		CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
+		CoordinateOperation reductionToCrs84 = CRS.findOperation(target3d, targetCrs, null);
+		return toLuceneGeoBounds(Envelopes.transform(reductionToCrs84, target3dEnvelope));
+	}
+
+	private static ProjectedCandidateBounds transformHorizontalSourceBounds(
+			GeometryWrapper sourceWrapper, CoordinateReferenceSystem sourceCrs)
+			throws FactoryException, TransformException {
 		CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
 		GeneralEnvelope sourceEnvelope = createSourceEnvelope(sourceWrapper, sourceCrs);
 		CoordinateOperation operation = CRS.findOperation(sourceCrs, targetCrs, null);
@@ -107,6 +133,23 @@ final class ConservativeCrs84EnvelopeProjector {
 		GeneralEnvelope sourceEnvelope = new GeneralEnvelope(sourceCrs);
 		sourceEnvelope.setRange(0, sourceBounds.getMinX(), sourceBounds.getMaxX());
 		sourceEnvelope.setRange(1, sourceBounds.getMinY(), sourceBounds.getMaxY());
+		return sourceEnvelope;
+	}
+
+	private static GeneralEnvelope createThreeDimensionalSourceEnvelope(GeometryWrapper sourceWrapper,
+			CoordinateReferenceSystem sourceCrs) throws TransformException {
+		GeneralEnvelope sourceEnvelope = createSourceEnvelope(sourceWrapper, sourceCrs);
+		double minZ = Double.POSITIVE_INFINITY;
+		double maxZ = Double.NEGATIVE_INFINITY;
+		for (Coordinate coordinate : sourceWrapper.getParsingGeometry().getCoordinates()) {
+			double z = coordinate.getZ();
+			if (!Double.isFinite(z)) {
+				throw new TransformException("Three-dimensional source CRS requires finite vertical ordinates.");
+			}
+			minZ = Math.min(minZ, z);
+			maxZ = Math.max(maxZ, z);
+		}
+		sourceEnvelope.setRange(2, minZ, maxZ);
 		return sourceEnvelope;
 	}
 

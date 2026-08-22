@@ -7,6 +7,8 @@ import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.sdk.Entities;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
+import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
+import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.sis.geometry.GeneralDirectPosition;
 import org.apache.sis.referencing.CRS;
 import org.eclipse.rdf4j.model.IRI;
@@ -145,11 +147,11 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	/**
-	 * GDA94 3D (EPSG:4939) to GDA2020 3D (EPSG:7843) is a geog3D coordinate-frame rotation. The candidate
-	 * projector uses the two-dimensional horizontal operation to CRS84 and therefore ignores ellipsoidal height.
-	 * Exact evaluation uses the full 3D operation. At 3000 m the two CRS84 images differ; Lucene envelope
-	 * intersection must still return the pair. Exact {@code sfIntersects} holds with GDA94 3D as the relation
-	 * subject; {@code sfEquals} does not hold, and the reverse argument order does not.
+	 * GDA94 3D (EPSG:4939) to GDA2020 3D (EPSG:7843) is a geog3D coordinate-frame rotation whose horizontal
+	 * output depends on ellipsoidal height. At 3000 m, reducing the source CRS to its horizontal component before
+	 * the datum operation disagrees with exact evaluation. Candidate envelopes and supported Lucene configurations
+	 * must retain the exact-true pair. Exact {@code sfIntersects} holds with GDA94 3D as the relation subject;
+	 * {@code sfEquals} does not hold, and the reverse argument order does not.
 	 */
 	@Test
 	public void heightDependentGda94ToGda2020DatumDoesNotOmitExactMatches() throws Exception {
@@ -161,8 +163,6 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 
 		DatumComparison at0 = operations.compare(0);
 		DatumComparison at3000 = operations.compare(3000);
-		assertEquals("candidate projector must ignore ellipsoidal height",
-				at0.sourceEnvelope, at3000.sourceEnvelope);
 		assertTrue("full 3D transform must move horizontal coordinates when only height changes\n" + at3000.dump(),
 				at3000.fullLat != at0.fullLat || at3000.fullLon != at0.fullLon);
 		assertTrue(at3000.dump(), at3000.hypotCrs84Degrees() > HEIGHT_DEPENDENT_SHIFT_DEGREES);
@@ -178,15 +178,27 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 					comparison.sourceIndex.candidateBoundsKind());
 			assertEquals(comparison.dump(), CandidateBoundsKind.TRANSFORMED,
 					comparison.targetIndex.candidateBoundsKind());
+			assertTrue("exact-true pair must have intersecting candidate envelopes\n" + comparison.dump(),
+					comparison.sourceEnvelope.intersects(comparison.targetEnvelope));
 
-			Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
-			sources.put(1L, List.of(comparison.sourceIndex));
-			sources.put(2L, List.of(comparison.targetIndex));
-			Fixture fixture = createFixture("gda94-gda2020-3d-h" + (int) comparison.sourceHeight, sources);
-			assertTrue(comparison.dump(),
-					envelopeHits(fixture, comparison.sourceIndex).contains(2L));
-			assertTrue(comparison.dump(),
-					envelopeHits(fixture, comparison.targetIndex).contains(1L));
+			for (IndexSettings setting : heightDependentIndexSettings()) {
+				Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+				sources.put(1L, List.of(comparison.sourceIndex));
+				sources.put(2L, List.of(comparison.targetIndex));
+				String settingName = setting.prefixTree.name().toLowerCase(Locale.ROOT) + "-" + setting.precision;
+				Fixture fixture = createFixture(
+						"gda94-gda2020-3d-h" + (int) comparison.sourceHeight + "-" + settingName,
+						sources, setting.prefixTree, setting.precision);
+				assertTrue(settingName + "\n" + comparison.dump(),
+						envelopeHits(fixture, comparison.sourceIndex).contains(2L));
+				assertTrue(settingName + "\n" + comparison.dump(),
+						envelopeHits(fixture, comparison.targetIndex).contains(1L));
+
+				assertIndexedEqualsReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, comparison, settingName);
+				for (GeoSparqlPropertyRelation relation : DISJOINT_RELATIONS) {
+					assertIndexedEqualsReference(fixture, relation, comparison, settingName);
+				}
+			}
 		}
 	}
 
@@ -311,11 +323,19 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 
 	private Fixture createFixture(String directoryName, Map<Long, List<IndexGeometry>> sources)
 			throws Exception {
+		return createFixture(directoryName, sources,
+				GeoSparqlConfig.PREFIXTREE_DEFAULT, GeoSparqlConfig.PRECISION_DEFAULT);
+	}
+
+	private Fixture createFixture(String directoryName, Map<Long, List<IndexGeometry>> sources,
+			GeoSparqlConfig.PrefixTree prefixTree, int precision) throws Exception {
 		Path dataDir = tmpFolder.getRoot().toPath().resolve(directoryName);
 		Files.createDirectories(dataDir);
 
 		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
 		GeoSparqlConfig config = new GeoSparqlConfig();
+		config.setPrefixTree(prefixTree);
+		config.setPrecision(precision);
 		config.updateCurrentSettings();
 		plugin.setConfig(config);
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlCandidateEnvelopeDifferentialTest.class));
@@ -344,6 +364,18 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		List<Long> rows = collectCandidateIds(new GeoSparqlRelationIterator(fixture.plugin, relation,
 				subject, PREDICATE, object, fixture.entities), subject);
 		return new LinkedHashSet<>(rows);
+	}
+
+	private void assertIndexedEqualsReference(Fixture fixture, GeoSparqlPropertyRelation relation,
+			DatumComparison comparison, String settingName) throws Exception {
+		String message = settingName + " " + relation + "\n" + comparison.dump();
+		try {
+			assertEquals(message,
+					runReference(fixture, relation, 1L, 0),
+					runIndexed(fixture, relation, 1L, 0));
+		} catch (RuntimeException e) {
+			throw new AssertionError(message, e);
+		}
 	}
 
 	private Set<Long> runReference(Fixture fixture, GeoSparqlPropertyRelation relation,
@@ -411,8 +443,19 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		return java.util.Arrays.stream(wkts).map(TestIndexGeometries::fromWkt).toList();
 	}
 
+	private static List<IndexSettings> heightDependentIndexSettings() {
+		return List.of(
+				new IndexSettings(GeoSparqlConfig.PrefixTree.QUAD, GeoSparqlConfig.PRECISION_DEFAULT),
+				new IndexSettings(GeoSparqlConfig.PrefixTree.QUAD, QuadPrefixTree.MAX_LEVELS_POSSIBLE),
+				new IndexSettings(GeoSparqlConfig.PrefixTree.GEOHASH, GeoSparqlConfig.PRECISION_DEFAULT),
+				new IndexSettings(GeoSparqlConfig.PrefixTree.GEOHASH, GeohashPrefixTree.getMaxLevelsPossible()));
+	}
+
 	private record Fixture(GeoSparqlPlugin plugin, FakeEntities entities,
 			Map<Long, List<IndexGeometry>> sources) {
+	}
+
+	private record IndexSettings(GeoSparqlConfig.PrefixTree prefixTree, int precision) {
 	}
 
 	private record Gda94ToGda2020DatumOperations(
