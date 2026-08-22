@@ -350,6 +350,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 			indexer.indexGeometryList(entry.getKey(), id -> "entity-" + id, entry.getValue());
 		}
 		indexer.commit();
+		indexer.complete();
 
 		FakeEntities entities = new FakeEntities();
 		for (Long entityId : sources.keySet()) {

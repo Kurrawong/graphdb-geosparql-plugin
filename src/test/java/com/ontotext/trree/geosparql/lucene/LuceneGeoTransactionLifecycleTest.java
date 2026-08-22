@@ -38,7 +38,7 @@ public class LuceneGeoTransactionLifecycleTest {
 		indexer.begin();
 		indexer.indexGeometryList(1L, id -> "geometry", List.of(geometry("POINT(2 2)")));
 		indexer.commit();
-		assertEquals("POINT(2 2)", onlySource(indexer).lexicalForm());
+		assertPendingTransactionFailure(indexer);
 
 		indexer.rollback();
 		assertEquals("POINT(1 1)", onlySource(indexer).lexicalForm());
@@ -69,7 +69,7 @@ public class LuceneGeoTransactionLifecycleTest {
 		LuceneGeoIndexer indexer = createIndexer(dataDir);
 
 		commit(indexer, "POINT(2 2)");
-		assertEquals("POINT(2 2)", onlySource(indexer).lexicalForm());
+		assertPendingTransactionFailure(indexer);
 		indexer.rollback();
 
 		assertEmpty(createIndexer(dataDir));
@@ -107,6 +107,22 @@ public class LuceneGeoTransactionLifecycleTest {
 	}
 
 	@Test
+	public void pendingRecoveryCannotBeCompletedWithoutForceReindex() throws Exception {
+		File dataDir = tmpFolder.newFolder("pending-recovery-no-op");
+		LuceneGeoIndexer indexer = createIndexer(dataDir);
+		commit(indexer, "POINT(1 1)");
+		indexer.complete();
+		commit(indexer, "POINT(2 2)");
+
+		LuceneGeoIndexer restarted = createIndexer(dataDir);
+		restarted.begin();
+		PluginException failure = assertThrows(PluginException.class, restarted::commit);
+		assertTrue(failure.getMessage().contains("pending GraphDB transaction"));
+		restarted.rollback();
+		assertPendingTransactionFailure(restarted);
+	}
+
+	@Test
 	public void luceneCommitFailureLeavesPreviousGeometryVisible() throws Exception {
 		File dataDir = tmpFolder.newFolder("commit-failure");
 		FailingCommitIndexer indexer = createFailingIndexer(dataDir);
@@ -124,6 +140,37 @@ public class LuceneGeoTransactionLifecycleTest {
 		assertEquals(originalGeneration, latestCommit(dataDir).getGeneration());
 	}
 
+	@Test
+	public void failedPostCommitRestorationBlocksReadsBeforeAndAfterRestart() throws Exception {
+		File dataDir = tmpFolder.newFolder("failed-post-commit-restoration");
+		FailingRestoreIndexer indexer = createFailingRestoreIndexer(dataDir);
+		commit(indexer, "POINT(1 1)");
+		indexer.complete();
+
+		commit(indexer, "POINT(2 2)");
+		indexer.failRestore = true;
+		assertThrows(IOException.class, indexer::rollback);
+
+		assertPendingTransactionFailure(indexer);
+		assertPendingTransactionFailure(createIndexer(dataDir));
+	}
+
+	@Test
+	public void failedSnapshotAcquisitionReleasesWriterLock() throws Exception {
+		File dataDir = tmpFolder.newFolder("failed-snapshot-acquisition");
+		FailingSnapshotIndexer indexer = createFailingSnapshotIndexer(dataDir);
+		commit(indexer, "POINT(1 1)");
+		indexer.complete();
+		indexer.failSnapshot = true;
+
+		assertThrows(IOException.class, indexer::begin);
+		assertFalse(indexer.isTransactionActive());
+
+		LuceneGeoIndexer reopened = createIndexer(dataDir);
+		reopened.begin();
+		reopened.rollback();
+	}
+
 	private LuceneGeoIndexer createIndexer(File dataDir) throws Exception {
 		LuceneGeoIndexer indexer = new LuceneGeoIndexer(createParent(dataDir));
 		indexer.initialize();
@@ -132,6 +179,18 @@ public class LuceneGeoTransactionLifecycleTest {
 
 	private FailingCommitIndexer createFailingIndexer(File dataDir) throws Exception {
 		FailingCommitIndexer indexer = new FailingCommitIndexer(createParent(dataDir));
+		indexer.initialize();
+		return indexer;
+	}
+
+	private FailingRestoreIndexer createFailingRestoreIndexer(File dataDir) throws Exception {
+		FailingRestoreIndexer indexer = new FailingRestoreIndexer(createParent(dataDir));
+		indexer.initialize();
+		return indexer;
+	}
+
+	private FailingSnapshotIndexer createFailingSnapshotIndexer(File dataDir) throws Exception {
+		FailingSnapshotIndexer indexer = new FailingSnapshotIndexer(createParent(dataDir));
 		indexer.initialize();
 		return indexer;
 	}
@@ -171,6 +230,12 @@ public class LuceneGeoTransactionLifecycleTest {
 		}
 	}
 
+	private void assertPendingTransactionFailure(LuceneGeoIndexer indexer) {
+		PluginException failure = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(1L));
+		assertTrue(failure.getMessage().contains("pending GraphDB transaction"));
+	}
+
 	private IndexCommit latestCommit(File dataDir) throws Exception {
 		try (FSDirectory directory = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(dataDir.toPath()))) {
 			List<IndexCommit> commits = DirectoryReader.listCommits(directory);
@@ -191,6 +256,38 @@ public class LuceneGeoTransactionLifecycleTest {
 				throw new IOException("Simulated commit failure");
 			}
 			super.closeIndexWriter();
+		}
+	}
+
+	private static final class FailingRestoreIndexer extends LuceneGeoIndexer {
+		private boolean failRestore;
+
+		private FailingRestoreIndexer(GeoSparqlPlugin parent) {
+			super(parent);
+		}
+
+		@Override
+		protected void restorePreTransactionCommit() throws IOException {
+			if (failRestore) {
+				throw new IOException("Simulated restoration failure");
+			}
+			super.restorePreTransactionCommit();
+		}
+	}
+
+	private static final class FailingSnapshotIndexer extends LuceneGeoIndexer {
+		private boolean failSnapshot;
+
+		private FailingSnapshotIndexer(GeoSparqlPlugin parent) {
+			super(parent);
+		}
+
+		@Override
+		IndexCommit snapshotExistingCommit() throws IOException {
+			if (failSnapshot) {
+				throw new IOException("Simulated snapshot failure");
+			}
+			return super.snapshotExistingCommit();
 		}
 	}
 }

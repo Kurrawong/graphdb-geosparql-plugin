@@ -76,6 +76,7 @@ public class GeoSparqlCandidateSelectivityTest {
 			}
 		}
 		indexer.commit();
+		indexer.complete();
 
 		IndexGeometry brisbane = geometry(
 				"<" + GDA2020 + "> POLYGON((-27.6 152.9,-27.3 152.9,-27.3 153.2,-27.6 153.2,-27.6 152.9))");

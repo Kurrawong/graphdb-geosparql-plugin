@@ -132,11 +132,30 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		Files.createDirectories(indexDir);
 		boolean existingCommit = DirectoryReader.indexExists(directory);
 		indexWriter = new IndexWriter(directory, newIndexWriterConfig());
-		preTransactionCommit = existingCommit ? snapshotDeletionPolicy.snapshot() : null;
-		transactionActive = true;
-		provisionalCommitPublished = false;
-		schemaMismatchAtTransactionStart = schemaMismatchDetected;
-		recoveryRequiredAtTransactionStart = recoveryRequired;
+		try {
+			preTransactionCommit = existingCommit ? snapshotExistingCommit() : null;
+			transactionActive = true;
+			provisionalCommitPublished = false;
+			schemaMismatchAtTransactionStart = schemaMismatchDetected;
+			recoveryRequiredAtTransactionStart = recoveryRequired;
+		} catch (Exception e) {
+			try {
+				releasePreTransactionCommit();
+			} catch (IOException cleanupFailure) {
+				e.addSuppressed(cleanupFailure);
+			}
+			try {
+				indexWriter.rollback();
+			} catch (IOException cleanupFailure) {
+				e.addSuppressed(cleanupFailure);
+			}
+			indexWriter = null;
+			throw e;
+		}
+	}
+
+	IndexCommit snapshotExistingCommit() throws IOException {
+		return snapshotDeletionPolicy.snapshot();
 	}
 
 	private IndexWriterConfig newIndexWriterConfig() {
@@ -161,8 +180,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	public void commit() throws Exception {
 		boolean rebuildWasInProgress = schemaRebuildInProgress;
 		try {
+			if (recoveryRequiredAtTransactionStart && !rebuildWasInProgress) {
+				assertReadableCurrentSchema();
+			}
 			writeSchemaMarkerIfNeeded();
 			writePendingTransactionMarker();
+			recoveryRequired = true;
 			closeIndexWriter(); // also commits
 			provisionalCommitPublished = true;
 			if (rebuildWasInProgress) {
@@ -468,7 +491,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 	}
 
-	private void restorePreTransactionCommit() throws IOException {
+	protected void restorePreTransactionCommit() throws IOException {
 		IndexWriterConfig restoreConfig = newIndexWriterConfig();
 		if (preTransactionCommit == null) {
 			restoreConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);

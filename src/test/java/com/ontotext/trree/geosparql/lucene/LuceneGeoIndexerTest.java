@@ -143,6 +143,7 @@ public class LuceneGeoIndexerTest {
             }
         }
         luceneGeoIndexer.commit();
+		luceneGeoIndexer.complete();
     }
 
     private void initIndexer() throws Exception {
@@ -266,6 +267,7 @@ public class LuceneGeoIndexerTest {
         entityCandidateIndexer.begin();
         entityCandidateIndexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(geometry, geometry));
         entityCandidateIndexer.commit();
+		entityCandidateIndexer.complete();
 
 		try (FSDirectory directory = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(entityCandidateDataDir));
 			 IndexReader reader = DirectoryReader.open(directory)) {
@@ -299,6 +301,7 @@ public class LuceneGeoIndexerTest {
 		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(collectionEnvelope));
         indexer.indexGeometryList(2L, subject -> "Subject " + subject, List.of(emptySentinel));
         indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(collectionEnvelope)));
@@ -338,6 +341,7 @@ public class LuceneGeoIndexerTest {
         indexer.begin();
 		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(collectionEnvelope));
         indexer.commit();
+		indexer.complete();
 
         CloseableIterator<CandidateEntity> entities = indexer.getAllEntities();
         try {
@@ -364,6 +368,7 @@ public class LuceneGeoIndexerTest {
         indexer.begin();
 		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(collectionEnvelope));
         indexer.commit();
+		indexer.complete();
 
 		CloseableIterator<SourceGeometryLiteral> sources =
 				indexer.getSourceGeometryLiteralsFor(1L);
@@ -387,6 +392,7 @@ public class LuceneGeoIndexerTest {
         indexer.begin();
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(first, second));
         indexer.commit();
+		indexer.complete();
 
         CloseableIterator<SourceGeometryLiteral> geometries =
                 indexer.getSourceGeometryLiteralsFor(1L);
@@ -502,6 +508,7 @@ public class LuceneGeoIndexerTest {
             entityCandidateIndexer.indexGeometryList(subject, id -> "Subject " + id, List.of(geometry));
         }
         entityCandidateIndexer.commit();
+		entityCandidateIndexer.complete();
 
 		CloseableIterator<CandidateEntity> iterator = entityCandidateIndexer.getAllEntities();
 

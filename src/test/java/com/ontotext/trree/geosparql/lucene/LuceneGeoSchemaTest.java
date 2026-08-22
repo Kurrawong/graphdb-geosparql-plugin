@@ -317,6 +317,7 @@ public class LuceneGeoSchemaTest {
         indexer.begin();
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
         indexer.commit();
+		indexer.complete();
 
         try (FSDirectory dir = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(emptyDataDir));
              IndexReader reader = DirectoryReader.open(dir)) {
@@ -428,11 +429,14 @@ public class LuceneGeoSchemaTest {
         indexer.failCommitClose();
 
         assertThrows(IOException.class, indexer::commit);
-        PluginException exception = assertThrows(PluginException.class,
+		PluginException pending = assertThrows(PluginException.class,
                 () -> indexer.getSourceGeometryLiteralsFor(0));
+		assertTrue(pending.getMessage().contains("pending GraphDB transaction"));
 
-        assertForceReindexMessage(exception);
         indexer.rollback();
+		PluginException mismatch = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(mismatch);
     }
 
     @Test
@@ -446,6 +450,7 @@ public class LuceneGeoSchemaTest {
         indexer.freshIndex();
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
         indexer.commit();
+		indexer.complete();
 
         CloseableIterator<SourceGeometryLiteral> iterator =
                 indexer.getSourceGeometryLiteralsFor(0);
@@ -474,6 +479,7 @@ public class LuceneGeoSchemaTest {
                 SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT));
         projectedIndexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(projectedGeometry));
         projectedIndexer.commit();
+		projectedIndexer.complete();
 
         try (FSDirectory dir = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(projectedDataDir));
              IndexReader reader = DirectoryReader.open(dir)) {

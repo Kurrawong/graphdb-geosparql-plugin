@@ -56,6 +56,7 @@ public class LuceneCandidateLookupTest {
 				List.of(geometry("POLYGON((3 3,3 6,6 6,6 3,3 3))")));
 		indexer.indexGeometryList(3L, id -> "separated", List.of(geometry("POINT(20 20)")));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L, 2L},
 				collectEntityIds(indexer.getEnvelopeIntersections(bound)));
@@ -109,6 +110,7 @@ public class LuceneCandidateLookupTest {
 					List.of(geometry("POINT(" + x + " " + y + ")")));
 		}
 		indexer.commit();
+		indexer.complete();
 
 		long[] candidates = collectEntityIds(indexer.getEnvelopeIntersections(bound));
 		assertEquals(candidateCount, candidates.length);
@@ -154,6 +156,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "line", List.of(line));
 		indexer.indexGeometryList(2L, id -> "distant", List.of(distantCrs84));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(point)));
@@ -234,6 +237,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "fallback", List.of(fallback));
 		indexer.indexGeometryList(2L, id -> "separated", List.of(separated));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(localBound)));
@@ -261,6 +265,7 @@ public class LuceneCandidateLookupTest {
 				List.of(geometry("POINT(2 2)"), geometry("LINESTRING(10 10,12 12)")));
 		indexer.indexGeometryList(7L, id -> "boundary touch", List.of(geometry("POINT(0 2)")));
 		indexer.commit();
+		indexer.complete();
 
 		List<EnvelopeDisjointCandidate> definite =
 				collectEnvelopeDisjointCandidates(indexer.getEnvelopeDisjointCandidates(bound));
@@ -290,6 +295,7 @@ public class LuceneCandidateLookupTest {
 					List.of(geometry("POINT(" + x + " " + y + ")")));
 		}
 		indexer.commit();
+		indexer.complete();
 
 		List<EnvelopeDisjointCandidate> candidates =
 				collectEnvelopeDisjointCandidates(indexer.getEnvelopeDisjointCandidates(bound));
@@ -312,6 +318,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "point", List.of(geometry("POINT(10 10)")));
 		indexer.indexGeometryList(2L, id -> "empty", List.of(empty));
 		indexer.commit();
+		indexer.complete();
 
 		assertTrue(collectEnvelopeDisjointCandidates(
 				indexer.getEnvelopeDisjointCandidates(empty)).isEmpty());
@@ -327,6 +334,7 @@ public class LuceneCandidateLookupTest {
 			indexer.indexGeometryList(entityId, id -> "geometry " + id, List.of(geometries.get(i)));
 		}
 		indexer.commit();
+		indexer.complete();
 		for (int boundIndex = 0; boundIndex < geometries.size(); boundIndex++) {
 			IndexGeometry bound = geometries.get(boundIndex);
 			Set<Long> expectedIntersections = new HashSet<>();
@@ -353,6 +361,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "midpoint", List.of(geometry("POINT(0 11)")));
 		indexer.indexGeometryList(2L, id -> "outside latitude", List.of(geometry("POINT(0 20)")));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(bound)));
@@ -384,6 +393,7 @@ public class LuceneCandidateLookupTest {
 			indexer.begin();
 			indexer.indexGeometryList(1L, id -> "false positive", List.of(indexed));
 			indexer.commit();
+			indexer.complete();
 
 			assertArrayEquals("fixture " + i, new long[]{1L},
 					collectEntityIds(indexer.getEnvelopeIntersections(bound)));
@@ -403,6 +413,7 @@ public class LuceneCandidateLookupTest {
 		indexer.begin();
 		indexer.indexGeometryList(1L, id -> "point in hole", List.of(pointInHole));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeDisjointUncertainCandidates(holedPolygon)));
@@ -418,6 +429,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "point", List.of(point));
 		indexer.indexGeometryList(2L, id -> "empty", List.of(empty));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L}, collectEntityIds(indexer.getEnvelopeIntersections(point)));
 		assertArrayEquals(new long[0], collectEntityIds(indexer.getEnvelopeIntersections(empty)));
@@ -441,6 +453,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "edge point", List.of(geometry("POINT(99 14)")));
 		indexer.indexGeometryList(2L, id -> "outside", List.of(geometry("POINT(101 14)")));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(collection)));

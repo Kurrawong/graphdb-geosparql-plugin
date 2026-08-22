@@ -5,10 +5,12 @@ import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginConnection;
+import com.ontotext.trree.sdk.PluginException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.lang.reflect.Proxy;
@@ -18,6 +20,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertThrows;
 
 public class GeoSparqlUpdateListenerTest {
 	@Rule
@@ -92,7 +95,9 @@ public class GeoSparqlUpdateListenerTest {
 		indexer.indexGeometryList(1L, id -> "geometry",
 				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
 		listener.transactionCommit(connection);
-		assertEquals("POINT(2 2)", onlySource(indexer).lexicalForm());
+		PluginException pendingOutcome = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(1L));
+		assertTrue(pendingOutcome.getMessage().contains("pending GraphDB transaction"));
 		listener.transactionAborted(connection);
 
 		LuceneGeoIndexer restarted = new LuceneGeoIndexer(enabledPlugin(dataDir));
@@ -128,6 +133,34 @@ public class GeoSparqlUpdateListenerTest {
 		}
 	}
 
+	@Test
+	public void failedListenerRestorationLeavesCurrentAndRestartedIndexersFailClosed() throws Exception {
+		Path dataDir = tmpFolder.newFolder("listener-failed-restoration").toPath();
+		GeoSparqlPlugin plugin = enabledPlugin(dataDir);
+		FailingRestoreIndexer indexer = new FailingRestoreIndexer(plugin);
+		indexer.initialize();
+		plugin.indexer = indexer;
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(1 1)")));
+		indexer.commit();
+		indexer.complete();
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		PluginConnection connection = emptyPluginConnection();
+
+		listener.transactionStarted(connection);
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
+		listener.transactionCommit(connection);
+		indexer.failRestore = true;
+		listener.transactionAborted(connection);
+
+		assertPendingTransactionFailure(indexer);
+		LuceneGeoIndexer restarted = new LuceneGeoIndexer(enabledPlugin(dataDir));
+		restarted.initialize();
+		assertPendingTransactionFailure(restarted);
+	}
+
 	private GeoSparqlPlugin enabledPlugin(Path dataDir) {
 		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
 		GeoSparqlConfig config = new GeoSparqlConfig();
@@ -147,9 +180,31 @@ public class GeoSparqlUpdateListenerTest {
 		}
 	}
 
+	private void assertPendingTransactionFailure(LuceneGeoIndexer indexer) {
+		PluginException failure = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(1L));
+		assertTrue(failure.getMessage().contains("pending GraphDB transaction"));
+	}
+
 	private PluginConnection emptyPluginConnection() {
 		return (PluginConnection) Proxy.newProxyInstance(
 				PluginConnection.class.getClassLoader(), new Class<?>[]{PluginConnection.class},
 				(proxy, method, arguments) -> null);
+	}
+
+	private static final class FailingRestoreIndexer extends LuceneGeoIndexer {
+		private boolean failRestore;
+
+		private FailingRestoreIndexer(GeoSparqlPlugin parent) {
+			super(parent);
+		}
+
+		@Override
+		protected void restorePreTransactionCommit() throws IOException {
+			if (failRestore) {
+				throw new IOException("Simulated restoration failure");
+			}
+			super.restorePreTransactionCommit();
+		}
 	}
 }
