@@ -6,6 +6,8 @@ import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginConnection;
 import com.ontotext.trree.sdk.PluginException;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.store.FSDirectory;
 import org.junit.Rule;
 import org.junit.Test;
 import org.slf4j.LoggerFactory;
@@ -161,6 +163,46 @@ public class GeoSparqlUpdateListenerTest {
 		assertPendingTransactionFailure(restarted);
 	}
 
+	@Test
+	public void failedConfigRestorationKeepsRestoredIndexFailClosedAcrossRestart() throws Exception {
+		Path dataDir = tmpFolder.newFolder("failed-config-restoration").toPath();
+		GeoSparqlPlugin plugin = enabledPlugin(dataDir);
+		GeoSparqlUtils.saveConfig(plugin.getConfig(), dataDir);
+		LuceneGeoIndexer indexer = new LuceneGeoIndexer(plugin);
+		indexer.initialize();
+		plugin.indexer = indexer;
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(1 1)")));
+		indexer.commit();
+		indexer.complete();
+		FailingConfigRestoreListener listener = new FailingConfigRestoreListener(plugin);
+
+		listener.transactionStarted(emptyPluginConnection());
+		plugin.getConfig().setPrefixTree(GeoSparqlConfig.PrefixTree.GEOHASH);
+		plugin.getConfig().setPrecision(20);
+		plugin.getConfig().updateCurrentSettings();
+		indexer.initSettings();
+		GeoSparqlUtils.saveConfig(plugin.getConfig(), dataDir);
+		indexer.freshIndex();
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
+		listener.transactionCommit(emptyPluginConnection());
+		listener.failConfigRestore = true;
+		listener.transactionAborted(emptyPluginConnection());
+
+		assertEquals(GeoSparqlConfig.PrefixTree.QUAD, plugin.getConfig().getCurrentPrefixTree());
+		assertEquals(11, plugin.getConfig().getCurrentPrecision());
+		assertEquals("POINT(1 1)", committedSourceLexicalForm(dataDir));
+		assertPendingTransactionFailure(indexer);
+		GeoSparqlConfig persistedConfig = GeoSparqlUtils.readConfig(dataDir);
+		assertEquals(GeoSparqlConfig.PrefixTree.GEOHASH, persistedConfig.getCurrentPrefixTree());
+		assertEquals(20, persistedConfig.getCurrentPrecision());
+		LuceneGeoIndexer restarted = new LuceneGeoIndexer(pluginFromPersistedConfig(dataDir));
+		restarted.initialize();
+		assertPendingTransactionFailure(restarted);
+	}
+
 	private GeoSparqlPlugin enabledPlugin(Path dataDir) {
 		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
 		GeoSparqlConfig config = new GeoSparqlConfig();
@@ -169,6 +211,21 @@ public class GeoSparqlUpdateListenerTest {
 		plugin.setDataDir(dataDir.toFile());
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
 		return plugin;
+	}
+
+	private GeoSparqlPlugin pluginFromPersistedConfig(Path dataDir) {
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setConfig(GeoSparqlUtils.readConfig(dataDir));
+		plugin.setDataDir(dataDir.toFile());
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
+		return plugin;
+	}
+
+	private String committedSourceLexicalForm(Path dataDir) throws IOException {
+		try (FSDirectory directory = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(dataDir));
+			 DirectoryReader reader = DirectoryReader.open(directory)) {
+			return reader.document(0).get("geoExactLexicalForm");
+		}
 	}
 
 	private SourceGeometryLiteral onlySource(LuceneGeoIndexer indexer) throws Exception {
@@ -205,6 +262,22 @@ public class GeoSparqlUpdateListenerTest {
 				throw new IOException("Simulated restoration failure");
 			}
 			super.restorePreTransactionCommit();
+		}
+	}
+
+	private static final class FailingConfigRestoreListener extends GeoSparqlUpdateListener {
+		private boolean failConfigRestore;
+
+		private FailingConfigRestoreListener(GeoSparqlPlugin parent) {
+			super(parent, 1L, 2L, 3L);
+		}
+
+		@Override
+		protected void restoreConfigFile(Path configPath) throws IOException {
+			if (failConfigRestore) {
+				throw new IOException("Simulated configuration restoration failure");
+			}
+			super.restoreConfigFile(configPath);
 		}
 	}
 }

@@ -94,6 +94,17 @@ public interface GeoSparqlIndexer {
 
 	void rollback() throws Exception;
 
+	/**
+	 * Restores the pre-transaction index while retaining fail-closed recovery state when another durable plugin state
+	 * could not be restored.
+	 */
+	default void rollback(boolean recoveryRequired) throws Exception {
+		if (recoveryRequired) {
+			throw new UnsupportedOperationException("Retaining index recovery state is not supported.");
+		}
+		rollback();
+	}
+
 	/** Appends the index geometry derived from one source geometry literal during a streaming full index build. */
 	void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry);
 

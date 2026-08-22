@@ -234,6 +234,11 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public void rollback() throws Exception {
+		rollback(false);
+	}
+
+	@Override
+	public void rollback(boolean requireRecovery) throws Exception {
 		if (!transactionActive) {
 			return;
 		}
@@ -249,7 +254,10 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		releasePreTransactionCommit();
 		deleteObsoleteCommits();
 		schemaMismatchDetected = schemaMismatchAtTransactionStart;
-		recoveryRequired = recoveryRequiredAtTransactionStart;
+		recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
+		if (requireRecovery && !Files.exists(pendingTransactionMarker)) {
+			writePendingTransactionMarker();
+		}
 		if (!recoveryRequired) {
 			Files.deleteIfExists(pendingTransactionMarker);
 		}

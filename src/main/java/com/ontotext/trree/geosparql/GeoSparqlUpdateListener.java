@@ -153,10 +153,10 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
     @Override
 	public void transactionAborted(PluginConnection pluginConnection) {
 		cleanupAfterTransaction();
-		restoreConfigState();
+		boolean configRestored = restoreConfigState();
 		if (hasIndexTransaction()) {
 			try {
-				parent.indexer.rollback();
+				parent.indexer.rollback(!configRestored);
 			} catch (Exception e) {
 				parent.getLogger().warn("Unable to rollback indexer transaction.", e);
 			}
@@ -182,21 +182,27 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		}
 	}
 
-	private void restoreConfigState() {
+	private boolean restoreConfigState() {
 		if (configBeforeTransaction == null) {
-			return;
+			return true;
 		}
 		parent.setConfig(configBeforeTransaction);
 		Path configPath = GeoSparqlConfig.resolveConfigPath(parent.getDataDir().toPath());
 		try {
-			if (configFileExistedBeforeTransaction) {
-				Files.createDirectories(configPath.getParent());
-				Files.write(configPath, configFileBeforeTransaction);
-			} else {
-				Files.deleteIfExists(configPath);
-			}
+			restoreConfigFile(configPath);
+			return true;
 		} catch (IOException e) {
 			parent.getLogger().warn("Unable to restore GeoSPARQL configuration after transaction abort.", e);
+			return false;
+		}
+	}
+
+	protected void restoreConfigFile(Path configPath) throws IOException {
+		if (configFileExistedBeforeTransaction) {
+			Files.createDirectories(configPath.getParent());
+			Files.write(configPath, configFileBeforeTransaction);
+		} else {
+			Files.deleteIfExists(configPath);
 		}
 	}
 
