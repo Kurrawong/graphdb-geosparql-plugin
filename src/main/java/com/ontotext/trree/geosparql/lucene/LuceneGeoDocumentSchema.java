@@ -78,6 +78,8 @@ final class LuceneGeoDocumentSchema {
 	/** Commit metadata value requiring ordinate-preserving source WKB and exact envelope bounds. */
 	static final String COMMIT_SCHEMA_LAYOUT_VALUE =
 			"prefix-envelope-ordinate-preserving-source-wkb-envelope-marker-topology-dv-envelope-points";
+	/** Commit metadata key identifying the CRS transformation inputs used for candidate envelopes. */
+	static final String COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY = "geosparql.crsEnvironmentFingerprint";
 	static final String SCHEMA_MISMATCH_MESSAGE =
 			"Existing GeoSPARQL Lucene index does not match the required schema v2 layout. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
@@ -188,8 +190,8 @@ final class LuceneGeoDocumentSchema {
 				&& COMMIT_SCHEMA_LAYOUT_VALUE.equals(commitData.get(COMMIT_SCHEMA_LAYOUT_KEY));
 	}
 
-	static Iterable<Map.Entry<String, String>> currentSchemaCommitData(
-			Iterable<Map.Entry<String, String>> existingCommitData) {
+	static Iterable<Map.Entry<String, String>> currentCompatibilityCommitData(
+			Iterable<Map.Entry<String, String>> existingCommitData, String crsEnvironmentFingerprint) {
 		Map<String, String> commitData = new LinkedHashMap<>();
 		if (existingCommitData != null) {
 			for (Map.Entry<String, String> entry : existingCommitData) {
@@ -198,6 +200,7 @@ final class LuceneGeoDocumentSchema {
 		}
 		commitData.put(COMMIT_SCHEMA_VERSION_KEY, COMMIT_SCHEMA_VERSION_VALUE);
 		commitData.put(COMMIT_SCHEMA_LAYOUT_KEY, COMMIT_SCHEMA_LAYOUT_VALUE);
+		commitData.put(COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY, crsEnvironmentFingerprint);
 		return commitData.entrySet();
 	}
 
