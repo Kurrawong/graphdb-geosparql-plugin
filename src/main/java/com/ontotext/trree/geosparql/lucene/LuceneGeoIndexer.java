@@ -340,9 +340,11 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			return getCandidateEntitiesForQuery(envelopeIntersections);
 		}
 		/*
-		 * Every source geometry lies inside its exact index envelope. When the bound source fills its own envelope,
-		 * a candidate envelope wholly inside that rectangle proves the source pair cannot be disjoint. The inclusive
-		 * ranges also remove boundary-contained sources: touching the closed bound still makes sfDisjoint,
+		 * A native CRS84 source lies inside its source-derived index envelope. A transformed source is treated as lying
+		 * inside its SIS-derived index envelope under the conservative-envelope engineering assumption documented by
+		 * ConservativeCrs84EnvelopeProjector. On that premise, when the native CRS84 bound source fills its own
+		 * envelope, a candidate envelope wholly inside that rectangle proves the source pair cannot be disjoint. The
+		 * inclusive ranges also remove boundary-contained sources: touching the closed bound still makes sfDisjoint,
 		 * ehDisjoint, and rcc8dc false.
 		 */
 		Query uncertain = new BooleanQuery.Builder()
@@ -363,9 +365,11 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 		Query envelopeIntersections = envelopeIntersectionsQuery(boundSourceIndexGeometry);
 		/*
-		 * Prefix-tree Intersects is conservative for indexed envelopes: approximation may retain false positives,
-		 * but does not omit an envelope that intersects the bound. Its complement therefore contains only
-		 * envelope-separated source documents, which the relation traversal can classify without source payloads.
+		 * Given direct containment for native CRS84 envelopes and the documented conservative-envelope engineering
+		 * assumption for SIS-transformed envelopes, prefix-tree Intersects is conservative for source geometries:
+		 * approximation may retain false positives but does not omit an envelope that intersects the bound. Its
+		 * complement therefore contains only envelope-separated source documents, which relation traversal can classify
+		 * without source payloads.
 		 */
 		Query envelopeDisjoint = new BooleanQuery.Builder()
 				.add(LuceneGeoDocumentSchema.hasEnvelopeQuery(true), BooleanClause.Occur.FILTER)

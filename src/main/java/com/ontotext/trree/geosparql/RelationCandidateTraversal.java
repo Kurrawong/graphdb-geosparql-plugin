@@ -14,9 +14,9 @@ import java.util.Optional;
  * Traverses candidate entities for one bound side of a GeoSPARQL property relation.
  *
  * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation. Full-scan traversal returns
- * complete candidate source sets. Partitioned disjoint traversal first returns source documents whose envelopes prove
- * a match, then exact-evaluates uncertain envelope intersections after removing eligible envelope-contained definite
- * non-matches, and finally evaluates non-spatial empty sentinels.
+ * complete candidate source sets. Under the candidate-envelope containment contract, partitioned disjoint traversal
+ * first returns source documents whose envelopes prove a match, then exact-evaluates uncertain envelope intersections
+ * after removing eligible envelope-contained definite non-matches, and finally evaluates non-spatial empty sentinels.
  *
  * <p>The traversal owns its active Lucene iterator. It closes every phase before opening the next and closes the
  * active iterator when traversal ends early.

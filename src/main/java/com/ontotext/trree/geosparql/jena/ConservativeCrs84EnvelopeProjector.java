@@ -24,20 +24,31 @@ import org.opengis.util.FactoryException;
  * reduction to CRS84. Other sources use an operation on their two-dimensional horizontal CRS. The result is used
  * only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its native CRS.
  *
- * <p>The plugin uses the {@code CoordinateOperation} overload because it samples envelope corners, edge midpoints
- * and center, uses transform derivatives to locate cubic-curve extrema, and accounts for poles and wraparound.
- * The {@code MathTransform} overload is not used: SIS documents that it can under-cover poles and handles longitude
- * wraparound only when wraparound steps are already in the chain. {@code CRS.findOperation} does not insert those
- * steps.
+ * <p>The plugin uses the SIS
+ * <a href="https://sis.apache.org/apidocs/org.apache.sis.referencing/org/apache/sis/geometry/Envelopes.html">
+ * {@code CoordinateOperation} envelope transformation</a>, which does substantially more than transform the four
+ * corners. SIS samples intermediate points, uses transform derivatives (Jacobians) where available, estimates
+ * nonlinear edge extrema by cubic interpolation, and transforms the source positions corresponding to the predicted
+ * extrema. This overload also uses {@code CoordinateOperation} metadata to handle poles and longitude wraparound.
+ * SIS recommends this overload for envelope transformation and states that most SIS transforms support the
+ * derivatives used by the algorithm. The {@code MathTransform} overload is not used because it lacks the additional
+ * pole and wraparound handling.
  *
- * <p>SIS documents the {@code CoordinateOperation} result as a curvature-aware approximation that may be larger than
- * the complete CRS84 image and should not be smaller in most cases. That wording is not a coverage proof. The
- * remaining residual is cubic-curve location on nonlinear inverse projections. SIS 1.6 does not identify a
- * detectably unsafe {@code CoordinateOperation} class among the two-dimensional EPSG-to-CRS84 operations this plugin
- * constructs, including GDA2020/MGA, UTM, Web Mercator, Lambert conformal conic, polar stereographic, and datum
- * shifts. Those sources keep a selective transformed envelope. Non-CRS84 geometries are not mapped to the world
- * envelope. Jacobian failure at an interior point is not treated as an unsafe operation class: pole and wraparound
- * handling of the {@code CoordinateOperation} overload still apply after sampling.
+ * <p>SIS nevertheless describes the result as an approximation that "should not be smaller in most cases". The
+ * <a href="https://sis.apache.org/book/en/developer-guide.html">
+ * transformed-envelope extremum calculation</a> uses a cubic approximation, not interval arithmetic or another
+ * formal enclosure proof. The plugin relies on Apache SIS envelope transformation as a conservative engineering
+ * assumption: SIS intends and tests the operation to preserve containment, but does not provide a universal
+ * mathematical enclosure guarantee. Finite, representable SIS envelopes are therefore treated as conservative
+ * candidate bounds without claiming a mathematically proven property of every operation.
+ *
+ * <p>This assumption is accepted because conservative containment is the intended SIS behaviour; SIS tests include
+ * containment-oriented checks such as inverse-transformed envelopes containing their originals; and SIS regression
+ * coverage treats projection-domain and wraparound behaviour as envelope-transformation correctness concerns. The
+ * plugin's SIS 1.6 compatibility evidence identifies no finite, in-domain under-bounding case, but absence of an
+ * identified counterexample does not prove safety. The plugin independently exercises the assumption with adversarial
+ * and randomised transformed-envelope coverage tests, exact-versus-index-backed differential tests, and prefix-tree
+ * and precision tests.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
@@ -45,10 +56,12 @@ import org.opengis.util.FactoryException;
  * non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or transform
  * failure. Unit-in-the-last-place widening does not close a geographically large miss.
  *
- * <p>Candidate lookup may include false positives. It must avoid false negatives. The plugin uses SIS's
- * curvature-aware {@code CoordinateOperation} envelope transformation for representable results and falls back to the
- * world envelope for transformation failures or results that cannot be represented as a single Lucene geographic
- * rectangle. SIS does not provide a formal coverage guarantee for finite transformed envelopes.
+ * <p>If a future SIS implementation, EPSG dataset, datum grid, or selected coordinate operation violates the
+ * assumption, candidate pruning could produce a false negative. The transformed-envelope coverage and differential
+ * tests, together with CRS-environment compatibility and fingerprint checks, are therefore correctness controls, not
+ * merely accuracy or performance tests. World fallback remains the representation path for transform failures and
+ * results that cannot safely be stored as one Lucene geographic rectangle; it is not the policy for every non-CRS84
+ * geometry.
  */
 final class ConservativeCrs84EnvelopeProjector {
 	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";

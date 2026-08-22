@@ -38,9 +38,10 @@ public interface GeoSparqlIndexer {
 	/**
 	 * Returns uncertain candidates for one bound source in a partitioned disjoint traversal.
 	 *
-	 * <p>Adapters may safely remove candidates whose exact envelope metadata proves they cannot be disjoint. The
-	 * returned candidates carry complete source payloads. Callers own and must close the iterator. Implementations
-	 * without a definite-non-match proof retain ordinary conservative envelope intersections.
+	 * <p>Under the candidate-envelope containment contract, adapters may remove candidates whose precise envelope
+	 * ordinate metadata proves they cannot be disjoint. The returned candidates carry complete source payloads.
+	 * Callers own and must close the iterator. Implementations without a definite-non-match proof retain ordinary
+	 * conservative envelope intersections.
 	 *
 	 * @param boundSourceIndexGeometry derived index envelope for one bound source geometry literal
 	 * @return a closeable iterator over uncertain entity groups and their matching source geometry literal snapshots

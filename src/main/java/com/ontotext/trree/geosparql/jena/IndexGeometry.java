@@ -101,7 +101,9 @@ public final class IndexGeometry {
 	 * Returns whether the source is a non-empty CRS84 polygon that covers every point in its index envelope.
 	 *
 	 * <p>This deliberately excludes transformed sources, holes, rotated polygons, and collections. For an eligible
-	 * bound, containment of another source's exact index envelope proves that the two sources cannot be disjoint.
+	 * native CRS84 bound, containment of another source's index envelope proves that the two sources cannot be
+	 * disjoint, on the conservative-envelope engineering assumption documented by
+	 * {@link ConservativeCrs84EnvelopeProjector} when that other envelope is SIS-transformed.
 	 */
 	public boolean isEnvelopeCoveringRectangle() {
 		GeometryWrapper sourceWrapper = sourceGeometryLiteral.asGeometryWrapper();
