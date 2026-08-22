@@ -19,6 +19,7 @@ public final class JenaGeometryAdapter {
 	}
 
 	public static void initialize() {
+		JenaCalculationPrecision.configure();
 		SRSRegistry.setupDefaultSRS();
 		GeometryDatatype.registerDatatypes();
 	}

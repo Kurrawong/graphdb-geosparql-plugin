@@ -207,6 +207,18 @@ public class LuceneGeoSchemaTest {
         assertForceReindexMessage(exception);
     }
 
+	@Test
+	public void missingCandidateBoundsKindRequiresReindex() {
+		Document document = currentSchemaDocument(1L, sampleGeometry);
+		document.removeFields(LuceneGeoDocumentSchema.FIELD_CANDIDATE_BOUNDS_KIND);
+
+		PluginException exception = assertThrows(PluginException.class,
+				() -> LuceneGeoDocumentSchema.sourceGeometryLiteral(
+						document, new SourceGeometryLiteralResolver()));
+
+		assertForceReindexMessage(exception);
+	}
+
     @Test
     public void testMalformedSourceWkbRequiresForceReindex() throws Exception {
         Path malformedDataDir = tmpFolder.getRoot().toPath().resolve("malformed-source-wkb");

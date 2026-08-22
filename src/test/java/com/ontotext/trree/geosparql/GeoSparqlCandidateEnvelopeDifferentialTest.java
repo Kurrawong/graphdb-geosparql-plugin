@@ -6,9 +6,13 @@ import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.sdk.Entities;
+import org.apache.jena.geosparql.configuration.GeoSPARQLConfig;
+import org.apache.jena.geosparql.configuration.GeoSPARQLOperations;
+import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
+import org.apache.sis.geometry.DirectPosition2D;
 import org.apache.sis.geometry.GeneralDirectPosition;
 import org.apache.sis.referencing.CRS;
 import org.eclipse.rdf4j.model.IRI;
@@ -17,6 +21,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.opengis.geometry.DirectPosition;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
@@ -57,6 +62,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	private static final String MGA55 = "http://www.opengis.net/def/crs/EPSG/0/7855";
 	private static final String EPSG_4326 = "http://www.opengis.net/def/crs/EPSG/0/4326";
 	private static final String UTM_32N = "http://www.opengis.net/def/crs/EPSG/0/32632";
+	private static final String UTM_33N = "http://www.opengis.net/def/crs/EPSG/0/32633";
 	private static final String UTM_34N = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String WEB_MERCATOR = "http://www.opengis.net/def/crs/EPSG/0/3857";
 	private static final String LAMBERT_93 = "http://www.opengis.net/def/crs/EPSG/0/2154";
@@ -144,6 +150,99 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
 		assertEquals(Set.of(1L, 2L),
 				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0));
+	}
+
+	@Test
+	public void jenaPrecisionCleanedTransformationDoesNotEscapeCandidateTraversal() throws Exception {
+		SourceGeometryLiteral projected = SourceGeometryLiteral.fromWkt(
+				"<" + UTM_32N + "> POINT(500000 5200000)");
+		GeometryWrapper projectedWrapper = projected.asGeometryWrapper();
+		GeometryWrapper jenaTransformed = projectedWrapper.transform(IndexGeometry.INDEX_CRS);
+		Coordinate cleanedCoordinate = jenaTransformed.getXYGeometry().getCoordinate();
+		SourceGeometryLiteral crs84AtCleanedCoordinate = SourceGeometryLiteral.fromWkt(
+				"POINT(" + cleanedCoordinate.x + " " + cleanedCoordinate.y + ")");
+
+		Coordinate parsingCoordinate = projectedWrapper.getParsingGeometry().getCoordinate();
+		CoordinateReferenceSystem projectedCrs = CRS.getHorizontalComponent(projectedWrapper.getCRS());
+		CoordinateOperation rawOperation = CRS.findOperation(
+				projectedCrs, SRSRegistry.getCRS(IndexGeometry.INDEX_CRS), null);
+		DirectPosition rawPosition = rawOperation.getMathTransform().transform(
+				new DirectPosition2D(projectedCrs, parsingCoordinate.x, parsingCoordinate.y), null);
+		double rawX = rawPosition.getOrdinate(0);
+		double rawY = rawPosition.getOrdinate(1);
+		String mismatch = "precision=" + GeoSPARQLConfig.DECIMAL_PLACES_PRECISION
+				+ " raw=(" + rawX + ", " + rawY + ")"
+				+ " cleaned=(" + cleanedCoordinate.x + ", " + cleanedCoordinate.y + ")";
+		assertEquals(mismatch, GeoSPARQLOperations.cleanUpPrecision(rawX), cleanedCoordinate.x, 0.0);
+		assertEquals(mismatch, GeoSPARQLOperations.cleanUpPrecision(rawY), cleanedCoordinate.y, 0.0);
+		assertTrue(mismatch, rawX != cleanedCoordinate.x || rawY != cleanedCoordinate.y);
+		assertTrue(mismatch,
+				Math.abs(rawX - cleanedCoordinate.x) > Math.ulp(rawX)
+						|| Math.abs(rawY - cleanedCoordinate.y) > Math.ulp(rawY));
+
+		assertTrue(mismatch, GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				crs84AtCleanedCoordinate, projected));
+		assertFalse(mismatch, GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(
+				crs84AtCleanedCoordinate, projected));
+		assertFalse(mismatch, GeoSparqlPropertyRelation.EH_DISJOINT.evaluate(
+				crs84AtCleanedCoordinate, projected));
+		assertFalse(mismatch, GeoSparqlPropertyRelation.RCC8_DC.evaluate(
+				crs84AtCleanedCoordinate, projected));
+
+		for (IndexSettings setting : maximumPrecisionIndexSettings()) {
+			Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+			sources.put(1L, List.of(IndexGeometry.fromSourceGeometryLiteral(crs84AtCleanedCoordinate)));
+			sources.put(2L, List.of(IndexGeometry.fromSourceGeometryLiteral(projected)));
+			String settingName = setting.prefixTree.name().toLowerCase(Locale.ROOT) + "-" + setting.precision;
+			Fixture fixture = createFixture("jena-cleanup-" + settingName,
+					sources, setting.prefixTree, setting.precision);
+
+			assertTrue(settingName + " subject-bound sfIntersects\n" + mismatch,
+					runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0).contains(2L));
+			assertTrue(settingName + " object-bound sfIntersects\n" + mismatch,
+					runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L).contains(1L));
+			for (GeoSparqlPropertyRelation disjoint : DISJOINT_RELATIONS) {
+				assertFalse(settingName + " subject-bound " + disjoint + "\n" + mismatch,
+						runIndexed(fixture, disjoint, 1L, 0).contains(2L));
+				assertFalse(settingName + " object-bound " + disjoint + "\n" + mismatch,
+						runIndexed(fixture, disjoint, 0, 2L).contains(1L));
+			}
+		}
+	}
+
+	@Test
+	public void precisionCleanedProjectedToProjectedPairUsesExactTraversal() throws Exception {
+		SourceGeometryLiteral utm32 = SourceGeometryLiteral.fromWkt(
+				"<" + UTM_32N + "> POINT(500000 5200000)");
+		Coordinate cleanedUtm33 = utm32.asGeometryWrapper().transform(UTM_33N)
+				.getXYGeometry().getCoordinate();
+		SourceGeometryLiteral utm33AtCleanedCoordinate = SourceGeometryLiteral.fromWkt(
+				"<" + UTM_33N + "> POINT(" + cleanedUtm33.x + " " + cleanedUtm33.y + ")");
+
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(utm33AtCleanedCoordinate, utm32));
+		for (GeoSparqlPropertyRelation disjoint : DISJOINT_RELATIONS) {
+			assertFalse(disjoint.toString(), disjoint.evaluate(utm33AtCleanedCoordinate, utm32));
+		}
+
+		for (IndexSettings setting : maximumPrecisionIndexSettings()) {
+			Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+			sources.put(1L, List.of(IndexGeometry.fromSourceGeometryLiteral(utm33AtCleanedCoordinate)));
+			sources.put(2L, List.of(IndexGeometry.fromSourceGeometryLiteral(utm32)));
+			String settingName = setting.prefixTree.name().toLowerCase(Locale.ROOT) + "-" + setting.precision;
+			Fixture fixture = createFixture("projected-cleanup-" + settingName,
+					sources, setting.prefixTree, setting.precision);
+
+			for (GeoSparqlPropertyRelation relation : EnumSet.of(
+					GeoSparqlPropertyRelation.SF_INTERSECTS,
+					GeoSparqlPropertyRelation.SF_DISJOINT,
+					GeoSparqlPropertyRelation.EH_DISJOINT,
+					GeoSparqlPropertyRelation.RCC8_DC)) {
+				assertEquals(settingName + " subject-bound " + relation,
+						runReference(fixture, relation, 1L, 0), runIndexed(fixture, relation, 1L, 0));
+				assertEquals(settingName + " object-bound " + relation,
+						runReference(fixture, relation, 0, 2L), runIndexed(fixture, relation, 0, 2L));
+			}
+		}
 	}
 
 	/**
@@ -450,6 +549,13 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 				new IndexSettings(GeoSparqlConfig.PrefixTree.QUAD, QuadPrefixTree.MAX_LEVELS_POSSIBLE),
 				new IndexSettings(GeoSparqlConfig.PrefixTree.GEOHASH, GeoSparqlConfig.PRECISION_DEFAULT),
 				new IndexSettings(GeoSparqlConfig.PrefixTree.GEOHASH, GeohashPrefixTree.getMaxLevelsPossible()));
+	}
+
+	private static List<IndexSettings> maximumPrecisionIndexSettings() {
+		return List.of(
+				new IndexSettings(GeoSparqlConfig.PrefixTree.QUAD, QuadPrefixTree.MAX_LEVELS_POSSIBLE),
+				new IndexSettings(GeoSparqlConfig.PrefixTree.GEOHASH,
+						GeohashPrefixTree.getMaxLevelsPossible()));
 	}
 
 	private record Fixture(GeoSparqlPlugin plugin, FakeEntities entities,

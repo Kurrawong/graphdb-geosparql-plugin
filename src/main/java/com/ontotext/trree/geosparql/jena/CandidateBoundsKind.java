@@ -12,7 +12,8 @@ package com.ontotext.trree.geosparql.jena;
  * rectangle used only when that envelope cannot be stored as one Lucene rectangle, the source has no usable
  * horizontal CRS, or transform construction fails.
  *
- * <p>This is indexing diagnostics only. It is not persisted in Lucene.
+ * <p>The kind is persisted with each Lucene source document so transformed candidate subjects can be retained for
+ * exact evaluation when Jena's cleanup occurs outside CRS84.
  */
 public enum CandidateBoundsKind {
 	EMPTY,

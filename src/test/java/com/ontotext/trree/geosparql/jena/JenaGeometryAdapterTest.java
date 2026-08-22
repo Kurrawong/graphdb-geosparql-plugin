@@ -3,6 +3,7 @@ package com.ontotext.trree.geosparql.jena;
 import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.apache.jena.geosparql.configuration.GeoSPARQLConfig;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -42,6 +43,16 @@ public class JenaGeometryAdapterTest {
 		assertEquals(GeoConstants.GEO_WKT_LITERAL, geometry.jenaDatatype());
 		assertEquals(CRS84, geometry.effectiveCrsUri());
 		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, geometry.asGeometryWrapper().getSrsURI());
+	}
+
+	@Test
+	public void adapterPinsJenaCalculationPrecision() {
+		GeoSPARQLConfig.DECIMAL_PLACES_PRECISION = JenaCalculationPrecision.DECIMAL_PLACES + 3;
+
+		JenaGeometryAdapter.initialize();
+
+		assertEquals(JenaCalculationPrecision.DECIMAL_PLACES,
+				GeoSPARQLConfig.DECIMAL_PLACES_PRECISION);
 	}
 
 	@Test

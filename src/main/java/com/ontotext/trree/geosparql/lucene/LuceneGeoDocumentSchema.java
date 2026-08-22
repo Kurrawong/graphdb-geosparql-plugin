@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql.lucene;
 
+import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginException;
@@ -67,6 +68,8 @@ final class LuceneGeoDocumentSchema {
 	static final String FIELD_INDEX_CRS = "geoIndexCrs";
 	/** Indexed and stored marker separating spatial envelope documents from non-spatial empty sentinels. */
 	static final String FIELD_HAS_ENVELOPE = "geoHasEnvelope";
+	/** Indexed and stored provenance used to retain transformed sources as uncertain candidates. */
+	static final String FIELD_CANDIDATE_BOUNDS_KIND = "geoCandidateBoundsKind";
 	static final String HAS_ENVELOPE_VALUE = "1";
 	static final String NO_ENVELOPE_VALUE = "0";
 	/** Commit metadata key used for the constant-time index-level schema compatibility check. */
@@ -75,9 +78,9 @@ final class LuceneGeoDocumentSchema {
 	static final String COMMIT_SCHEMA_VERSION_VALUE = Integer.toString(SCHEMA_VERSION);
 	/** Commit metadata key identifying the concrete field layout within the schema version. */
 	static final String COMMIT_SCHEMA_LAYOUT_KEY = "geosparql.luceneSchemaLayout";
-	/** Commit metadata value requiring ordinate-preserving source WKB and exact envelope bounds. */
+	/** Commit metadata value requiring source WKB, exact envelope bounds, and candidate-bounds provenance. */
 	static final String COMMIT_SCHEMA_LAYOUT_VALUE =
-			"prefix-envelope-ordinate-preserving-source-wkb-envelope-marker-topology-dv-envelope-points";
+			"prefix-envelope-ordinate-preserving-source-wkb-envelope-marker-topology-dv-envelope-points-bounds-kind";
 	/** Commit metadata key identifying the CRS transformation inputs used for candidate envelopes. */
 	static final String COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY = "geosparql.crsEnvironmentFingerprint";
 	static final String SCHEMA_MISMATCH_MESSAGE =
@@ -126,6 +129,8 @@ final class LuceneGeoDocumentSchema {
 		}
 		doc.add(new StringField(FIELD_HAS_ENVELOPE,
 				geometry.isSpatialCandidate() ? HAS_ENVELOPE_VALUE : NO_ENVELOPE_VALUE, Field.Store.YES));
+		doc.add(new StringField(FIELD_CANDIDATE_BOUNDS_KIND,
+				geometry.candidateBoundsKind().name(), Field.Store.YES));
 		// Empty source geometry literals still need an entity-bearing document so full scans can reconstruct
 		// them for exact predicate evaluation. Their sentinel document deliberately has no Lucene spatial fields.
 
@@ -176,6 +181,7 @@ final class LuceneGeoDocumentSchema {
 				&& numericFieldValue(doc, FIELD_SOURCE_SPATIAL_DIMENSION) != null
 				&& numericFieldValue(doc, FIELD_SOURCE_TOPOLOGICAL_DIMENSION) != null
 				&& hasValidEnvelopeMarker(doc)
+				&& hasValidCandidateBoundsKind(doc)
 				&& IndexGeometry.INDEX_CRS.equals(doc.get(FIELD_INDEX_CRS));
 	}
 
@@ -217,6 +223,10 @@ final class LuceneGeoDocumentSchema {
 				hasEnvelope ? HAS_ENVELOPE_VALUE : NO_ENVELOPE_VALUE));
 	}
 
+	static Query candidateBoundsKindQuery(CandidateBoundsKind kind) {
+		return new TermQuery(new Term(FIELD_CANDIDATE_BOUNDS_KIND, kind.name()));
+	}
+
 	static Query envelopeWithinQuery(Envelope boundEnvelope) {
 		return new BooleanQuery.Builder()
 				.add(DoublePoint.newRangeQuery(FIELD_ENVELOPE_MIN_X,
@@ -251,6 +261,15 @@ final class LuceneGeoDocumentSchema {
 	private static boolean hasValidEnvelopeMarker(Document doc) {
 		String value = doc.get(FIELD_HAS_ENVELOPE);
 		return HAS_ENVELOPE_VALUE.equals(value) || NO_ENVELOPE_VALUE.equals(value);
+	}
+
+	private static boolean hasValidCandidateBoundsKind(Document doc) {
+		try {
+			CandidateBoundsKind.valueOf(doc.get(FIELD_CANDIDATE_BOUNDS_KIND));
+			return true;
+		} catch (IllegalArgumentException | NullPointerException e) {
+			return false;
+		}
 	}
 
 	private static Number numericFieldValue(Document doc, String fieldName) {

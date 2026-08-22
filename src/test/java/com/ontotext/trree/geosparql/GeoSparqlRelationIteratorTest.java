@@ -440,6 +440,11 @@ public class GeoSparqlRelationIteratorTest {
 		}
 
 		@Override
+		public CloseableIterator<CandidateEntity> getTransformCleanupCandidates() {
+			return emptyIterator();
+		}
+
+		@Override
 		public CloseableIterator<SourceGeometryLiteral> getSourceGeometryLiteralsFor(long subject) {
 			if (subject == OBJECT) {
 				List<SourceGeometryLiteral> sources = new ArrayList<>();

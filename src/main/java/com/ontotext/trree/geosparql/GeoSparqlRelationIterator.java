@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.Entities;
@@ -93,32 +94,40 @@ class GeoSparqlRelationIterator extends StatementIterator {
 			CandidateEntity candidate = candidateLookup.exactCandidateEntity();
 			Optional<SourceGeometryLiteral> boundSourceGeometryLiteral =
 					candidateLookup.boundSourceGeometryLiteral();
-			if (boundSubject == 0) {
-				List<SourceGeometryLiteral> candidateSubjectGeometries =
-						candidate.matchingSourceGeometryLiterals();
-				boolean holds = boundSourceGeometryLiteral.isEmpty()
-						? relationHolds(candidateSubjectGeometries,
-								boundObjectGeometries().sourceGeometryLiterals())
-						: relationHolds(candidateSubjectGeometries,
-								boundSourceGeometryLiteral.get());
-				if (holds
-						&& emittedCandidateEntityIds.add(candidateEntityId)) {
-					setCurrentMatch(candidateEntityId);
-					return true;
+			try {
+				if (boundSubject == 0) {
+					List<SourceGeometryLiteral> candidateSubjectGeometries =
+							candidate.matchingSourceGeometryLiterals();
+					boolean holds = boundSourceGeometryLiteral.isEmpty()
+							? relationHolds(candidateSubjectGeometries,
+									boundObjectGeometries().sourceGeometryLiterals())
+							: relationHolds(candidateSubjectGeometries,
+									boundSourceGeometryLiteral.get());
+					if (holds
+							&& emittedCandidateEntityIds.add(candidateEntityId)) {
+						setCurrentMatch(candidateEntityId);
+						return true;
+					}
+				} else {
+					List<SourceGeometryLiteral> candidateObjectGeometries =
+							candidate.matchingSourceGeometryLiterals();
+					boolean holds = boundSourceGeometryLiteral.isEmpty()
+							? relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
+									candidateObjectGeometries)
+							: relationHolds(boundSourceGeometryLiteral.get(),
+									candidateObjectGeometries);
+					if (holds
+							&& emittedCandidateEntityIds.add(candidateEntityId)) {
+						setCurrentMatch(candidateEntityId);
+						return true;
+					}
 				}
-			} else {
-				List<SourceGeometryLiteral> candidateObjectGeometries =
-						candidate.matchingSourceGeometryLiterals();
-				boolean holds = boundSourceGeometryLiteral.isEmpty()
-						? relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
-								candidateObjectGeometries)
-						: relationHolds(boundSourceGeometryLiteral.get(),
-								candidateObjectGeometries);
-				if (holds
-						&& emittedCandidateEntityIds.add(candidateEntityId)) {
-					setCurrentMatch(candidateEntityId);
-					return true;
+			} catch (JenaGeoSparqlException e) {
+				if (!candidateLookup.unevaluableCandidateIsNonMatch()) {
+					throw e;
 				}
+				logger.debug("Skipping unevaluable GeoSPARQL candidate entity {} during conservative full scan.",
+						candidateEntityId, e);
 			}
 		}
 
@@ -154,7 +163,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 				boundGeometries = boundSubjectGeometries();
 			}
 			candidateIterator = new RelationCandidateTraversal(parent.indexer, relation,
-					boundGeometries.indexGeometries(), logger);
+					boundGeometries.indexGeometries(), boundSubject != 0, logger);
 		}
 		return candidateIterator;
 	}

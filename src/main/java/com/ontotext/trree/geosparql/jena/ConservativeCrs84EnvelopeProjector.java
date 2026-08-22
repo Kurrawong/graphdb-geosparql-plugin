@@ -50,6 +50,13 @@ import org.opengis.util.FactoryException;
  * exercises the assumption with adversarial and randomised transformed-envelope coverage tests,
  * exact-versus-index-backed differential tests, and prefix-tree and precision tests.
  *
+ * <p>Jena separately rounds coordinates after transforming the right exact-evaluation operand into the left
+ * operand's CRS. The plugin pins that cleanup precision in {@link JenaCalculationPrecision}. Transformed CRS84
+ * candidate bounds are widened by the maximum cleanup displacement in CRS84 units so a right operand transformed
+ * into CRS84 remains covered. This widening is distinct from the SIS envelope approximation. When exact evaluation
+ * would instead round in another CRS, relation traversal retains the pair through exact evaluation rather than
+ * treating CRS84 bounds as an exclusion or disjoint proof.
+ *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
  * used only when the result still cannot be stored as one Lucene geographic rectangle: inverted lower/upper ordering,
@@ -74,6 +81,7 @@ final class ConservativeCrs84EnvelopeProjector {
 	}
 
 	ProjectedCandidateBounds projectBounds(SourceGeometryLiteral source) {
+		JenaCalculationPrecision.configure();
 		GeometryWrapper sourceWrapper = source.asGeometryWrapper();
 		if (sourceWrapper.isEmpty()) {
 			return ProjectedCandidateBounds.empty();
@@ -173,7 +181,8 @@ final class ConservativeCrs84EnvelopeProjector {
 	 * spans full longitude with a local latitude range is stored as that rectangle. The world CRS84 envelope is used
 	 * only when the result is still unusable as one ordered Lucene geographic rectangle.
 	 *
-	 * <p>This path trusts a finite, ordered, in-range SIS rectangle after unit-in-the-last-place widening. It does
+	 * <p>This path trusts a finite, ordered, in-range SIS rectangle after widening for Jena's pinned CRS84 decimal
+	 * cleanup and floating-point arithmetic. It does
 	 * not prove that rectangle covers the complete transformed geometry. A representable rectangle, including one that
 	 * spans full longitude, remains {@link CandidateBoundsKind#TRANSFORMED}. World fallback is a representation path
 	 * for an unusable rectangle, not a substitute for an unidentified unsafe {@code CoordinateOperation} class.
@@ -198,10 +207,11 @@ final class ConservativeCrs84EnvelopeProjector {
 				|| minY < world.getMinY() || maxY > world.getMaxY()) {
 			return ProjectedCandidateBounds.worldFallback(FALLBACK_UNREPRESENTABLE_RECTANGLE);
 		}
-		minX = Math.max(world.getMinX(), Math.nextDown(minX));
-		maxX = Math.min(world.getMaxX(), Math.nextUp(maxX));
-		minY = Math.max(world.getMinY(), Math.nextDown(minY));
-		maxY = Math.min(world.getMaxY(), Math.nextUp(maxY));
+		double cleanupDisplacement = JenaCalculationPrecision.maximumCleanupDisplacement();
+		minX = Math.max(world.getMinX(), Math.nextDown(minX - cleanupDisplacement));
+		maxX = Math.min(world.getMaxX(), Math.nextUp(maxX + cleanupDisplacement));
+		minY = Math.max(world.getMinY(), Math.nextDown(minY - cleanupDisplacement));
+		maxY = Math.min(world.getMaxY(), Math.nextUp(maxY + cleanupDisplacement));
 		if (minX > maxX || minY > maxY) {
 			return ProjectedCandidateBounds.worldFallback(FALLBACK_UNREPRESENTABLE_RECTANGLE);
 		}

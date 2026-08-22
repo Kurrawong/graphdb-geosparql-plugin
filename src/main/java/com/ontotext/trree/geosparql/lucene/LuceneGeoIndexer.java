@@ -6,6 +6,7 @@ import com.ontotext.trree.geosparql.EnvelopeDisjointCandidate;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
+import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginException;
@@ -319,6 +320,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry) {
+		return getEnvelopeIntersections(boundSourceIndexGeometry, false);
+	}
+
+	@Override
+	public CloseableIterator<CandidateEntity> getEnvelopeIntersections(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		assertReadableCurrentSchema();
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getCandidateEntitiesForQuery(new MatchNoDocsQuery("Empty source has no envelope intersections."));
@@ -328,8 +335,21 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	@Override
+	public CloseableIterator<CandidateEntity> getTransformCleanupCandidates() {
+		assertReadableCurrentSchema();
+		return getCandidateEntitiesForQuery(
+				LuceneGeoDocumentSchema.candidateBoundsKindQuery(CandidateBoundsKind.TRANSFORMED));
+	}
+
+	@Override
 	public CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
 			IndexGeometry boundSourceIndexGeometry) {
+		return getEnvelopeDisjointUncertainCandidates(boundSourceIndexGeometry, false);
+	}
+
+	@Override
+	public CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		assertReadableCurrentSchema();
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getCandidateEntitiesForQuery(
@@ -345,25 +365,34 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		 * ConservativeCrs84EnvelopeProjector. On that premise, when the native CRS84 bound source fills its own
 		 * envelope, a candidate envelope wholly inside that rectangle proves the source pair cannot be disjoint. The
 		 * inclusive ranges also remove boundary-contained sources: touching the closed bound still makes sfDisjoint,
-		 * ehDisjoint, and rcc8dc false.
+		 * ehDisjoint, and rcc8dc false. A transformed candidate subject is always retained because its own CRS controls
+		 * Jena cleanup and the CRS84 containment proof does not model that displacement.
 		 */
-		Query uncertain = new BooleanQuery.Builder()
-				.add(envelopeIntersections, BooleanClause.Occur.FILTER)
+		Query ordinaryUncertain = new BooleanQuery.Builder()
+				.add(envelopeIntersectionsQuery(boundSourceIndexGeometry), BooleanClause.Occur.FILTER)
 				.add(LuceneGeoDocumentSchema.envelopeWithinQuery(
 						boundSourceIndexGeometry.indexEnvelope()), BooleanClause.Occur.MUST_NOT)
 				.build();
-		return getCandidateEntitiesForQuery(uncertain);
+		return getCandidateEntitiesForQuery(ordinaryUncertain);
 	}
 
 	@Override
 	public CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
 			IndexGeometry boundSourceIndexGeometry) {
+		return getEnvelopeDisjointCandidates(boundSourceIndexGeometry, false);
+	}
+
+	@Override
+	public CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		assertReadableCurrentSchema();
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getEnvelopeDisjointCandidatesForQuery(
 					new MatchNoDocsQuery("Empty source has no envelope-disjoint partition."));
 		}
-		Query envelopeIntersections = envelopeIntersectionsQuery(boundSourceIndexGeometry);
+		Query envelopeIntersections = candidateIsSubject
+				? cleanupSafeEnvelopeIntersectionsQuery(boundSourceIndexGeometry)
+				: envelopeIntersectionsQuery(boundSourceIndexGeometry);
 		/*
 		 * Given direct containment for native CRS84 envelopes and the documented conservative-envelope engineering
 		 * assumption for SIS-transformed envelopes, prefix-tree Intersects is conservative for source geometries:
@@ -431,6 +460,15 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	private Query envelopeIntersectionsQuery(IndexGeometry indexGeometry) {
 		return strategy.makeQuery(
 				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(indexGeometry)));
+	}
+
+	private Query cleanupSafeEnvelopeIntersectionsQuery(IndexGeometry indexGeometry) {
+		return new BooleanQuery.Builder()
+				.add(envelopeIntersectionsQuery(indexGeometry), BooleanClause.Occur.SHOULD)
+				.add(LuceneGeoDocumentSchema.candidateBoundsKindQuery(CandidateBoundsKind.TRANSFORMED),
+						BooleanClause.Occur.SHOULD)
+				.setMinimumNumberShouldMatch(1)
+				.build();
 	}
 
 	private CloseableIterator<CandidateEntity> getCandidateEntitiesForQuery(Query query) {

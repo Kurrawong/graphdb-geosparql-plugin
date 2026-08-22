@@ -14,9 +14,10 @@ import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
 /**
  * GeoSPARQL property relations exposed by GraphDB.
  *
- * <p>Every non-disjoint relation uses envelope intersection for conservative candidate lookup. Disjoint relations
- * partition source documents into envelope-proven matches and uncertain candidates that still require exact
- * evaluation. Jena exact evaluation always preserves subject/object argument order.
+ * <p>When Jena exact evaluation rounds in CRS84, non-disjoint relations use envelope intersection for conservative
+ * candidate lookup and disjoint relations partition source documents into envelope-proven matches and uncertain
+ * candidates. Pairs whose cleanup occurs in another CRS are retained for exact evaluation because CRS84 envelopes
+ * cannot safely exclude or classify them. Jena exact evaluation always preserves subject/object argument order.
  */
 public enum GeoSparqlPropertyRelation {
 	// Simple Features

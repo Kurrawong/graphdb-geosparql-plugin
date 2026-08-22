@@ -53,6 +53,7 @@ public class RelationCandidateTraversalTest {
 		assertEquals(RelationCandidateTraversal.MatchCertainty.REQUIRES_EXACT_EVALUATION,
 				uncertain.matchCertainty());
 		assertSame(bound.sourceGeometryLiteral(), uncertain.boundSourceGeometryLiteral().orElseThrow());
+		assertFalse(uncertain.unevaluableCandidateIsNonMatch());
 
 		RelationCandidateTraversal.Candidate sentinel = traversal.next();
 		assertEquals(3L, sentinel.entityId());
@@ -104,6 +105,57 @@ public class RelationCandidateTraversalTest {
 		assertFalse(traversal.hasNext());
 		assertEquals(1, indexer.fullScanLookupCount);
 		assertTrue(indexer.events.isEmpty());
+	}
+
+	@Test
+	public void objectBoundNativeCrs84TraversalUsesEnvelopeCandidates() {
+		IndexGeometry bound = geometry("POINT(0 0)");
+		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
+		indexer.addEnvelopeCandidates(bound, candidate(1L, geometry("POINT(0 0)")));
+
+		RelationCandidateTraversal traversal = new RelationCandidateTraversal(indexer,
+				GeoSparqlPropertyRelation.SF_INTERSECTS, List.of(bound), false, LOG);
+
+		assertEquals(1L, traversal.next().entityId());
+		assertFalse(traversal.hasNext());
+		assertEquals(0, indexer.fullScanLookupCount);
+		assertEquals(List.of(bound.sourceGeometryLiteral()), indexer.envelopeLookupSources);
+	}
+
+	@Test
+	public void objectBoundTransformCleanupCandidatesUseCompleteBoundSetAndTolerateUnevaluablePairs() {
+		IndexGeometry bound = geometry("POINT(0 0)");
+		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
+		indexer.transformCleanupCandidates = List.of(candidate(1L,
+				geometry("<http://www.opengis.net/def/crs/EPSG/0/32632> POINT(500000 5200000)")));
+
+		RelationCandidateTraversal traversal = new RelationCandidateTraversal(indexer,
+				GeoSparqlPropertyRelation.SF_INTERSECTS, List.of(bound), false, LOG);
+		RelationCandidateTraversal.Candidate candidate = traversal.next();
+
+		assertEquals(1L, candidate.entityId());
+		assertTrue(candidate.boundSourceGeometryLiteral().isEmpty());
+		assertTrue(candidate.unevaluableCandidateIsNonMatch());
+		assertFalse(traversal.hasNext());
+	}
+
+	@Test
+	public void subjectBoundTransformedCrsUsesExactFullScanAndNoDisjointProof() {
+		IndexGeometry bound = geometry(
+				"<http://www.opengis.net/def/crs/EPSG/0/32632> POINT(500000 5200000)");
+		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
+		indexer.fullScanCandidates = List.of(candidate(1L, geometry("POINT(9 46.953529)")));
+
+		RelationCandidateTraversal traversal = new RelationCandidateTraversal(indexer,
+				GeoSparqlPropertyRelation.SF_DISJOINT, List.of(bound), true, LOG);
+
+		RelationCandidateTraversal.Candidate candidate = traversal.next();
+		assertEquals(RelationCandidateTraversal.MatchCertainty.REQUIRES_EXACT_EVALUATION,
+				candidate.matchCertainty());
+		assertTrue(candidate.unevaluableCandidateIsNonMatch());
+		assertFalse(traversal.hasNext());
+		assertEquals(1, indexer.fullScanLookupCount);
+		assertTrue(indexer.envelopeDisjointLookupSources.isEmpty());
 	}
 
 	@Test
@@ -318,6 +370,7 @@ public class RelationCandidateTraversalTest {
 		private final List<SourceGeometryLiteral> envelopeDisjointLookupSources = new ArrayList<>();
 		private final List<String> events = new ArrayList<>();
 		private List<CandidateEntity> fullScanCandidates = List.of();
+		private List<CandidateEntity> transformCleanupCandidates = List.of();
 		private List<CandidateEntity> nonSpatialCandidates = List.of();
 		private TrackingIterator<CandidateEntity> fullScanIterator;
 		private TrackingIterator<EnvelopeDisjointCandidate> lastDefiniteIterator;
@@ -370,6 +423,12 @@ public class RelationCandidateTraversalTest {
 			fullScanIterator = new TrackingIterator<>(fullScanCandidates, () -> {
 			});
 			return fullScanIterator;
+		}
+
+		@Override
+		public CloseableIterator<CandidateEntity> getTransformCleanupCandidates() {
+			return new TrackingIterator<>(transformCleanupCandidates, () -> {
+			});
 		}
 
 		@Override

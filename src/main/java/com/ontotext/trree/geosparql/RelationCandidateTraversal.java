@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql;
 
+import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.slf4j.Logger;
@@ -14,7 +15,10 @@ import java.util.Optional;
  * Traverses candidate entities for one bound side of a GeoSPARQL property relation.
  *
  * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation. Full-scan traversal returns
- * complete candidate source sets. Under the candidate-envelope containment contract, partitioned disjoint traversal
+ * complete candidate source sets. Subject-bound queries in a non-CRS84 source CRS use a full scan because Jena
+ * rounds the right operand after transforming it into the left operand's CRS; a CRS84 envelope cannot safely exclude
+ * pairs or prove disjointness when that cleanup occurs in another CRS. Under the
+ * candidate-envelope containment contract, partitioned disjoint traversal
  * first returns source documents whose envelopes prove a match, then exact-evaluates uncertain envelope intersections
  * after removing eligible envelope-contained definite non-matches, and finally evaluates non-spatial empty sentinels.
  *
@@ -32,6 +36,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		ENVELOPE_INTERSECTIONS,
 		DEFINITE_MATCHES,
 		UNCERTAIN_CANDIDATES,
+		TRANSFORM_CLEANUP_CANDIDATES,
 		EMPTY_SENTINELS,
 		DONE
 	}
@@ -39,6 +44,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 	private final GeoSparqlIndexer indexer;
 	private final GeoSparqlPropertyRelation relation;
 	private final List<IndexGeometry> boundIndexGeometries;
+	private final boolean boundSubject;
 	private final Logger logger;
 
 	private TraversalPhase phase;
@@ -51,9 +57,15 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 
 	RelationCandidateTraversal(GeoSparqlIndexer indexer, GeoSparqlPropertyRelation relation,
 			Collection<IndexGeometry> boundIndexGeometries, Logger logger) {
+		this(indexer, relation, boundIndexGeometries, true, logger);
+	}
+
+	RelationCandidateTraversal(GeoSparqlIndexer indexer, GeoSparqlPropertyRelation relation,
+			Collection<IndexGeometry> boundIndexGeometries, boolean boundSubject, Logger logger) {
 		this.indexer = indexer;
 		this.relation = relation;
 		this.boundIndexGeometries = List.copyOf(boundIndexGeometries);
+		this.boundSubject = boundSubject;
 		this.logger = logger;
 		this.phase = initialPhase();
 	}
@@ -98,10 +110,19 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		if (boundIndexGeometries.isEmpty()) {
 			return TraversalPhase.DONE;
 		}
+		if (requiresExactFullScanForCleanupCrs()) {
+			return TraversalPhase.FULL_SCAN;
+		}
 		return switch (relation.getCandidateLookupPolicy()) {
 			case ENVELOPE_INTERSECTS -> TraversalPhase.ENVELOPE_INTERSECTIONS;
 			case DISJOINT_PARTITIONED -> initialDisjointPhase();
 		};
+	}
+
+	private boolean requiresExactFullScanForCleanupCrs() {
+		return boundSubject && boundIndexGeometries.stream()
+				.filter(IndexGeometry::isSpatialCandidate)
+				.anyMatch(bound -> bound.candidateBoundsKind() != CandidateBoundsKind.NATIVE_CRS84);
 	}
 
 	private TraversalPhase initialDisjointPhase() {
@@ -127,6 +148,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 				case ENVELOPE_INTERSECTIONS -> loadNextEnvelopeIntersection();
 				case DEFINITE_MATCHES -> loadNextDefiniteMatch();
 				case UNCERTAIN_CANDIDATES -> loadNextUncertainCandidate();
+				case TRANSFORM_CLEANUP_CANDIDATES -> loadNextTransformCleanupCandidate();
 				case EMPTY_SENTINELS -> loadNextEmptySentinel();
 				case DONE -> null;
 			};
@@ -142,7 +164,8 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			currentExactCandidates = indexer.getAllEntities();
 		}
 		if (currentExactCandidates.hasNext()) {
-			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next());
+			return Candidate.exactAgainstCompleteBoundSet(
+					currentExactCandidates.next(), requiresExactFullScanForCleanupCrs());
 		}
 		finishTraversal();
 		return null;
@@ -156,7 +179,11 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			}
 			closeActiveIterator();
 			if (!openNextEnvelopeIntersection()) {
-				finishTraversal();
+				if (boundSubject) {
+					finishTraversal();
+				} else {
+					beginPhase(TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
+				}
 				return null;
 			}
 		}
@@ -196,9 +223,26 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			if (openNextEnvelopeIntersection()) {
 				continue;
 			}
-			beginPhase(TraversalPhase.EMPTY_SENTINELS);
+			beginPhase(boundSubject
+					? TraversalPhase.EMPTY_SENTINELS
+					: TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
 			return null;
 		}
+	}
+
+	private Candidate loadNextTransformCleanupCandidate() {
+		if (currentExactCandidates == null) {
+			currentExactCandidates = indexer.getTransformCleanupCandidates();
+		}
+		if (currentExactCandidates.hasNext()) {
+			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next(), true);
+		}
+		if (relation.getCandidateLookupPolicy() == CandidateLookupPolicy.DISJOINT_PARTITIONED) {
+			beginPhase(TraversalPhase.EMPTY_SENTINELS);
+		} else {
+			finishTraversal();
+		}
+		return null;
 	}
 
 	private Candidate loadNextEmptySentinel() {
@@ -210,7 +254,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			 * Empty sentinels have no spatial field, so they cannot participate in either envelope partition.
 			 * Exact evaluation against the complete non-empty bound set preserves empty-geometry semantics.
 			 */
-			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next());
+			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next(), false);
 		}
 		finishTraversal();
 		return null;
@@ -222,7 +266,8 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			if (!boundSourceCanParticipateInDisjointPartition(currentBoundIndexGeometry)) {
 				continue;
 			}
-			currentDefiniteCandidates = indexer.getEnvelopeDisjointCandidates(currentBoundIndexGeometry);
+			currentDefiniteCandidates = indexer.getEnvelopeDisjointCandidates(
+					currentBoundIndexGeometry, !boundSubject);
 			return true;
 		}
 		return false;
@@ -239,8 +284,8 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 				continue;
 			}
 			currentExactCandidates = phase == TraversalPhase.UNCERTAIN_CANDIDATES
-					? indexer.getEnvelopeDisjointUncertainCandidates(currentBoundIndexGeometry)
-					: indexer.getEnvelopeIntersections(currentBoundIndexGeometry);
+					? indexer.getEnvelopeDisjointUncertainCandidates(currentBoundIndexGeometry, !boundSubject)
+					: indexer.getEnvelopeIntersections(currentBoundIndexGeometry, !boundSubject);
 			return true;
 		}
 		return false;
@@ -287,21 +332,24 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		private final MatchCertainty matchCertainty;
 		private final CandidateEntity candidateEntity;
 		private final SourceGeometryLiteral boundSourceGeometryLiteral;
+		private final boolean unevaluableCandidateIsNonMatch;
 
 		private Candidate(long entityId, MatchCertainty matchCertainty, CandidateEntity candidateEntity,
-				SourceGeometryLiteral boundSourceGeometryLiteral) {
+				SourceGeometryLiteral boundSourceGeometryLiteral, boolean unevaluableCandidateIsNonMatch) {
 			this.entityId = entityId;
 			this.matchCertainty = matchCertainty;
 			this.candidateEntity = candidateEntity;
 			this.boundSourceGeometryLiteral = boundSourceGeometryLiteral;
+			this.unevaluableCandidateIsNonMatch = unevaluableCandidateIsNonMatch;
 		}
 
 		private static Candidate definiteMatch(long entityId) {
-			return new Candidate(entityId, MatchCertainty.DEFINITE_MATCH, null, null);
+			return new Candidate(entityId, MatchCertainty.DEFINITE_MATCH, null, null, false);
 		}
 
-		private static Candidate exactAgainstCompleteBoundSet(CandidateEntity candidateEntity) {
-			return exactCandidate(candidateEntity, null);
+		private static Candidate exactAgainstCompleteBoundSet(
+				CandidateEntity candidateEntity, boolean unevaluableCandidateIsNonMatch) {
+			return exactCandidate(candidateEntity, null, unevaluableCandidateIsNonMatch);
 		}
 
 		private static Candidate exactForBoundSource(CandidateEntity candidateEntity,
@@ -309,16 +357,16 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			if (boundSourceGeometryLiteral == null) {
 				throw new IllegalArgumentException("Exact source-pair candidate requires a bound source.");
 			}
-			return exactCandidate(candidateEntity, boundSourceGeometryLiteral);
+			return exactCandidate(candidateEntity, boundSourceGeometryLiteral, false);
 		}
 
 		private static Candidate exactCandidate(CandidateEntity candidateEntity,
-				SourceGeometryLiteral boundSourceGeometryLiteral) {
+				SourceGeometryLiteral boundSourceGeometryLiteral, boolean unevaluableCandidateIsNonMatch) {
 			if (candidateEntity == null) {
 				throw new IllegalArgumentException("Exact relation candidate requires candidate source geometry.");
 			}
 			return new Candidate(candidateEntity.entityId(), MatchCertainty.REQUIRES_EXACT_EVALUATION,
-					candidateEntity, boundSourceGeometryLiteral);
+					candidateEntity, boundSourceGeometryLiteral, unevaluableCandidateIsNonMatch);
 		}
 
 		long entityId() {
@@ -338,6 +386,10 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 
 		Optional<SourceGeometryLiteral> boundSourceGeometryLiteral() {
 			return Optional.ofNullable(boundSourceGeometryLiteral);
+		}
+
+		boolean unevaluableCandidateIsNonMatch() {
+			return unevaluableCandidateIsNonMatch;
 		}
 	}
 }

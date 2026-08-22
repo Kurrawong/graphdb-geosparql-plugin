@@ -36,6 +36,25 @@ public interface GeoSparqlIndexer {
 	CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry);
 
 	/**
+	 * Returns conservative intersection candidates with operand direction available to the adapter.
+	 *
+	 * <p>When the candidate is the relation subject, its source CRS is the exact-evaluation cleanup CRS. Adapters must
+	 * retain candidates whose CRS84 envelope cannot safely model that cleanup.
+	 */
+	default CloseableIterator<CandidateEntity> getEnvelopeIntersections(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		return getEnvelopeIntersections(boundSourceIndexGeometry);
+	}
+
+	/**
+	 * Returns source documents retained because the candidate subject's transformed CRS84 envelope cannot model
+	 * cleanup performed in that candidate's source CRS.
+	 */
+	default CloseableIterator<CandidateEntity> getTransformCleanupCandidates() {
+		return getAllEntities();
+	}
+
+	/**
 	 * Returns uncertain candidates for one bound source in a partitioned disjoint traversal.
 	 *
 	 * <p>Under the candidate-envelope containment contract, adapters may remove candidates whose precise envelope
@@ -51,6 +70,11 @@ public interface GeoSparqlIndexer {
 		return getEnvelopeIntersections(boundSourceIndexGeometry);
 	}
 
+	default CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		return getEnvelopeDisjointUncertainCandidates(boundSourceIndexGeometry);
+	}
+
 	/**
 	 * Returns one lightweight result per source document whose non-empty CRS84 index envelope is absent from the
 	 * conservative envelope-intersection result for the supplied bound source.
@@ -60,6 +84,11 @@ public interface GeoSparqlIndexer {
 	 */
 	CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
 			IndexGeometry boundSourceIndexGeometry);
+
+	default CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		return getEnvelopeDisjointCandidates(boundSourceIndexGeometry);
+	}
 
 	/** Returns entities represented by non-spatial empty-sentinel source documents for exact evaluation. */
 	CloseableIterator<CandidateEntity> getNonSpatialCandidates();

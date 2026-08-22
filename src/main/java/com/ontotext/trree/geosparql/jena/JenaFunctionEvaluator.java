@@ -171,6 +171,7 @@ public final class JenaFunctionEvaluator {
 	public static boolean evaluateTopological(String functionUri, SourceGeometryLiteral leftSource,
 											  SourceGeometryLiteral rightSource)
 			throws Exception {
+		JenaCalculationPrecision.configure();
 		GeometryWrapper left = leftSource.asGeometryWrapper();
 		GeometryWrapper right = rightSource.asGeometryWrapper();
 		boolean hasGenericCollection = isGenericCollection(left) || isGenericCollection(right);
