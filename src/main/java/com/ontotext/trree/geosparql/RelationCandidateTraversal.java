@@ -1,6 +1,5 @@
 package com.ontotext.trree.geosparql;
 
-import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.slf4j.Logger;
@@ -15,9 +14,8 @@ import java.util.Optional;
  * Traverses candidate entities for one bound side of a GeoSPARQL property relation.
  *
  * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation. Full-scan traversal returns
- * complete candidate source sets. Subject-bound queries in a non-CRS84 source CRS use a full scan because Jena
- * rounds the right operand after transforming it into the left operand's CRS; a CRS84 envelope cannot safely exclude
- * pairs or prove disjointness when that cleanup occurs in another CRS. Under the
+ * complete candidate source sets. Mixed-CRS pairs whose cleanup target cannot be safely modeled by CRS84 envelopes
+ * are retained separately for exact evaluation; same-CRS pairs remain on the selective envelope path. Under the
  * candidate-envelope containment contract, partitioned disjoint traversal
  * first returns source documents whose envelopes prove a match, then exact-evaluates uncertain envelope intersections
  * after removing eligible envelope-contained definite non-matches, and finally evaluates non-spatial empty sentinels.
@@ -110,19 +108,10 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		if (boundIndexGeometries.isEmpty()) {
 			return TraversalPhase.DONE;
 		}
-		if (requiresExactFullScanForCleanupCrs()) {
-			return TraversalPhase.FULL_SCAN;
-		}
 		return switch (relation.getCandidateLookupPolicy()) {
 			case ENVELOPE_INTERSECTS -> TraversalPhase.ENVELOPE_INTERSECTIONS;
 			case DISJOINT_PARTITIONED -> initialDisjointPhase();
 		};
-	}
-
-	private boolean requiresExactFullScanForCleanupCrs() {
-		return boundSubject && boundIndexGeometries.stream()
-				.filter(IndexGeometry::isSpatialCandidate)
-				.anyMatch(bound -> bound.candidateBoundsKind() != CandidateBoundsKind.NATIVE_CRS84);
 	}
 
 	private TraversalPhase initialDisjointPhase() {
@@ -164,8 +153,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			currentExactCandidates = indexer.getAllEntities();
 		}
 		if (currentExactCandidates.hasNext()) {
-			return Candidate.exactAgainstCompleteBoundSet(
-					currentExactCandidates.next(), requiresExactFullScanForCleanupCrs());
+			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next(), false);
 		}
 		finishTraversal();
 		return null;
@@ -179,11 +167,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			}
 			closeActiveIterator();
 			if (!openNextEnvelopeIntersection()) {
-				if (boundSubject) {
-					finishTraversal();
-				} else {
-					beginPhase(TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
-				}
+				beginPhase(TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
 				return null;
 			}
 		}
@@ -223,26 +207,45 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			if (openNextEnvelopeIntersection()) {
 				continue;
 			}
-			beginPhase(boundSubject
-					? TraversalPhase.EMPTY_SENTINELS
-					: TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
+			beginPhase(TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
 			return null;
 		}
 	}
 
 	private Candidate loadNextTransformCleanupCandidate() {
-		if (currentExactCandidates == null) {
-			currentExactCandidates = indexer.getTransformCleanupCandidates();
+		while (true) {
+			if (currentExactCandidates != null && currentExactCandidates.hasNext()) {
+				return Candidate.exactForBoundSource(currentExactCandidates.next(),
+						currentBoundIndexGeometry.sourceGeometryLiteral(), true);
+			}
+			closeActiveIterator();
+			if (openNextTransformCleanupCandidates()) {
+				continue;
+			}
+			if (relation.getCandidateLookupPolicy() == CandidateLookupPolicy.DISJOINT_PARTITIONED) {
+				beginPhase(TraversalPhase.EMPTY_SENTINELS);
+			} else {
+				finishTraversal();
+			}
+			return null;
 		}
-		if (currentExactCandidates.hasNext()) {
-			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next(), true);
+	}
+
+	private boolean openNextTransformCleanupCandidates() {
+		while (boundIndex < boundIndexGeometries.size()) {
+			currentBoundIndexGeometry = boundIndexGeometries.get(boundIndex++);
+			if (!currentBoundIndexGeometry.isSpatialCandidate()) {
+				continue;
+			}
+			if (relation.getCandidateLookupPolicy() == CandidateLookupPolicy.DISJOINT_PARTITIONED
+					&& !boundSourceCanParticipateInDisjointPartition(currentBoundIndexGeometry)) {
+				continue;
+			}
+			currentExactCandidates = indexer.getTransformCleanupCandidates(
+					currentBoundIndexGeometry, !boundSubject);
+			return true;
 		}
-		if (relation.getCandidateLookupPolicy() == CandidateLookupPolicy.DISJOINT_PARTITIONED) {
-			beginPhase(TraversalPhase.EMPTY_SENTINELS);
-		} else {
-			finishTraversal();
-		}
-		return null;
+		return false;
 	}
 
 	private Candidate loadNextEmptySentinel() {
@@ -354,10 +357,15 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 
 		private static Candidate exactForBoundSource(CandidateEntity candidateEntity,
 				SourceGeometryLiteral boundSourceGeometryLiteral) {
+			return exactForBoundSource(candidateEntity, boundSourceGeometryLiteral, false);
+		}
+
+		private static Candidate exactForBoundSource(CandidateEntity candidateEntity,
+				SourceGeometryLiteral boundSourceGeometryLiteral, boolean unevaluableCandidateIsNonMatch) {
 			if (boundSourceGeometryLiteral == null) {
 				throw new IllegalArgumentException("Exact source-pair candidate requires a bound source.");
 			}
-			return exactCandidate(candidateEntity, boundSourceGeometryLiteral, false);
+			return exactCandidate(candidateEntity, boundSourceGeometryLiteral, unevaluableCandidateIsNonMatch);
 		}
 
 		private static Candidate exactCandidate(CandidateEntity candidateEntity,

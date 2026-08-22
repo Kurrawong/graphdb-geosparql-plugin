@@ -440,7 +440,8 @@ public class GeoSparqlRelationIteratorTest {
 		}
 
 		@Override
-		public CloseableIterator<CandidateEntity> getTransformCleanupCandidates() {
+		public CloseableIterator<CandidateEntity> getTransformCleanupCandidates(
+				IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 			return emptyIterator();
 		}
 

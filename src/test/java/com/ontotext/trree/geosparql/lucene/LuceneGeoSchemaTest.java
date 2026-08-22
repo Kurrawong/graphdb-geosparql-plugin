@@ -219,6 +219,20 @@ public class LuceneGeoSchemaTest {
 		assertForceReindexMessage(exception);
 	}
 
+	@Test
+	public void sourceCrsMustBeIndexedForSelectiveMixedCrsLookup() {
+		Document document = currentSchemaDocument(1L, sampleGeometry);
+		String sourceCrs = document.get(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS);
+		document.removeFields(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS);
+		document.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS, sourceCrs));
+
+		PluginException exception = assertThrows(PluginException.class,
+				() -> LuceneGeoDocumentSchema.sourceGeometryLiteral(
+						document, new SourceGeometryLiteralResolver()));
+
+		assertForceReindexMessage(exception);
+	}
+
     @Test
     public void testMalformedSourceWkbRequiresForceReindex() throws Exception {
         Path malformedDataDir = tmpFolder.getRoot().toPath().resolve("malformed-source-wkb");

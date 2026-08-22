@@ -37,9 +37,6 @@ public interface GeoSparqlIndexer {
 
 	/**
 	 * Returns conservative intersection candidates with operand direction available to the adapter.
-	 *
-	 * <p>When the candidate is the relation subject, its source CRS is the exact-evaluation cleanup CRS. Adapters must
-	 * retain candidates whose CRS84 envelope cannot safely model that cleanup.
 	 */
 	default CloseableIterator<CandidateEntity> getEnvelopeIntersections(
 			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
@@ -47,10 +44,12 @@ public interface GeoSparqlIndexer {
 	}
 
 	/**
-	 * Returns source documents retained because the candidate subject's transformed CRS84 envelope cannot model
-	 * cleanup performed in that candidate's source CRS.
+	 * Returns source documents retained because the pair's CRS84 envelopes cannot model cleanup performed in the
+	 * exact-evaluation target CRS. The bound source and operand direction let adapters retain only mixed-CRS pairs
+	 * that need this fallback.
 	 */
-	default CloseableIterator<CandidateEntity> getTransformCleanupCandidates() {
+	default CloseableIterator<CandidateEntity> getTransformCleanupCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		return getAllEntities();
 	}
 

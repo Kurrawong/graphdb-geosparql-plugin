@@ -87,6 +87,8 @@ public class GeoSparqlCandidateSelectivityTest {
 		assertTrue("Brisbane query retrieved " + candidates + " of " + indexed
 						+ " GDA2020 features; the candidate index has become unselective",
 				candidates > 0 && candidates < indexed / 10);
+		assertRelationTraversalIsSelective(indexer, brisbane, true, indexed);
+		assertRelationTraversalIsSelective(indexer, brisbane, false, indexed);
 
 		IndexGeometry mgaBrisbane = geometry("<" + MGA56
 				+ "> POLYGON((450000 6900000,450000 7020000,560000 7020000,560000 6900000,450000 6900000))");
@@ -111,5 +113,22 @@ public class GeoSparqlCandidateSelectivityTest {
 		} finally {
 			iterator.close();
 		}
+	}
+
+	private static void assertRelationTraversalIsSelective(
+			GeoSparqlIndexer indexer, IndexGeometry bound, boolean boundSubject, int indexed) {
+		int candidates = 0;
+		try (RelationCandidateTraversal traversal = new RelationCandidateTraversal(
+				indexer, GeoSparqlPropertyRelation.SF_INTERSECTS,
+				List.of(bound), boundSubject, LoggerFactory.getLogger(GeoSparqlCandidateSelectivityTest.class))) {
+			while (traversal.hasNext()) {
+				traversal.next();
+				candidates++;
+			}
+		}
+		String direction = boundSubject ? "subject-bound" : "object-bound";
+		assertTrue(direction + " relation traversal retrieved " + candidates + " of " + indexed
+					+ " same-CRS GDA2020 features",
+				candidates > 0 && candidates < indexed / 10);
 	}
 }
