@@ -7,10 +7,11 @@ package com.ontotext.trree.geosparql.jena;
  * a CRS84 geometry. {@link #TRANSFORMED} is a selective envelope produced by the SIS {@code CoordinateOperation}
  * envelope transformation, including full 3D operations for sources with a three-dimensional CRS and horizontal
  * operations for other transformable non-CRS84 sources. Its use for candidate pruning relies on the
- * conservative-envelope engineering assumption documented by {@link ConservativeCrs84EnvelopeProjector};
- * {@code TRANSFORMED} does not mean mathematically proven complete. {@link #WORLD_FALLBACK} is the geographic world
- * rectangle used only when that envelope cannot be stored as one Lucene rectangle, the source has no usable
- * horizontal CRS, or transform construction fails.
+ * conservative-envelope engineering assumption documented by {@link ConservativeCrs84EnvelopeProjector}, including
+ * the source-to-EPSG:4979-to-CRS84 candidate path where Jena exact evaluation uses a direct source-to-target
+ * operation. {@code TRANSFORMED} does not mean mathematically proven complete. {@link #WORLD_FALLBACK} is the
+ * geographic world rectangle used only when that envelope cannot be stored as one Lucene rectangle, the source has
+ * no usable horizontal CRS, or transform construction fails.
  *
  * <p>The kind is persisted with each Lucene source document as candidate-envelope provenance.
  */

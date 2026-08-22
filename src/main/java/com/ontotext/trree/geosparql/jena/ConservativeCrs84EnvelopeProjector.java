@@ -55,7 +55,10 @@ import org.opengis.util.FactoryException;
  * candidate bounds are widened by the maximum cleanup displacement in CRS84 units so a right operand transformed
  * into CRS84 remains covered. This widening is distinct from the SIS envelope approximation. When exact evaluation
  * would instead round in another CRS, relation traversal retains the pair through exact evaluation rather than
- * treating CRS84 bounds as an exclusion or disjoint proof.
+ * treating CRS84 bounds as an exclusion or disjoint proof. When the exact target is CRS84 and the right operand has a
+ * three-dimensional CRS, exact evaluation uses a direct source-to-CRS84 operation while this projector uses the
+ * source-to-EPSG:4979-to-CRS84 path. The conservative-envelope engineering assumption applies across that operation-
+ * path difference.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
