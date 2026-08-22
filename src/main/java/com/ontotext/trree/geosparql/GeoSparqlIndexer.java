@@ -79,7 +79,18 @@ public interface GeoSparqlIndexer {
 
 	void begin() throws Exception;
 
+	/** Returns whether this indexer is retaining transaction outcome state. */
+	default boolean isTransactionActive() {
+		return false;
+	}
+
 	void commit() throws Exception;
+
+	/**
+	 * Makes the most recently committed index transaction final after GraphDB completes the RDF transaction.
+	 */
+	default void complete() throws Exception {
+	}
 
 	void rollback() throws Exception;
 

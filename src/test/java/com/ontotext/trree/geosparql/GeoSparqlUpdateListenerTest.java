@@ -1,0 +1,155 @@
+package com.ontotext.trree.geosparql;
+
+import com.ontotext.test.TemporaryLocalFolder;
+import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
+import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
+import com.ontotext.trree.sdk.PluginConnection;
+import org.junit.Rule;
+import org.junit.Test;
+import org.slf4j.LoggerFactory;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.lang.reflect.Proxy;
+import java.util.List;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class GeoSparqlUpdateListenerTest {
+	@Rule
+	public TemporaryLocalFolder tmpFolder = new TemporaryLocalFolder();
+
+	@Test
+	public void abortRestoresPrefixTreeConfigWrittenDuringCommit() throws Exception {
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		GeoSparqlConfig config = new GeoSparqlConfig();
+		Path dataDir = tmpFolder.newFolder("config-abort").toPath();
+		plugin.setConfig(config);
+		plugin.setDataDir(dataDir.toFile());
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
+		GeoSparqlUtils.saveConfig(config, dataDir);
+		Path configPath = GeoSparqlConfig.resolveConfigPath(dataDir);
+		byte[] originalConfigFile = Files.readAllBytes(configPath);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		PluginConnection connection = emptyPluginConnection();
+
+		listener.transactionStarted(connection);
+		plugin.tmpPrefixTree = GeoSparqlConfig.PrefixTree.GEOHASH;
+		plugin.tmpPrecision = 20;
+		listener.transactionCommit(null);
+		listener.transactionAborted(null);
+
+		assertEquals(GeoSparqlConfig.PrefixTree.QUAD, plugin.getConfig().getPrefixTree());
+		assertEquals(11, plugin.getConfig().getPrecision());
+		assertArrayEquals(originalConfigFile, Files.readAllBytes(configPath));
+	}
+
+	@Test
+	public void abortRestoresCurrentSettingsChangedDuringForceReindex() throws Exception {
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		GeoSparqlConfig config = new GeoSparqlConfig();
+		Path dataDir = tmpFolder.newFolder("reindex-config-abort").toPath();
+		plugin.setConfig(config);
+		plugin.setDataDir(dataDir.toFile());
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
+		GeoSparqlUtils.saveConfig(config, dataDir);
+		byte[] originalConfigFile = Files.readAllBytes(GeoSparqlConfig.resolveConfigPath(dataDir));
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+
+		listener.transactionStarted(null);
+		config.setPrefixTree(GeoSparqlConfig.PrefixTree.GEOHASH);
+		config.setPrecision(20);
+		config.updateCurrentSettings();
+		GeoSparqlUtils.saveConfig(config, dataDir);
+		listener.transactionAborted(null);
+
+		assertEquals(GeoSparqlConfig.PrefixTree.QUAD, plugin.getConfig().getCurrentPrefixTree());
+		assertEquals(11, plugin.getConfig().getCurrentPrecision());
+		assertArrayEquals(originalConfigFile,
+				Files.readAllBytes(GeoSparqlConfig.resolveConfigPath(dataDir)));
+	}
+
+	@Test
+	public void listenerPostCommitAbortRestoresPreviousLuceneStateAfterRestart() throws Exception {
+		Path dataDir = tmpFolder.newFolder("listener-post-commit-abort").toPath();
+		GeoSparqlPlugin plugin = enabledPlugin(dataDir);
+		LuceneGeoIndexer indexer = new LuceneGeoIndexer(plugin);
+		indexer.initialize();
+		plugin.indexer = indexer;
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(1 1)")));
+		indexer.commit();
+		indexer.complete();
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		PluginConnection connection = emptyPluginConnection();
+
+		listener.transactionStarted(connection);
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
+		listener.transactionCommit(connection);
+		assertEquals("POINT(2 2)", onlySource(indexer).lexicalForm());
+		listener.transactionAborted(connection);
+
+		LuceneGeoIndexer restarted = new LuceneGeoIndexer(enabledPlugin(dataDir));
+		restarted.initialize();
+		assertEquals("POINT(1 1)", onlySource(restarted).lexicalForm());
+	}
+
+	@Test
+	public void abortRestoresCommitlessStateWhenIndexingStartsDuringPluginEnable() throws Exception {
+		Path dataDir = tmpFolder.newFolder("enable-time-abort").toPath();
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		GeoSparqlConfig config = new GeoSparqlConfig();
+		plugin.setConfig(config);
+		plugin.setDataDir(dataDir.toFile());
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		listener.transactionStarted(emptyPluginConnection());
+
+		config.setEnabled(true);
+		LuceneGeoIndexer indexer = new LuceneGeoIndexer(plugin);
+		indexer.initialize();
+		plugin.indexer = indexer;
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
+		indexer.commit();
+		listener.transactionAborted(emptyPluginConnection());
+
+		LuceneGeoIndexer restarted = new LuceneGeoIndexer(enabledPlugin(dataDir));
+		restarted.initialize();
+		try (CloseableIterator<SourceGeometryLiteral> sources = restarted.getSourceGeometryLiteralsFor(0)) {
+			assertFalse(sources.hasNext());
+		}
+	}
+
+	private GeoSparqlPlugin enabledPlugin(Path dataDir) {
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		GeoSparqlConfig config = new GeoSparqlConfig();
+		config.setEnabled(true);
+		plugin.setConfig(config);
+		plugin.setDataDir(dataDir.toFile());
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
+		return plugin;
+	}
+
+	private SourceGeometryLiteral onlySource(LuceneGeoIndexer indexer) throws Exception {
+		try (CloseableIterator<SourceGeometryLiteral> sources = indexer.getSourceGeometryLiteralsFor(1L)) {
+			assertTrue(sources.hasNext());
+			SourceGeometryLiteral source = sources.next();
+			assertFalse(sources.hasNext());
+			return source;
+		}
+	}
+
+	private PluginConnection emptyPluginConnection() {
+		return (PluginConnection) Proxy.newProxyInstance(
+				PluginConnection.class.getClassLoader(), new Class<?>[]{PluginConnection.class},
+				(proxy, method, arguments) -> null);
+	}
+}

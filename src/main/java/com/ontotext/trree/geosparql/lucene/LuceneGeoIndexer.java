@@ -26,7 +26,12 @@ import org.locationtech.spatial4j.shape.Rectangle;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.function.Function;
 
@@ -65,13 +70,19 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
     private Directory directory;
 
-	private IndexWriterConfig iwConfig;
 	private IndexWriter indexWriter;
+	private SnapshotDeletionPolicy snapshotDeletionPolicy;
+	private IndexCommit preTransactionCommit;
+	private boolean transactionActive;
+	private boolean provisionalCommitPublished;
+	private boolean schemaMismatchAtTransactionStart;
+	private boolean recoveryRequired;
+	private boolean recoveryRequiredAtTransactionStart;
+	private Path pendingTransactionMarker;
     private Logger logger;
 	private boolean schemaMismatchDetected;
 	private boolean schemaMarkerPending;
 	private boolean schemaRebuildInProgress;
-	private boolean schemaMismatchBeforeRebuild;
 
 	static final String SCHEMA_MISMATCH_MESSAGE = LuceneGeoDocumentSchema.SCHEMA_MISMATCH_MESSAGE;
 
@@ -89,9 +100,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
         this.indexDir = GeoSparqlConfig.resolveIndexPath(parent.getDataDir().toPath());
 
 		this.directory = FSDirectory.open(indexDir);
+		this.pendingTransactionMarker = indexDir.resolve("pending-graphdb-transaction");
+		this.snapshotDeletionPolicy = new SnapshotDeletionPolicy(new KeepOnlyLastCommitDeletionPolicy());
 
 		initSettings();
 		schemaMismatchDetected = detectSchemaMismatch();
+		recoveryRequired = Files.exists(pendingTransactionMarker);
 	}
 
 	@Override
@@ -112,35 +126,54 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public void begin() throws Exception {
-		iwConfig = new IndexWriterConfig();
+		if (transactionActive) {
+			throw new IllegalStateException("A GeoSPARQL index transaction is already active.");
+		}
+		Files.createDirectories(indexDir);
+		boolean existingCommit = DirectoryReader.indexExists(directory);
+		indexWriter = new IndexWriter(directory, newIndexWriterConfig());
+		preTransactionCommit = existingCommit ? snapshotDeletionPolicy.snapshot() : null;
+		transactionActive = true;
+		provisionalCommitPublished = false;
+		schemaMismatchAtTransactionStart = schemaMismatchDetected;
+		recoveryRequiredAtTransactionStart = recoveryRequired;
+	}
+
+	private IndexWriterConfig newIndexWriterConfig() {
+		IndexWriterConfig config = new IndexWriterConfig();
 		// Turn off compound file format.
 		// Building the compound file format takes time during indexing (7-33%)
-		iwConfig.setUseCompoundFile(false);
+		config.setUseCompoundFile(false);
 		// Set maxBufferedDocs large enough to prevent the writer from flushing based on document count.
-		iwConfig.setMaxBufferedDocs(parent.getConfig().getMaxBufferedDocs());
+		config.setMaxBufferedDocs(parent.getConfig().getMaxBufferedDocs());
 		//More RAM before flushing means Lucene writes larger segments to begin with which means less merging later.
-		iwConfig.setRAMBufferSizeMB(parent.getConfig().getRamBufferSizeMb());
-		indexWriter = new IndexWriter(directory, iwConfig);
+		config.setRAMBufferSizeMB(parent.getConfig().getRamBufferSizeMb());
+		config.setIndexDeletionPolicy(snapshotDeletionPolicy);
+		return config;
+	}
+
+	@Override
+	public boolean isTransactionActive() {
+		return transactionActive;
 	}
 
 	@Override
 	public void commit() throws Exception {
 		boolean rebuildWasInProgress = schemaRebuildInProgress;
-		boolean committed = false;
 		try {
 			writeSchemaMarkerIfNeeded();
+			writePendingTransactionMarker();
 			closeIndexWriter(); // also commits
-			committed = true;
+			provisionalCommitPublished = true;
 			if (rebuildWasInProgress) {
 				schemaMismatchDetected = false;
 			}
 		} finally {
-			if (!committed && schemaRebuildInProgress) {
-				schemaMismatchDetected = schemaMismatchBeforeRebuild;
+			if (!provisionalCommitPublished) {
+				schemaMismatchDetected = schemaMismatchAtTransactionStart;
 			}
 			schemaMarkerPending = false;
 			schemaRebuildInProgress = false;
-			schemaMismatchBeforeRebuild = false;
 		}
 	}
 
@@ -149,19 +182,61 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	@Override
-	public void rollback() throws Exception {
-		try {
-			indexWriter.rollback();
-		} finally {
-			restoreSchemaStateAfterUncommittedRebuild();
-			schemaMarkerPending = false;
+	public void complete() throws Exception {
+		if (!transactionActive) {
+			return;
 		}
+		IOException cleanupFailure = null;
+		try {
+			releasePreTransactionCommit();
+			deleteObsoleteCommits();
+		} catch (IOException e) {
+			cleanupFailure = e;
+		}
+		try {
+			Files.deleteIfExists(pendingTransactionMarker);
+		} catch (IOException e) {
+			if (cleanupFailure == null) {
+				cleanupFailure = e;
+			} else {
+				cleanupFailure.addSuppressed(e);
+			}
+		}
+		recoveryRequired = false;
+		clearTransactionState();
+		if (cleanupFailure != null) {
+			throw cleanupFailure;
+		}
+	}
+
+	@Override
+	public void rollback() throws Exception {
+		if (!transactionActive) {
+			return;
+		}
+		boolean pendingCommit = Files.exists(pendingTransactionMarker);
+		if (indexWriter != null && indexWriter.isOpen()) {
+			indexWriter.rollback();
+		}
+		boolean commitWasPublished = provisionalCommitPublished
+				|| pendingCommit && hasCommitAfterPreTransactionCommit();
+		if (commitWasPublished) {
+			restorePreTransactionCommit();
+		}
+		releasePreTransactionCommit();
+		deleteObsoleteCommits();
+		schemaMismatchDetected = schemaMismatchAtTransactionStart;
+		recoveryRequired = recoveryRequiredAtTransactionStart;
+		if (!recoveryRequired) {
+			Files.deleteIfExists(pendingTransactionMarker);
+		}
+		initSettings();
+		clearTransactionState();
 	}
 
 	@Override
 	public void freshIndex() throws Exception {
 		indexWriter.deleteAll();
-		schemaMismatchBeforeRebuild = schemaMismatchDetected;
 		schemaRebuildInProgress = true;
 		schemaMarkerPending = true;
 	}
@@ -342,6 +417,10 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	private void assertReadableCurrentSchema() {
+		if (recoveryRequired) {
+			throw new PluginException("The GeoSPARQL Lucene index has a pending GraphDB transaction. "
+					+ "Queries are unavailable until a full force-reindex completes.");
+		}
 		if (schemaMismatchDetected) {
 			throw new PluginException(SCHEMA_MISMATCH_MESSAGE);
 		}
@@ -380,11 +459,64 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 				indexWriter.getLiveCommitData()));
 	}
 
-	private void restoreSchemaStateAfterUncommittedRebuild() {
-		if (schemaRebuildInProgress) {
-			schemaMismatchDetected = schemaMismatchBeforeRebuild;
-			schemaRebuildInProgress = false;
-			schemaMismatchBeforeRebuild = false;
+	private void writePendingTransactionMarker() throws IOException {
+		byte[] contents = "GeoSPARQL Lucene commit awaiting GraphDB outcome\n".getBytes(StandardCharsets.UTF_8);
+		try (FileChannel channel = FileChannel.open(pendingTransactionMarker,
+				StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+			channel.write(ByteBuffer.wrap(contents));
+			channel.force(true);
 		}
+	}
+
+	private void restorePreTransactionCommit() throws IOException {
+		IndexWriterConfig restoreConfig = newIndexWriterConfig();
+		if (preTransactionCommit == null) {
+			restoreConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+		} else {
+			restoreConfig.setIndexCommit(preTransactionCommit);
+		}
+		try (IndexWriter restoreWriter = new IndexWriter(directory, restoreConfig)) {
+			if (preTransactionCommit != null) {
+				restoreWriter.setLiveCommitData(preTransactionCommit.getUserData().entrySet());
+			}
+			restoreWriter.commit();
+		}
+	}
+
+	private boolean hasCommitAfterPreTransactionCommit() throws IOException {
+		if (!DirectoryReader.indexExists(directory)) {
+			return false;
+		}
+		if (preTransactionCommit == null) {
+			return true;
+		}
+		try (DirectoryReader reader = DirectoryReader.open(directory)) {
+			return reader.getIndexCommit().getGeneration() != preTransactionCommit.getGeneration();
+		}
+	}
+
+	private void releasePreTransactionCommit() throws IOException {
+		if (preTransactionCommit != null) {
+			snapshotDeletionPolicy.release(preTransactionCommit);
+			preTransactionCommit = null;
+		}
+	}
+
+	private void deleteObsoleteCommits() throws IOException {
+		IndexWriter cleanupWriter = new IndexWriter(directory, newIndexWriterConfig());
+		try {
+			cleanupWriter.deleteUnusedFiles();
+		} finally {
+			cleanupWriter.rollback();
+		}
+	}
+
+	private void clearTransactionState() {
+		transactionActive = false;
+		provisionalCommitPublished = false;
+		indexWriter = null;
+		schemaMarkerPending = false;
+		schemaRebuildInProgress = false;
+		recoveryRequiredAtTransactionStart = false;
 	}
 }

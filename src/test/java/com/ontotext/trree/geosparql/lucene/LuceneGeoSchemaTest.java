@@ -375,6 +375,25 @@ public class LuceneGeoSchemaTest {
         assertForceReindexMessage(exception);
     }
 
+	@Test
+	public void forceReindexPostCommitAbortRestoresPreviousSchemaGateAfterRestart() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("post-commit-reindex-abort");
+		Files.createDirectories(dataDir);
+		writeCurrentSchemaIndexWithoutCommitMarker(dataDir);
+
+		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+		indexer.begin();
+		indexer.freshIndex();
+		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		indexer.commit();
+		indexer.rollback();
+
+		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
+		PluginException exception = assertThrows(PluginException.class,
+				() -> restarted.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(exception);
+	}
+
     @Test
     public void testForceReindexInProgressKeepsReadsBlockedUntilCommit() throws Exception {
         Path missingMarkerDataDir = tmpFolder.getRoot().toPath().resolve("in-progress-reindex-mismatch");

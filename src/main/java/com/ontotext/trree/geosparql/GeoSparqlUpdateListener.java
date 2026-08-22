@@ -5,6 +5,10 @@ import com.ontotext.trree.sdk.*;
 import gnu.trove.TLongHashSet;
 import gnu.trove.TLongProcedure;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * Listener for incremental indexing of GeoSPARQL data.
  */
@@ -16,6 +20,10 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 
 	private final TLongHashSet geometriesToUpdate = new TLongHashSet();
 	private final TLongHashSet featuresToUpdate = new TLongHashSet();
+	private GeoSparqlConfig configBeforeTransaction;
+	private byte[] configFileBeforeTransaction;
+	private boolean configFileExistedBeforeTransaction;
+	private boolean indexTransactionStarted;
 
 	GeoSparqlUpdateListener(GeoSparqlPlugin parent, long asWKT, long asGML, long hasDefaultGeometry) {
 		this.parent = parent;
@@ -58,12 +66,15 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	public void transactionStarted(PluginConnection pluginConnection) {
 		parent.tmpPrefixTree = null;
 		parent.tmpPrecision = 0;
+		captureConfigState();
+		indexTransactionStarted = false;
 		if (! parent.getConfig().isEnabled()) {
 			return;
 		}
 
 		try {
 			parent.indexer.begin();
+			indexTransactionStarted = true;
 		} catch (Exception e) {
 			throw new PluginException("Unable to start indexer transaction.", e);
 		}
@@ -121,6 +132,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 
 		try {
 			parent.indexer.commit();
+			indexTransactionStarted = true;
 		} catch (Exception e) {
 			throw new PluginException("Unable to commit the GeoSPARQL Lucene index.", e);
 		}
@@ -128,26 +140,74 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 
     @Override
     public void transactionCompleted(PluginConnection pluginConnection) {
-
+		if (hasIndexTransaction()) {
+			try {
+				parent.indexer.complete();
+			} catch (Exception e) {
+				parent.getLogger().warn("Unable to finalize the GeoSPARQL Lucene index transaction.", e);
+			}
+		}
+		clearOutcomeState();
     }
 
     @Override
 	public void transactionAborted(PluginConnection pluginConnection) {
-		if (! parent.getConfig().isEnabled()) {
-			return;
-		}
-
 		cleanupAfterTransaction();
-		try {
-			parent.indexer.rollback();
-		} catch (Exception e) {
-			parent.getLogger().warn("Unable to rollback indexer transaction.", e);
+		restoreConfigState();
+		if (hasIndexTransaction()) {
+			try {
+				parent.indexer.rollback();
+			} catch (Exception e) {
+				parent.getLogger().warn("Unable to rollback indexer transaction.", e);
+			}
 		}
+		clearOutcomeState();
 	}
 
 	private void cleanupAfterTransaction() {
 		// Reuse the accumulators while discarding all transaction-local entity ids.
 		geometriesToUpdate.clear();
 		featuresToUpdate.clear();
+	}
+
+	private void captureConfigState() {
+		configBeforeTransaction = new GeoSparqlConfig();
+		configBeforeTransaction.setFromProperties(parent.getConfig().getAsProperties());
+		Path configPath = GeoSparqlConfig.resolveConfigPath(parent.getDataDir().toPath());
+		configFileExistedBeforeTransaction = Files.exists(configPath);
+		try {
+			configFileBeforeTransaction = configFileExistedBeforeTransaction ? Files.readAllBytes(configPath) : null;
+		} catch (IOException e) {
+			throw new PluginException("Unable to retain GeoSPARQL configuration for transaction rollback.", e);
+		}
+	}
+
+	private void restoreConfigState() {
+		if (configBeforeTransaction == null) {
+			return;
+		}
+		parent.setConfig(configBeforeTransaction);
+		Path configPath = GeoSparqlConfig.resolveConfigPath(parent.getDataDir().toPath());
+		try {
+			if (configFileExistedBeforeTransaction) {
+				Files.createDirectories(configPath.getParent());
+				Files.write(configPath, configFileBeforeTransaction);
+			} else {
+				Files.deleteIfExists(configPath);
+			}
+		} catch (IOException e) {
+			parent.getLogger().warn("Unable to restore GeoSPARQL configuration after transaction abort.", e);
+		}
+	}
+
+	private void clearOutcomeState() {
+		configBeforeTransaction = null;
+		configFileBeforeTransaction = null;
+		configFileExistedBeforeTransaction = false;
+		indexTransactionStarted = false;
+	}
+
+	private boolean hasIndexTransaction() {
+		return indexTransactionStarted || parent.indexer != null && parent.indexer.isTransactionActive();
 	}
 }
