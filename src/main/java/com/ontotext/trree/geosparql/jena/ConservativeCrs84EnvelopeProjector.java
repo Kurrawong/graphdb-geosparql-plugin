@@ -44,11 +44,11 @@ import org.opengis.util.FactoryException;
  *
  * <p>This assumption is accepted because conservative containment is the intended SIS behaviour; SIS tests include
  * containment-oriented checks such as inverse-transformed envelopes containing their originals; and SIS regression
- * coverage treats projection-domain and wraparound behaviour as envelope-transformation correctness concerns. The
- * plugin's SIS 1.6 compatibility evidence identifies no finite, in-domain under-bounding case, but absence of an
- * identified counterexample does not prove safety. The plugin independently exercises the assumption with adversarial
- * and randomised transformed-envelope coverage tests, exact-versus-index-backed differential tests, and prefix-tree
- * and precision tests.
+ * coverage treats projection-domain and wraparound behaviour as envelope-transformation correctness concerns. No
+ * finite, in-domain under-bounding case is identified by the plugin's SIS 1.6 test corpus or its review of the SIS API
+ * and implementation, but absence of an identified counterexample does not prove safety. The plugin independently
+ * exercises the assumption with adversarial and randomised transformed-envelope coverage tests,
+ * exact-versus-index-backed differential tests, and prefix-tree and precision tests.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
