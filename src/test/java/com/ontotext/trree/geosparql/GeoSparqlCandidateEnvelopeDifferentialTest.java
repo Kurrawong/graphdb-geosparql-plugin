@@ -150,6 +150,32 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
+	public void multiGeometryEntityMatchesWhenAnUnevaluablePairPrecedesATruePair() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+		sources.put(1L, geometries(
+				"<" + UTM_32N + "> POINT(500000 5200000)",
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)"));
+		sources.put(2L, geometries("<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)"));
+		Fixture fixture = createFixture("unevaluable-then-true-differential", sources);
+
+		try {
+			GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+					sources.get(1L).get(0).sourceGeometryLiteral(),
+					sources.get(2L).get(0).sourceGeometryLiteral());
+			fail("UTM 32N as subject against EPSG:4979 must be unevaluable");
+		} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException expected) {
+			// The first listed source pair is unevaluable; the later 3D pair holds.
+		}
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(1L).get(1).sourceGeometryLiteral(),
+				sources.get(2L).get(0).sourceGeometryLiteral()));
+		assertEquals(Set.of(1L, 2L),
+				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertEquals(Set.of(1L, 2L),
+				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+	}
+
+	@Test
 	public void envelopeContainedNonMatchesAreNotExactDisjoint() throws Exception {
 		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
 		sources.put(100L, geometries("POLYGON((0 0,0 10,10 10,10 0,0 0))"));
@@ -288,20 +314,11 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 
 	private Boolean exactRelationOrUnknown(GeoSparqlPropertyRelation relation,
 			List<SourceGeometryLiteral> subjectSources, List<SourceGeometryLiteral> objectSources) {
-		boolean evaluated = false;
-		for (SourceGeometryLiteral subjectSource : subjectSources) {
-			for (SourceGeometryLiteral objectSource : objectSources) {
-				try {
-					if (relation.evaluate(subjectSource, objectSource)) {
-						return true;
-					}
-					evaluated = true;
-				} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException ignored) {
-					// An unevaluable pair must not hide a later evaluable true match.
-				}
-			}
+		try {
+			return relation.evaluate(subjectSources, objectSources);
+		} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException ignored) {
+			return null;
 		}
-		return evaluated ? false : null;
 	}
 
 	private List<Long> collectCandidateIds(GeoSparqlRelationIterator iterator, long boundSubject) {

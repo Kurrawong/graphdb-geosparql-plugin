@@ -6,6 +6,9 @@ import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import org.eclipse.rdf4j.model.IRI;
 import org.locationtech.jts.geom.Dimension;
 
+import java.util.Collection;
+import java.util.List;
+
 import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
 
 /**
@@ -104,5 +107,47 @@ public enum GeoSparqlPropertyRelation {
 		} catch (Exception e) {
 			throw new JenaGeoSparqlException("Unable to evaluate GeoSPARQL relation " + predicateUri, e);
 		}
+	}
+
+	/**
+	 * Returns whether any subject/object source pair satisfies this relation.
+	 *
+	 * <p>Multiple geometry literals on an entity are existential: a true pair matches immediately. An unevaluable
+	 * pair does not hide a later evaluable true pair. If at least one pair evaluates to false and none are true, the
+	 * relation does not hold. If every pair is unevaluable, the last evaluation error is propagated.
+	 */
+	public boolean evaluate(Collection<SourceGeometryLiteral> subjectGeometries,
+			Collection<SourceGeometryLiteral> objectGeometries) {
+		if (subjectGeometries.isEmpty() || objectGeometries.isEmpty()) {
+			return false;
+		}
+		JenaGeoSparqlException lastError = null;
+		boolean evaluated = false;
+		for (SourceGeometryLiteral subjectGeometry : subjectGeometries) {
+			for (SourceGeometryLiteral objectGeometry : objectGeometries) {
+				try {
+					if (evaluate(subjectGeometry, objectGeometry)) {
+						return true;
+					}
+					evaluated = true;
+				} catch (JenaGeoSparqlException e) {
+					lastError = e;
+				}
+			}
+		}
+		if (!evaluated && lastError != null) {
+			throw lastError;
+		}
+		return false;
+	}
+
+	public boolean evaluate(Collection<SourceGeometryLiteral> subjectGeometries,
+			SourceGeometryLiteral objectGeometry) {
+		return evaluate(subjectGeometries, List.of(objectGeometry));
+	}
+
+	public boolean evaluate(SourceGeometryLiteral subjectGeometry,
+			Collection<SourceGeometryLiteral> objectGeometries) {
+		return evaluate(List.of(subjectGeometry), objectGeometries);
 	}
 }

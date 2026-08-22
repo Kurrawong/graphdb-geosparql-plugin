@@ -23,6 +23,7 @@ import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class GeoSparqlRelationIteratorTest {
 	private static final long SUBJECT = 1L;
@@ -77,6 +78,45 @@ public class GeoSparqlRelationIteratorTest {
 			assertEquals(OBJECT, iterator.object);
 			assertFalse(iterator.next());
 			assertEquals(2, ((ScriptedGeoSparqlIndexer) plugin.indexer).envelopeLookupCount);
+		} finally {
+			iterator.close();
+		}
+	}
+
+	@Test
+	public void unevaluableSourcePairDoesNotHideALaterTrueMatch() {
+		com.ontotext.trree.geosparql.jena.JenaGeometryAdapter.initialize();
+		IndexGeometry utm32n = indexGeometry(
+				"<http://www.opengis.net/def/crs/EPSG/0/32632> POINT(500000 5200000)");
+		IndexGeometry epsg4979 = indexGeometry(
+				"<http://www.opengis.net/def/crs/EPSG/0/4979> POINT Z(-27.47 153.03 55)");
+
+		try {
+			GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+					utm32n.sourceGeometryLiteral(), epsg4979.sourceGeometryLiteral());
+			fail("UTM 32N as subject against EPSG:4979 must be unevaluable");
+		} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException expected) {
+			// Jena cannot reduce the 3D CRS to this projected CRS for this pair.
+		}
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				epsg4979.sourceGeometryLiteral(), epsg4979.sourceGeometryLiteral()));
+
+		FakeEntities entities = new FakeEntities();
+		entities.add(SUBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/mixed"));
+		entities.add(OBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/wgs84-3d"));
+
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
+		plugin.indexer = new ScriptedGeoSparqlIndexer(singletonList(epsg4979),
+				List.of(utm32n, epsg4979), List.of());
+
+		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_INTERSECTS, 0, PREDICATE, OBJECT, entities);
+		try {
+			assertTrue(iterator.next());
+			assertEquals(SUBJECT, iterator.subject);
+			assertEquals(OBJECT, iterator.object);
+			assertFalse(iterator.next());
 		} finally {
 			iterator.close();
 		}

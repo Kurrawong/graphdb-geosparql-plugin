@@ -20,10 +20,10 @@ import java.util.Optional;
  * {@code MathTransform} overload. That envelope is used only for Lucene candidate lookup. Exact evaluation uses the
  * source geometry literal and its native CRS. SIS does not prove that transform is never smaller than the complete
  * CRS84 image. Wraparound may broaden that envelope, potentially to full longitude. A representable SIS rectangle is
- * indexed as-is, including ordinary projected sources such as GDA2020/MGA. Non-CRS84 geometries are not mapped to the
- * world envelope. The world CRS84 envelope is used only when the result still cannot be stored as one Lucene
- * geographic rectangle, or when transform construction fails. An empty source has a null envelope and is represented
- * by a non-spatial Lucene document so exact traversal can still reconstruct it.
+ * indexed as-is, including ordinary non-CRS84 sources such as GDA2020 and projected MGA2020 CRSes. Non-CRS84
+ * geometries are not mapped to the world envelope. The world CRS84 envelope is used only when the result still cannot
+ * be stored as one Lucene geographic rectangle, or when transform construction fails. An empty source has a null
+ * envelope and is represented by a non-spatial Lucene document so exact traversal can still reconstruct it.
  */
 public final class IndexGeometry {
 	public static final String INDEX_CRS = SRS_URI.DEFAULT_WKT_CRS84;

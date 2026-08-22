@@ -172,43 +172,17 @@ class GeoSparqlRelationIterator extends StatementIterator {
 
 	private boolean relationHolds(Collection<SourceGeometryLiteral> subjectGeometries,
 			Collection<SourceGeometryLiteral> objectGeometries) {
-		if (subjectGeometries.isEmpty() || objectGeometries.isEmpty()) {
-			return false;
-		}
-		for (SourceGeometryLiteral subjectGeometry : subjectGeometries) {
-			for (SourceGeometryLiteral objectGeometry : objectGeometries) {
-				if (relation.evaluate(subjectGeometry, objectGeometry)) {
-					return true;
-				}
-			}
-		}
-		return false;
+		return relation.evaluate(subjectGeometries, objectGeometries);
 	}
 
 	private boolean relationHolds(Collection<SourceGeometryLiteral> subjectGeometries,
 			SourceGeometryLiteral objectGeometry) {
-		if (subjectGeometries.isEmpty()) {
-			return false;
-		}
-		for (SourceGeometryLiteral subjectGeometry : subjectGeometries) {
-			if (relation.evaluate(subjectGeometry, objectGeometry)) {
-				return true;
-			}
-		}
-		return false;
+		return relation.evaluate(subjectGeometries, objectGeometry);
 	}
 
 	private boolean relationHolds(SourceGeometryLiteral subjectGeometry,
 			Collection<SourceGeometryLiteral> objectGeometries) {
-		if (objectGeometries.isEmpty()) {
-			return false;
-		}
-		for (SourceGeometryLiteral objectGeometry : objectGeometries) {
-			if (relation.evaluate(subjectGeometry, objectGeometry)) {
-				return true;
-			}
-		}
-		return false;
+		return relation.evaluate(subjectGeometry, objectGeometries);
 	}
 
 	private EntityGeometries geometriesForEntity(long entityId) {
