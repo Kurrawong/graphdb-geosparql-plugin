@@ -6,7 +6,7 @@ package com.ontotext.trree.geosparql.jena;
  * <p>{@link #EMPTY} is the non-spatial sentinel for an empty source. {@link #NATIVE_CRS84} is the source envelope of
  * a CRS84 geometry. {@link #TRANSFORMED} is a selective envelope produced by the SIS {@code CoordinateOperation}
  * envelope transformation, including full 3D operations for sources with a three-dimensional CRS and horizontal
- * operations for ordinary GDA2020 and projected MGA2020 sources. Its use for candidate pruning relies on the
+ * operations for other transformable non-CRS84 sources. Its use for candidate pruning relies on the
  * conservative-envelope engineering assumption documented by {@link ConservativeCrs84EnvelopeProjector};
  * {@code TRANSFORMED} does not mean mathematically proven complete. {@link #WORLD_FALLBACK} is the geographic world
  * rectangle used only when that envelope cannot be stored as one Lucene rectangle, the source has no usable
