@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -90,7 +91,7 @@ final class CrsEnvironmentFingerprint {
 		}
 
 		List<Path> files;
-		try (Stream<Path> paths = Files.walk(datumChanges)) {
+		try (Stream<Path> paths = Files.walk(datumChanges, FileVisitOption.FOLLOW_LINKS)) {
 			files = paths.filter(Files::isRegularFile)
 					.sorted(Comparator.comparing(path -> normalizedRelativePath(datumChanges, path)))
 					.toList();
