@@ -61,12 +61,12 @@ public final class JenaFunctionEvaluator {
 		JenaGeometryAdapter.initialize();
 		try {
 			if (isBinaryTopological(functionUri)) {
-				requireMinArgs(functionUri, args, 2);
+				requireArgs(functionUri, args, 2);
 				return valueFactory.createLiteral(
 						evaluateTopological(functionUri, sourceLiteral(args[0]), sourceLiteral(args[1])));
 			}
 			if (GeoConstants.GEOF_RELATE.stringValue().equals(functionUri)) {
-				requireMinArgs(functionUri, args, 3);
+				requireArgs(functionUri, args, 3);
 				return valueFactory.createLiteral(evaluateRelate(sourceLiteral(args[0]), sourceLiteral(args[1]),
 						args[2].stringValue()));
 			}
@@ -468,7 +468,7 @@ public final class JenaFunctionEvaluator {
 	}
 
 	private static boolean extensionBoolean(String functionUri, Value... args) throws Exception {
-		requireMinArgs(functionUri, args, 2);
+		requireArgs(functionUri, args, 2);
 		GeometryWrapper left = geometry(args[0]);
 		GeometryWrapper right = left.checkTransformSRS(geometry(args[1]));
 		if (GeoConstants.EXT_CONTAINS_PROPERLY.stringValue().equals(functionUri)) {
@@ -542,12 +542,5 @@ public final class JenaFunctionEvaluator {
 			}
 		}
 		throw new ValueExprEvaluationException(functionUri + " function received unexpected argument count: " + args.length);
-	}
-
-	private static void requireMinArgs(String functionUri, Value[] args, int min) throws ValueExprEvaluationException {
-		if (args.length < min) {
-			throw new ValueExprEvaluationException(functionUri + " function expects at least " + min
-					+ " arguments, found " + args.length);
-		}
 	}
 }

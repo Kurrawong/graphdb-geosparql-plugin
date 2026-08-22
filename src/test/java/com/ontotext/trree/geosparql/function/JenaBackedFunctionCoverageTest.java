@@ -151,6 +151,46 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
+	public void binaryTopologicalFunctionsEnforceExactArity() {
+		for (TopologicalCase testCase : topologicalCases()) {
+			IRI uri = testCase.functionUri;
+			assertThrows("Expected " + uri + " to reject 1 argument",
+					ValueExprEvaluationException.class,
+					() -> evaluate(uri, wkt(testCase.trueLeftWkt)));
+			assertThrows("Expected " + uri + " to reject 3 arguments",
+					ValueExprEvaluationException.class,
+					() -> evaluate(uri, wkt(testCase.trueLeftWkt), wkt(testCase.trueRightWkt), VF.createLiteral("extra")));
+		}
+	}
+
+	@Test
+	public void relateEnforcesExactArity() {
+		assertThrows("Expected geof:relate to reject 2 arguments",
+				ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_RELATE, wkt("POINT(0 0)"), wkt("POINT(0 0)")));
+		assertThrows("Expected geof:relate to reject 4 arguments",
+				ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_RELATE, wkt("POINT(0 0)"), wkt("POINT(0 0)"),
+						VF.createLiteral("T********"), VF.createLiteral("extra")));
+	}
+
+	@Test
+	public void extensionBooleanFunctionsEnforceExactArity() {
+		List<IRI> extensionBooleans = List.of(
+				GeoConstants.EXT_CONTAINS_PROPERLY,
+				GeoConstants.EXT_COVERED_BY,
+				GeoConstants.EXT_COVERS);
+		for (IRI uri : extensionBooleans) {
+			assertThrows("Expected " + uri + " to reject 1 argument",
+					ValueExprEvaluationException.class,
+					() -> evaluate(uri, wkt(CONTAINS_A)));
+			assertThrows("Expected " + uri + " to reject 3 arguments",
+					ValueExprEvaluationException.class,
+					() -> evaluate(uri, wkt(CONTAINS_A), wkt(CONTAINS_B), VF.createLiteral("extra")));
+		}
+	}
+
+	@Test
 	public void distanceFunctionHasDirectCoverage() throws Exception {
 		Value distance = evaluate(GeoConstants.GEOF_DISTANCE,
 				wkt("POINT(0 0)"), wkt("LINESTRING(10 0, 10 0)"), GeoSparqlUnits.URI_METRE);
