@@ -3,6 +3,7 @@ package com.ontotext.trree.geosparql;
 import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.IndexGeometryFixtures;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.sdk.Entities;
@@ -407,6 +408,90 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
+	public void objectBoundEntityEvaluatesCompleteSourceSetsAfterAnUnevaluablePair() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+		sources.put(1L, List.of(worldFallbackGeometry(
+				"<" + UTM_32N + "> POINT(500000 5200000)")));
+		sources.put(2L, geometries(
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)",
+				"<" + UTM_32N + "> POINT(500000 5200000)"));
+		Fixture fixture = createFixture("complete-object-bound-source-set", sources);
+
+		try {
+			GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+					sources.get(1L).get(0).sourceGeometryLiteral(),
+					sources.get(2L).get(0).sourceGeometryLiteral());
+			fail("UTM 32N as subject against EPSG:4979 must be unevaluable");
+		} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException expected) {
+			// The first bound source pair is unevaluable; the later same-CRS pair holds.
+		}
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				List.of(sources.get(1L).get(0).sourceGeometryLiteral()),
+				sources.get(2L).stream().map(IndexGeometry::sourceGeometryLiteral).toList()));
+		assertEquals(Set.of(1L, 2L),
+				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertEquals(Set.of(1L, 2L),
+				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+	}
+
+	@Test
+	public void subjectBoundEntityEvaluatesCompleteSourceSetsAfterAnUnevaluablePair() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+		sources.put(1L, List.of(worldFallbackGeometry(
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)")));
+		sources.put(2L, geometries(
+				"<" + UTM_32N + "> POINT(500000 5200000)",
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)"));
+		Fixture fixture = createFixture("complete-subject-bound-source-set", sources);
+
+		try {
+			GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+					sources.get(2L).get(0).sourceGeometryLiteral(),
+					sources.get(1L).get(0).sourceGeometryLiteral());
+			fail("UTM 32N as subject against EPSG:4979 must be unevaluable");
+		} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException expected) {
+			// The first bound source pair is unevaluable; the later same-CRS pair holds.
+		}
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(2L).stream().map(IndexGeometry::sourceGeometryLiteral).toList(),
+				List.of(sources.get(1L).get(0).sourceGeometryLiteral())));
+		assertEquals(Set.of(1L, 2L),
+				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 2L, 0));
+		assertEquals(Set.of(1L, 2L),
+				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 2L, 0));
+	}
+
+	@Test
+	public void evaluatedFalsePairPreventsALaterUnevaluablePairFromAbortingTraversal() throws Exception {
+		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+		sources.put(1L, List.of(worldFallbackGeometry(
+				"<" + UTM_32N + "> POINT(500000 5200000)")));
+		sources.put(2L, geometries(
+				"<" + UTM_32N + "> POINT(400000 5100000)",
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)"));
+		Fixture fixture = createFixture("false-before-unevaluable-source-pair", sources);
+
+		assertFalse(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				sources.get(1L).get(0).sourceGeometryLiteral(),
+				sources.get(2L).get(0).sourceGeometryLiteral()));
+		try {
+			GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+					sources.get(1L).get(0).sourceGeometryLiteral(),
+					sources.get(2L).get(1).sourceGeometryLiteral());
+			fail("UTM 32N as subject against EPSG:4979 must be unevaluable");
+		} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException expected) {
+			// The evaluated false pair determines the complete source-set result.
+		}
+		assertFalse(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				List.of(sources.get(1L).get(0).sourceGeometryLiteral()),
+				sources.get(2L).stream().map(IndexGeometry::sourceGeometryLiteral).toList()));
+		assertEquals(Set.of(2L),
+				runReference(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertEquals(Set.of(2L),
+				runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+	}
+
+	@Test
 	public void envelopeContainedNonMatchesAreNotExactDisjoint() throws Exception {
 		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
 		sources.put(100L, geometries("POLYGON((0 0,0 10,10 10,10 0,0 0))"));
@@ -600,6 +685,14 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 
 	private static List<IndexGeometry> geometries(String... wkts) {
 		return java.util.Arrays.stream(wkts).map(TestIndexGeometries::fromWkt).toList();
+	}
+
+	private static IndexGeometry worldFallbackGeometry(String wkt) {
+		// A world fallback keeps mixed-CRS sources in every relevant Lucene phase; exact evaluation still uses the
+		// unchanged source geometry literal.
+		return IndexGeometryFixtures.withIndexEnvelope(SourceGeometryLiteral.fromWkt(wkt),
+				new Envelope(-180, 180, -90, 90), CandidateBoundsKind.WORLD_FALLBACK,
+				"unrepresentable-rectangle");
 	}
 
 	private DirectOperationComparison directOperationComparison(String name, String targetCrsUri,

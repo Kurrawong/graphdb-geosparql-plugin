@@ -447,6 +447,16 @@ public class GeoSparqlRelationIteratorTest {
 
 		@Override
 		public CloseableIterator<SourceGeometryLiteral> getSourceGeometryLiteralsFor(long subject) {
+			if (subject == candidateEntityId) {
+				LinkedHashSet<SourceGeometryLiteral> sources = new LinkedHashSet<>();
+				for (IndexGeometry geometry : firstCandidateGeometries) {
+					sources.add(geometry.sourceGeometryLiteral());
+				}
+				for (IndexGeometry geometry : secondCandidateGeometries) {
+					sources.add(geometry.sourceGeometryLiteral());
+				}
+				return iterator(new ArrayList<>(sources));
+			}
 			if (subject == OBJECT) {
 				List<SourceGeometryLiteral> sources = new ArrayList<>();
 				for (IndexGeometry geometry : boundObjectGeometries) {

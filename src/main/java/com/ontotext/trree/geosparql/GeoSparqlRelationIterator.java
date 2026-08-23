@@ -16,22 +16,20 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
  * Produces statement matches for a GeoSPARQL property relation.
  *
  * <p>With one side bound, Lucene supplies either envelope-proven entity ids or grouped uncertain candidates.
- * Envelope-proven disjoint matches need no source payload; uncertain candidates are evaluated against their source
- * geometry literal snapshots. The internal empty-bound fallback evaluates complete source sets, and a fully bound
- * pair bypasses candidate lookup.
+ * Envelope-proven disjoint matches need no source payload; uncertain candidates are evaluated once against the
+ * complete source geometry literal snapshots for both entities. The internal empty-bound fallback also evaluates
+ * complete source sets, and a fully bound pair bypasses candidate lookup.
  *
  * <p>One side is fixed for every candidate traversal, so the candidate entity id uniquely identifies the resulting
- * entity pair. Repeated source-document hits and bound-source lookups emit that candidate entity once. Closing the
- * statement iterator also closes the active Lucene reader.
+ * entity pair. Repeated source-document hits and bound-source lookups evaluate and emit that candidate entity at
+ * most once. Closing the statement iterator also closes the active Lucene reader.
  */
 class GeoSparqlRelationIterator extends StatementIterator {
 	private final GeoSparqlPlugin parent;
@@ -44,6 +42,7 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private EntityGeometries boundObjectGeometries;
 	private RelationCandidateTraversal candidateIterator;
 	private final Set<Long> emittedCandidateEntityIds = new HashSet<>();
+	private final Set<Long> exactlyEvaluatedCandidateEntityIds = new HashSet<>();
 
 	private boolean boundPairEvaluated;
 
@@ -91,31 +90,26 @@ class GeoSparqlRelationIterator extends StatementIterator {
 				setCurrentMatch(candidateEntityId);
 				return true;
 			}
+			if (!exactlyEvaluatedCandidateEntityIds.add(candidateEntityId)) {
+				continue;
+			}
 			CandidateEntity candidate = candidateLookup.exactCandidateEntity();
-			Optional<SourceGeometryLiteral> boundSourceGeometryLiteral =
-					candidateLookup.boundSourceGeometryLiteral();
+			Collection<SourceGeometryLiteral> candidateSourceGeometryLiterals =
+					candidateLookup.boundSourceGeometryLiteral().isEmpty()
+							? candidate.matchingSourceGeometryLiterals()
+							: geometriesForEntity(candidateEntityId).sourceGeometryLiterals();
 			try {
 				if (boundSubject == 0) {
-					List<SourceGeometryLiteral> candidateSubjectGeometries =
-							candidate.matchingSourceGeometryLiterals();
-					boolean holds = boundSourceGeometryLiteral.isEmpty()
-							? relationHolds(candidateSubjectGeometries,
-									boundObjectGeometries().sourceGeometryLiterals())
-							: relationHolds(candidateSubjectGeometries,
-									boundSourceGeometryLiteral.get());
+					boolean holds = relationHolds(candidateSourceGeometryLiterals,
+							boundObjectGeometries().sourceGeometryLiterals());
 					if (holds
 							&& emittedCandidateEntityIds.add(candidateEntityId)) {
 						setCurrentMatch(candidateEntityId);
 						return true;
 					}
 				} else {
-					List<SourceGeometryLiteral> candidateObjectGeometries =
-							candidate.matchingSourceGeometryLiterals();
-					boolean holds = boundSourceGeometryLiteral.isEmpty()
-							? relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
-									candidateObjectGeometries)
-							: relationHolds(boundSourceGeometryLiteral.get(),
-									candidateObjectGeometries);
+					boolean holds = relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
+							candidateSourceGeometryLiterals);
 					if (holds
 							&& emittedCandidateEntityIds.add(candidateEntityId)) {
 						setCurrentMatch(candidateEntityId);
@@ -182,16 +176,6 @@ class GeoSparqlRelationIterator extends StatementIterator {
 	private boolean relationHolds(Collection<SourceGeometryLiteral> subjectGeometries,
 			Collection<SourceGeometryLiteral> objectGeometries) {
 		return relation.evaluate(subjectGeometries, objectGeometries);
-	}
-
-	private boolean relationHolds(Collection<SourceGeometryLiteral> subjectGeometries,
-			SourceGeometryLiteral objectGeometry) {
-		return relation.evaluate(subjectGeometries, objectGeometry);
-	}
-
-	private boolean relationHolds(SourceGeometryLiteral subjectGeometry,
-			Collection<SourceGeometryLiteral> objectGeometries) {
-		return relation.evaluate(subjectGeometry, objectGeometries);
 	}
 
 	private EntityGeometries geometriesForEntity(long entityId) {
