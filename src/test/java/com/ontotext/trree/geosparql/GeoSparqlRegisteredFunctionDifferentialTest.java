@@ -18,10 +18,11 @@ import static org.junit.Assert.assertEquals;
  * it has the same existential source-set semantics as the corresponding property relation.
  */
 public class GeoSparqlRegisteredFunctionDifferentialTest extends AbstractGeoSparqlPluginTest {
+	private static final String EXAMPLE_NAMESPACE = "http://example.com/registered-function-differential/";
 	private static final String PREFIXES = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
-			+ "PREFIX ex: <http://example.com/registered-function-differential/>\n";
+			+ "PREFIX ex: <" + EXAMPLE_NAMESPACE + ">\n";
 	private static final String UTM_32N = "http://www.opengis.net/def/crs/EPSG/0/32632";
 	private static final String UTM_33N = "http://www.opengis.net/def/crs/EPSG/0/32633";
 	private static final String UTM_32_POINT = "<" + UTM_32N + "> POINT(500000 5200000)";
@@ -80,7 +81,6 @@ public class GeoSparqlRegisteredFunctionDifferentialTest extends AbstractGeoSpar
 
 	private void assertDifferential(String relation, String bound, boolean boundSubject, String... candidates)
 			throws Exception {
-		String values = candidateValues(candidates);
 		String propertyPattern = boundSubject
 				? "  ex:" + bound + " geo:" + relation + " ?candidate .\n"
 				: "  ?candidate geo:" + relation + " ex:" + bound + " .\n";
@@ -89,12 +89,12 @@ public class GeoSparqlRegisteredFunctionDifferentialTest extends AbstractGeoSpar
 				: "?candidateWkt, ?boundWkt";
 		Set<Value> propertyResults = queryCandidates(""
 				+ "SELECT DISTINCT ?candidate WHERE {\n"
-				+ values
 				+ propertyPattern
 				+ "}");
+		propertyResults.retainAll(candidateIris(candidates));
 		Set<Value> functionResults = queryCandidates(""
 				+ "SELECT DISTINCT ?candidate WHERE {\n"
-				+ values
+				+ candidateValues(candidates)
 				+ "  ?candidate geo:hasDefaultGeometry/geo:asWKT ?candidateWkt .\n"
 				+ "  ex:" + bound + " geo:hasDefaultGeometry/geo:asWKT ?boundWkt .\n"
 				+ "  FILTER(geof:" + relation + "(" + functionArguments + "))\n"
@@ -106,6 +106,14 @@ public class GeoSparqlRegisteredFunctionDifferentialTest extends AbstractGeoSpar
 
 	private Set<Value> queryCandidates(String query) throws Exception {
 		return new LinkedHashSet<>(executeSparqlQueryWithResult(PREFIXES + query, "candidate"));
+	}
+
+	private static Set<Value> candidateIris(String[] candidates) {
+		Set<Value> iris = new LinkedHashSet<>();
+		for (String candidate : candidates) {
+			iris.add(VF.createIRI(EXAMPLE_NAMESPACE, candidate));
+		}
+		return iris;
 	}
 
 	private static String candidateValues(String[] candidates) {
