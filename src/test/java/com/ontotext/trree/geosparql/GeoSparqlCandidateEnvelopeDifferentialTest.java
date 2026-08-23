@@ -74,7 +74,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";
 	private static final String GDA2020_3D = "http://www.opengis.net/def/crs/EPSG/0/7843";
 	private static final String GDA94_3D = "http://www.opengis.net/def/crs/EPSG/0/4939";
-	private static final String NAD83_CSRS_3D = "http://www.opengis.net/def/crs/EPSG/0/4957";
+	private static final String NAD83_CSRS_3D = "http://www.opengis.net/def/crs/EPSG/0/4955";
 	private static final double GDA94_LAT = -27.47;
 	private static final double GDA94_LON = 153.03;
 	private static final double HEIGHT_DEPENDENT_SHIFT_DEGREES = 1e-12;
