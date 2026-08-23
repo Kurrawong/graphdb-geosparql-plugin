@@ -4,6 +4,7 @@ import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.IndexGeometryFixtures;
+import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import com.ontotext.trree.sdk.Entities;
@@ -48,6 +49,7 @@ import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -95,17 +97,16 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
-	public void indexBackedRelationsDoNotOmitExactMatchesAcrossFamiliesAndCrs() throws Exception {
+	public void indexBackedRelationsDoNotOmitExactMatchesOrSuppressUnevaluableEntitiesAcrossFamiliesAndCrs()
+			throws Exception {
 		Fixture fixture = createFixture("candidate-envelope-differential", representativeGeometries());
 
 		for (GeoSparqlPropertyRelation relation : GeoSparqlPropertyRelation.values()) {
 			for (long boundEntityId : fixture.sources.keySet()) {
-			assertTrue(relation + " object-bound entity " + boundEntityId + " omitted exact matches",
-					runIndexed(fixture, relation, 0, boundEntityId)
-							.containsAll(runReference(fixture, relation, 0, boundEntityId)));
-			assertTrue(relation + " subject-bound entity " + boundEntityId + " omitted exact matches",
-					runIndexed(fixture, relation, boundEntityId, 0)
-							.containsAll(runReference(fixture, relation, boundEntityId, 0)));
+				assertIndexedContainsReferenceOrPropagatesUnevaluableEntity(
+						fixture, relation, 0, boundEntityId);
+				assertIndexedContainsReferenceOrPropagatesUnevaluableEntity(
+						fixture, relation, boundEntityId, 0);
 			}
 		}
 	}
@@ -484,6 +485,36 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
+	public void allUnevaluableCandidatesPropagateAcrossEnvelopeAndTransformCleanupPhases() throws Exception {
+		IndexGeometry utm32 = geometries(
+				"<" + UTM_32N + "> POINT(-100000000 0)").get(0);
+		// The UTM point projects to the 99°E transform-domain edge. The nearby 3D point remains inside its widened
+		// candidate envelope, while exact evaluation cannot reduce either 3D point to UTM 32N.
+		IndexGeometry nearbyEpsg4979 = geometries(
+				"<" + WGS84_3D + "> POINT Z(0 99.0000001 55)").get(0);
+		IndexGeometry distantEpsg4979 = geometries(
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 55)").get(0);
+
+		assertThrows(JenaGeoSparqlException.class, () -> GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				utm32.sourceGeometryLiteral(), nearbyEpsg4979.sourceGeometryLiteral()));
+		assertThrows(JenaGeoSparqlException.class, () -> GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				utm32.sourceGeometryLiteral(), distantEpsg4979.sourceGeometryLiteral()));
+
+		Fixture envelopeFixture = createFixture("unevaluable-envelope-candidate",
+				Map.of(1L, List.of(utm32), 2L, List.of(nearbyEpsg4979)));
+		assertTrue(envelopeHits(envelopeFixture, nearbyEpsg4979).contains(1L));
+		assertThrows(JenaGeoSparqlException.class,
+				() -> runIndexed(envelopeFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+
+		Fixture cleanupFixture = createFixture("unevaluable-transform-cleanup-candidate",
+				Map.of(1L, List.of(utm32), 2L, List.of(distantEpsg4979)));
+		assertFalse(envelopeHits(cleanupFixture, distantEpsg4979).contains(1L));
+		assertTrue(transformCleanupHits(cleanupFixture, distantEpsg4979, true).contains(1L));
+		assertThrows(JenaGeoSparqlException.class,
+				() -> runIndexed(cleanupFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+	}
+
+	@Test
 	public void envelopeContainedNonMatchesAreNotExactDisjoint() throws Exception {
 		Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
 		sources.put(100L, geometries("POLYGON((0 0,0 10,10 10,10 0,0 0))"));
@@ -614,6 +645,44 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		}
 	}
 
+	private void assertIndexedContainsReferenceOrPropagatesUnevaluableEntity(
+			Fixture fixture, GeoSparqlPropertyRelation relation, long subject, long object) throws Exception {
+		String direction = subject == 0 ? "object-bound" : "subject-bound";
+		long boundEntityId = subject == 0 ? object : subject;
+		String message = relation + " " + direction + " entity " + boundEntityId;
+		try {
+			assertTrue(message + " omitted exact matches",
+					runIndexed(fixture, relation, subject, object)
+							.containsAll(runReference(fixture, relation, subject, object)));
+		} catch (JenaGeoSparqlException expected) {
+			assertTrue(message + " propagated without an all-unevaluable entity",
+					hasAllUnevaluableEntity(fixture, relation, subject, object));
+		}
+	}
+
+	private boolean hasAllUnevaluableEntity(
+			Fixture fixture, GeoSparqlPropertyRelation relation, long subject, long object) {
+		long boundEntityId = subject == 0 ? object : subject;
+		List<SourceGeometryLiteral> boundSources = fixture.sources.get(boundEntityId).stream()
+				.map(IndexGeometry::sourceGeometryLiteral)
+				.toList();
+		for (List<IndexGeometry> candidateGeometries : fixture.sources.values()) {
+			List<SourceGeometryLiteral> candidateSources = candidateGeometries.stream()
+					.map(IndexGeometry::sourceGeometryLiteral)
+					.toList();
+			try {
+				if (subject == 0) {
+					relation.evaluate(candidateSources, boundSources);
+				} else {
+					relation.evaluate(boundSources, candidateSources);
+				}
+			} catch (JenaGeoSparqlException expected) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private Set<Long> runReference(Fixture fixture, GeoSparqlPropertyRelation relation,
 			long subject, long object) throws Exception {
 		long boundEntityId = subject == 0 ? object : subject;
@@ -652,6 +721,17 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 
 	private static Set<Long> envelopeHits(Fixture fixture, IndexGeometry bound) throws Exception {
 		CloseableIterator<CandidateEntity> candidates = fixture.plugin.indexer.getEnvelopeIntersections(bound);
+		return candidateEntityIds(candidates);
+	}
+
+	private static Set<Long> transformCleanupHits(
+			Fixture fixture, IndexGeometry bound, boolean candidatesAreSubjects) throws Exception {
+		CloseableIterator<CandidateEntity> candidates = fixture.plugin.indexer
+				.getTransformCleanupCandidates(bound, candidatesAreSubjects);
+		return candidateEntityIds(candidates);
+	}
+
+	private static Set<Long> candidateEntityIds(CloseableIterator<CandidateEntity> candidates) throws Exception {
 		try {
 			Set<Long> entityIds = new LinkedHashSet<>();
 			while (candidates.hasNext()) {

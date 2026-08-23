@@ -1,7 +1,6 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
-import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.Entities;
@@ -98,30 +97,22 @@ class GeoSparqlRelationIterator extends StatementIterator {
 					candidateLookup.boundSourceGeometryLiteral().isEmpty()
 							? candidate.matchingSourceGeometryLiterals()
 							: geometriesForEntity(candidateEntityId).sourceGeometryLiterals();
-			try {
-				if (boundSubject == 0) {
-					boolean holds = relationHolds(candidateSourceGeometryLiterals,
-							boundObjectGeometries().sourceGeometryLiterals());
-					if (holds
-							&& emittedCandidateEntityIds.add(candidateEntityId)) {
-						setCurrentMatch(candidateEntityId);
-						return true;
-					}
-				} else {
-					boolean holds = relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
-							candidateSourceGeometryLiterals);
-					if (holds
-							&& emittedCandidateEntityIds.add(candidateEntityId)) {
-						setCurrentMatch(candidateEntityId);
-						return true;
-					}
+			if (boundSubject == 0) {
+				boolean holds = relationHolds(candidateSourceGeometryLiterals,
+						boundObjectGeometries().sourceGeometryLiterals());
+				if (holds
+						&& emittedCandidateEntityIds.add(candidateEntityId)) {
+					setCurrentMatch(candidateEntityId);
+					return true;
 				}
-			} catch (JenaGeoSparqlException e) {
-				if (!candidateLookup.unevaluableCandidateIsNonMatch()) {
-					throw e;
+			} else {
+				boolean holds = relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
+						candidateSourceGeometryLiterals);
+				if (holds
+						&& emittedCandidateEntityIds.add(candidateEntityId)) {
+					setCurrentMatch(candidateEntityId);
+					return true;
 				}
-				logger.debug("Skipping unevaluable GeoSPARQL candidate entity {} during conservative full scan.",
-						candidateEntityId, e);
 			}
 		}
 

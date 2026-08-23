@@ -53,7 +53,6 @@ public class RelationCandidateTraversalTest {
 		assertEquals(RelationCandidateTraversal.MatchCertainty.REQUIRES_EXACT_EVALUATION,
 				uncertain.matchCertainty());
 		assertSame(bound.sourceGeometryLiteral(), uncertain.boundSourceGeometryLiteral().orElseThrow());
-		assertFalse(uncertain.unevaluableCandidateIsNonMatch());
 
 		RelationCandidateTraversal.Candidate sentinel = traversal.next();
 		assertEquals(3L, sentinel.entityId());
@@ -123,7 +122,7 @@ public class RelationCandidateTraversalTest {
 	}
 
 	@Test
-	public void objectBoundTransformCleanupCandidatesRetainBoundSourceAndTolerateUnevaluablePairs() {
+	public void objectBoundTransformCleanupCandidatesRetainBoundSourceForExactEvaluation() {
 		IndexGeometry bound = geometry("POINT(0 0)");
 		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
 		indexer.transformCleanupCandidates = List.of(candidate(1L,
@@ -135,7 +134,6 @@ public class RelationCandidateTraversalTest {
 
 		assertEquals(1L, candidate.entityId());
 		assertSame(bound.sourceGeometryLiteral(), candidate.boundSourceGeometryLiteral().orElseThrow());
-		assertTrue(candidate.unevaluableCandidateIsNonMatch());
 		assertFalse(traversal.hasNext());
 	}
 
@@ -153,7 +151,6 @@ public class RelationCandidateTraversalTest {
 		assertEquals(RelationCandidateTraversal.MatchCertainty.REQUIRES_EXACT_EVALUATION,
 				candidate.matchCertainty());
 		assertSame(bound.sourceGeometryLiteral(), candidate.boundSourceGeometryLiteral().orElseThrow());
-		assertTrue(candidate.unevaluableCandidateIsNonMatch());
 		assertFalse(traversal.hasNext());
 		assertEquals(0, indexer.fullScanLookupCount);
 		assertEquals(List.of(bound.sourceGeometryLiteral()), indexer.envelopeDisjointLookupSources);

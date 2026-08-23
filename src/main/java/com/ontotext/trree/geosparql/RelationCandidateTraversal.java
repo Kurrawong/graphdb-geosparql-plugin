@@ -15,8 +15,9 @@ import java.util.Optional;
  *
  * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation. Full-scan traversal returns
  * complete candidate source sets. Mixed-CRS pairs whose cleanup target cannot be safely modeled by CRS84 envelopes
- * are retained separately for exact evaluation; same-CRS pairs remain on the selective envelope path. Under the
- * candidate-envelope containment contract, partitioned disjoint traversal
+ * are retained separately for exact evaluation; same-CRS pairs remain on the selective envelope path. Transform
+ * cleanup changes how an entity is retained for exact evaluation; it does not change entity-level exact-evaluation
+ * semantics. Under the candidate-envelope containment contract, partitioned disjoint traversal
  * first returns source documents whose envelopes prove a match, then exact-evaluates uncertain envelope intersections
  * after removing eligible envelope-contained definite non-matches, and finally evaluates non-spatial empty sentinels.
  *
@@ -153,7 +154,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			currentExactCandidates = indexer.getAllEntities();
 		}
 		if (currentExactCandidates.hasNext()) {
-			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next(), false);
+			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next());
 		}
 		finishTraversal();
 		return null;
@@ -216,7 +217,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		while (true) {
 			if (currentExactCandidates != null && currentExactCandidates.hasNext()) {
 				return Candidate.exactForBoundSource(currentExactCandidates.next(),
-						currentBoundIndexGeometry.sourceGeometryLiteral(), true);
+						currentBoundIndexGeometry.sourceGeometryLiteral());
 			}
 			closeActiveIterator();
 			if (openNextTransformCleanupCandidates()) {
@@ -257,7 +258,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			 * Empty sentinels have no spatial field, so they cannot participate in either envelope partition.
 			 * Exact evaluation against the complete non-empty bound set preserves empty-geometry semantics.
 			 */
-			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next(), false);
+			return Candidate.exactAgainstCompleteBoundSet(currentExactCandidates.next());
 		}
 		finishTraversal();
 		return null;
@@ -335,46 +336,38 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		private final MatchCertainty matchCertainty;
 		private final CandidateEntity candidateEntity;
 		private final SourceGeometryLiteral boundSourceGeometryLiteral;
-		private final boolean unevaluableCandidateIsNonMatch;
 
 		private Candidate(long entityId, MatchCertainty matchCertainty, CandidateEntity candidateEntity,
-				SourceGeometryLiteral boundSourceGeometryLiteral, boolean unevaluableCandidateIsNonMatch) {
+				SourceGeometryLiteral boundSourceGeometryLiteral) {
 			this.entityId = entityId;
 			this.matchCertainty = matchCertainty;
 			this.candidateEntity = candidateEntity;
 			this.boundSourceGeometryLiteral = boundSourceGeometryLiteral;
-			this.unevaluableCandidateIsNonMatch = unevaluableCandidateIsNonMatch;
 		}
 
 		private static Candidate definiteMatch(long entityId) {
-			return new Candidate(entityId, MatchCertainty.DEFINITE_MATCH, null, null, false);
+			return new Candidate(entityId, MatchCertainty.DEFINITE_MATCH, null, null);
 		}
 
-		private static Candidate exactAgainstCompleteBoundSet(
-				CandidateEntity candidateEntity, boolean unevaluableCandidateIsNonMatch) {
-			return exactCandidate(candidateEntity, null, unevaluableCandidateIsNonMatch);
+		private static Candidate exactAgainstCompleteBoundSet(CandidateEntity candidateEntity) {
+			return exactCandidate(candidateEntity, null);
 		}
 
 		private static Candidate exactForBoundSource(CandidateEntity candidateEntity,
 				SourceGeometryLiteral boundSourceGeometryLiteral) {
-			return exactForBoundSource(candidateEntity, boundSourceGeometryLiteral, false);
-		}
-
-		private static Candidate exactForBoundSource(CandidateEntity candidateEntity,
-				SourceGeometryLiteral boundSourceGeometryLiteral, boolean unevaluableCandidateIsNonMatch) {
 			if (boundSourceGeometryLiteral == null) {
 				throw new IllegalArgumentException("Exact source-pair candidate requires a bound source.");
 			}
-			return exactCandidate(candidateEntity, boundSourceGeometryLiteral, unevaluableCandidateIsNonMatch);
+			return exactCandidate(candidateEntity, boundSourceGeometryLiteral);
 		}
 
 		private static Candidate exactCandidate(CandidateEntity candidateEntity,
-				SourceGeometryLiteral boundSourceGeometryLiteral, boolean unevaluableCandidateIsNonMatch) {
+				SourceGeometryLiteral boundSourceGeometryLiteral) {
 			if (candidateEntity == null) {
 				throw new IllegalArgumentException("Exact relation candidate requires candidate source geometry.");
 			}
 			return new Candidate(candidateEntity.entityId(), MatchCertainty.REQUIRES_EXACT_EVALUATION,
-					candidateEntity, boundSourceGeometryLiteral, unevaluableCandidateIsNonMatch);
+					candidateEntity, boundSourceGeometryLiteral);
 		}
 
 		long entityId() {
@@ -394,10 +387,6 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 
 		Optional<SourceGeometryLiteral> boundSourceGeometryLiteral() {
 			return Optional.ofNullable(boundSourceGeometryLiteral);
-		}
-
-		boolean unevaluableCandidateIsNonMatch() {
-			return unevaluableCandidateIsNonMatch;
 		}
 	}
 }
