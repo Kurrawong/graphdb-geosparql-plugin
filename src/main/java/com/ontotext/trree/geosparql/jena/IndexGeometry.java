@@ -17,12 +17,12 @@ import java.util.Optional;
  *
  * <p>Native CRS84 sources use their source envelope. Non-CRS84 sources use Apache SIS
  * {@code Envelopes.transform(CoordinateOperation, Envelope)} on the source bounding box, not the weaker
- * {@code MathTransform} overload. Sources with a three-dimensional CRS retain their vertical range through the datum
- * operation before reduction to CRS84; other sources use their horizontal CRS. The resulting envelope is used only
- * for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its native CRS. SIS does not
- * prove that transform is never smaller than the complete CRS84 image. Transformed bounds are widened for the
- * pinned Jena post-transform decimal cleanup when CRS84 is the exact-evaluation target. Other target CRSes use an
- * exact evaluation fallback because Jena rounds in the left operand's CRS. Wraparound may broaden that envelope,
+ * {@code MathTransform} overload. Sources with a three-dimensional CRS retain their vertical range in a direct
+ * source-to-CRS84 operation; other sources use their horizontal CRS. The resulting envelope is used only for Lucene
+ * candidate lookup. Exact evaluation uses the source geometry literal and its native CRS. SIS does not prove that
+ * transform is never smaller than the complete CRS84 image. Transformed bounds are widened for the pinned Jena
+ * post-transform decimal cleanup when CRS84 is the exact-evaluation target. Other target CRSes use an exact
+ * evaluation fallback because Jena rounds in the left operand's CRS. Wraparound may broaden that envelope,
  * potentially to full longitude. A representable SIS rectangle is indexed as-is, including ordinary non-CRS84
  * sources such as GDA2020 and projected MGA2020 CRSes. Non-CRS84 geometries are not mapped to the world envelope. The
  * world CRS84 envelope is used only when the result still cannot be stored as one Lucene geographic rectangle, or

@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.sis.geometry.DirectPosition2D;
+import org.apache.sis.geometry.Envelopes;
 import org.apache.sis.geometry.GeneralEnvelope;
 import org.apache.sis.referencing.CRS;
 import org.junit.Before;
@@ -14,6 +15,8 @@ import org.locationtech.spatial4j.context.SpatialContext;
 import org.opengis.geometry.DirectPosition;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.operation.CoordinateOperation;
+
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -27,6 +30,10 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String EPSG_32601 = "http://www.opengis.net/def/crs/EPSG/0/32601";
 	private static final String EPSG_4326 = "http://www.opengis.net/def/crs/EPSG/0/4326";
+	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";
+	private static final String GDA2020_3D = "http://www.opengis.net/def/crs/EPSG/0/7843";
+	private static final String GDA94_3D = "http://www.opengis.net/def/crs/EPSG/0/4939";
+	private static final String NAD83_CSRS_3D = "http://www.opengis.net/def/crs/EPSG/0/4955";
 	private static final String PROJECTED_LINE_WKT =
 			"<" + EPSG_32634 + "> LINESTRING(200000 7000000, 800000 7000000)";
 	private static final String PROJECTED_POINT_WKT =
@@ -92,6 +99,30 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 		assertFalse(worldEnvelope().equals(point.indexEnvelope()));
 		assertTrue(point.indexEnvelope().getWidth() < 1.0);
 		assertTrue(point.indexEnvelope().getHeight() < 1.0);
+	}
+
+	@Test
+	public void threeDimensionalSourcesUseTheDirectSourceToCrs84Operation() throws Exception {
+		for (String wkt : List.of(
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 3000)",
+				"<" + GDA2020_3D + "> POINT Z(-27.47 153.03 3000)",
+				"<" + GDA94_3D + "> POINT Z(-27.47 153.03 3000)",
+				"<" + NAD83_CSRS_3D + "> POINT Z(49.25 -123.1 10000)")) {
+			SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(wkt);
+			GeometryWrapper sourceWrapper = source.asGeometryWrapper();
+			CoordinateReferenceSystem sourceCrs = sourceWrapper.getCRS();
+			Coordinate coordinate = sourceWrapper.getParsingGeometry().getCoordinate();
+			GeneralEnvelope sourceEnvelope = new GeneralEnvelope(sourceCrs);
+			sourceEnvelope.setRange(0, coordinate.x, coordinate.x);
+			sourceEnvelope.setRange(1, coordinate.y, coordinate.y);
+			sourceEnvelope.setRange(2, coordinate.getZ(), coordinate.getZ());
+			CoordinateOperation direct = CRS.findOperation(
+					sourceCrs, SRSRegistry.getCRS(IndexGeometry.INDEX_CRS), null);
+			Envelope expected = ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(
+					Envelopes.transform(direct, sourceEnvelope));
+
+			assertEquals(wkt + "\ndirect operation: " + direct.getName(), expected, PROJECTOR.project(source));
+		}
 	}
 
 	@Test

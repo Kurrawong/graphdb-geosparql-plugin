@@ -20,9 +20,9 @@ import org.opengis.util.FactoryException;
  *
  * <p>Native CRS84 sources use their source envelope. Empty sources yield a null envelope. Other non-empty sources
  * transform the source-CRS bounding box with Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}.
- * Sources with a three-dimensional CRS retain their vertical range through a full operation to WGS 84 3D before
- * reduction to CRS84. Other sources use an operation on their two-dimensional horizontal CRS. The result is used
- * only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its native CRS.
+ * Sources with a three-dimensional CRS retain their vertical range in a direct source-to-CRS84 operation. Other
+ * sources use an operation on their two-dimensional horizontal CRS. The result is used only for Lucene candidate
+ * lookup. Exact evaluation uses the source geometry literal and its native CRS.
  *
  * <p>The plugin uses the SIS
  * <a href="https://sis.apache.org/apidocs/org.apache.sis.referencing/org/apache/sis/geometry/Envelopes.html">
@@ -56,9 +56,7 @@ import org.opengis.util.FactoryException;
  * into CRS84 remains covered. This widening is distinct from the SIS envelope approximation. When exact evaluation
  * would instead round in another CRS, relation traversal retains the pair through exact evaluation rather than
  * treating CRS84 bounds as an exclusion or disjoint proof. When the exact target is CRS84 and the right operand has a
- * three-dimensional CRS, exact evaluation uses a direct source-to-CRS84 operation while this projector uses the
- * source-to-EPSG:4979-to-CRS84 path. The conservative-envelope engineering assumption applies across that operation-
- * path difference.
+ * three-dimensional CRS, exact evaluation and candidate projection select the same direct source-to-CRS84 operation.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
@@ -74,7 +72,6 @@ import org.opengis.util.FactoryException;
  * geometry.
  */
 final class ConservativeCrs84EnvelopeProjector {
-	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";
 	static final String FALLBACK_MISSING_HORIZONTAL_CRS = "missing-horizontal-crs";
 	static final String FALLBACK_TRANSFORM_FAILURE = "transform-failure";
 	static final String FALLBACK_UNREPRESENTABLE_RECTANGLE = "unrepresentable-rectangle";
@@ -119,13 +116,10 @@ final class ConservativeCrs84EnvelopeProjector {
 	private static ProjectedCandidateBounds transformThreeDimensionalSourceBounds(
 			GeometryWrapper sourceWrapper, CoordinateReferenceSystem sourceCrs)
 			throws FactoryException, TransformException {
-		CoordinateReferenceSystem target3d = SRSRegistry.getCRS(WGS84_3D);
-		GeneralEnvelope sourceEnvelope = createThreeDimensionalSourceEnvelope(sourceWrapper, sourceCrs);
-		CoordinateOperation full3dOperation = CRS.findOperation(sourceCrs, target3d, null);
-		org.opengis.geometry.Envelope target3dEnvelope = Envelopes.transform(full3dOperation, sourceEnvelope);
 		CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
-		CoordinateOperation reductionToCrs84 = CRS.findOperation(target3d, targetCrs, null);
-		return toLuceneGeoBounds(Envelopes.transform(reductionToCrs84, target3dEnvelope));
+		GeneralEnvelope sourceEnvelope = createThreeDimensionalSourceEnvelope(sourceWrapper, sourceCrs);
+		CoordinateOperation operation = CRS.findOperation(sourceCrs, targetCrs, null);
+		return toLuceneGeoBounds(Envelopes.transform(operation, sourceEnvelope));
 	}
 
 	private static ProjectedCandidateBounds transformHorizontalSourceBounds(

@@ -14,7 +14,9 @@ import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.sis.geometry.DirectPosition2D;
+import org.apache.sis.geometry.Envelopes;
 import org.apache.sis.geometry.GeneralDirectPosition;
+import org.apache.sis.geometry.GeneralEnvelope;
 import org.apache.sis.referencing.CRS;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Value;
@@ -56,10 +58,10 @@ import static org.junit.Assert.fail;
  * family. That is the contract the selective SIS candidate envelope must satisfy. Disjoint envelope proofs are also
  * checked against exact evaluation. Direct-operation cases construct the exact target from the precision-cleaned
  * geometry produced by Jena's source-to-target transformation, independently of candidate envelope projection.
- * Three-dimensional cases compare Jena's direct source-to-CRS84 operation with the index's source-to-EPSG:4979-to-
- * CRS84 path. These differential cases provide regression evidence for the envelope assumption, not a mathematical
- * proof. A GDA94 3D to GDA2020 3D datum pair additionally checks that dropping ellipsoidal height in a horizontal-only
- * operation does not omit an exact-true match when the full 3D operation moves the coordinates.
+ * Three-dimensional candidate envelopes and exact evaluation both use a direct source-to-CRS84 operation. These
+ * differential cases provide regression evidence for the envelope assumption, not a mathematical proof. A GDA94 3D
+ * to GDA2020 3D datum pair additionally checks that dropping ellipsoidal height in a horizontal-only operation does
+ * not omit an exact-true match when the full 3D operation moves the coordinates.
  */
 public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	private static final long PREDICATE = 200L;
@@ -160,33 +162,23 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
-	public void directJenaThreeDimensionalToCrs84TransformsRemainIndexCandidates() throws Exception {
-		List<DirectOperationComparison> comparisons = List.of(
-				directOperationComparison("wgs84-3d", IndexGeometry.INDEX_CRS, WGS84_3D,
-						"POINT Z(-27.47 153.03 3000)", false),
-				directOperationComparison("gda2020-3d", IndexGeometry.INDEX_CRS, GDA2020_3D,
-						"POINT Z(-27.47 153.03 3000)", false),
-				directOperationComparison("gda94-3d", IndexGeometry.INDEX_CRS, GDA94_3D,
-						"POINT Z(-27.47 153.03 3000)", false),
-				directOperationComparison("nad83-csrs-3d", IndexGeometry.INDEX_CRS, NAD83_CSRS_3D,
-						"POINT Z(49.25 -123.1 10000)", false));
-
-		for (DirectOperationComparison comparison : comparisons) {
-			ThreeDimensionalCandidatePath candidatePath = threeDimensionalCandidatePath(comparison);
+	public void threeDimensionalSourceToCrs84CandidateBoundsCoverTheDirectOperation() throws Exception {
+		for (DirectOperationComparison comparison : threeDimensionalDirectOperationComparisons()) {
 			assertEquals(comparison.dump(), 3,
 					comparison.directOperation.getMathTransform().getSourceDimensions());
 			assertEquals(comparison.dump(), 2,
 					comparison.directOperation.getMathTransform().getTargetDimensions());
-			assertEquals(candidatePath.dump(comparison), 3,
-					candidatePath.toWgs84_3d.getMathTransform().getTargetDimensions());
-			assertEquals(candidatePath.dump(comparison), 3,
-					candidatePath.toCrs84.getMathTransform().getSourceDimensions());
-			assertEquals(candidatePath.dump(comparison), 2,
-					candidatePath.toCrs84.getMathTransform().getTargetDimensions());
 			assertDirectCoincidentRelations(comparison);
+			assertDirectOperationEnvelopeAndJenaGeometryAreCovered(comparison);
+		}
+	}
 
+	@Test
+	public void crs84SubjectAndThreeDimensionalObjectRemainCorrectThroughLucene() throws Exception {
+		for (DirectOperationComparison comparison : threeDimensionalDirectOperationComparisons()) {
 			for (IndexSettings setting : maximumPrecisionIndexSettings()) {
-				assertDirectOperationPairThroughIndex(comparison, setting, candidatePath.dump(comparison));
+				assertDirectOperationPairThroughIndex(comparison, setting,
+						"CRS84 subject / 3D object\n" + comparison.dump());
 			}
 		}
 	}
@@ -704,6 +696,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		SourceGeometryLiteral target = SourceGeometryLiteral.fromWkt(
 				"<" + targetCrsUri + "> " + directParsingGeometry.toText());
 		CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(targetCrsUri);
+		CoordinateOperation directOperation = CRS.findOperation(sourceWrapper.getCRS(), targetCrs, null);
 		return new DirectOperationComparison(
 				name,
 				sourceCrsUri,
@@ -713,17 +706,39 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 				jenaDirect.getXYGeometry(),
 				IndexGeometry.fromSourceGeometryLiteral(source),
 				IndexGeometry.fromSourceGeometryLiteral(target),
-				CRS.findOperation(sourceWrapper.getCRS(), targetCrs, null),
+				directOperation,
+				Envelopes.transform(directOperation, sourceEnvelope(sourceWrapper)),
 				reverseIntersects);
 	}
 
-	private ThreeDimensionalCandidatePath threeDimensionalCandidatePath(DirectOperationComparison comparison)
-			throws Exception {
-		CoordinateReferenceSystem sourceCrs = comparison.sourceLiteral.asGeometryWrapper().getCRS();
-		CoordinateReferenceSystem wgs84_3d = SRSRegistry.getCRS(WGS84_3D);
-		return new ThreeDimensionalCandidatePath(
-				CRS.findOperation(sourceCrs, wgs84_3d, null),
-				CRS.findOperation(wgs84_3d, SRSRegistry.getCRS(IndexGeometry.INDEX_CRS), null));
+	private List<DirectOperationComparison> threeDimensionalDirectOperationComparisons() throws Exception {
+		return List.of(
+				directOperationComparison("wgs84-3d", IndexGeometry.INDEX_CRS, WGS84_3D,
+						"POINT Z(-27.47 153.03 3000)", false),
+				directOperationComparison("gda2020-3d", IndexGeometry.INDEX_CRS, GDA2020_3D,
+						"POINT Z(-27.47 153.03 3000)", false),
+				directOperationComparison("gda94-3d", IndexGeometry.INDEX_CRS, GDA94_3D,
+						"POINT Z(-27.47 153.03 3000)", false),
+				directOperationComparison("nad83-csrs-3d", IndexGeometry.INDEX_CRS, NAD83_CSRS_3D,
+						"POINT Z(49.25 -123.1 10000)", false));
+	}
+
+	private static GeneralEnvelope sourceEnvelope(GeometryWrapper sourceWrapper) {
+		CoordinateReferenceSystem sourceCrs = sourceWrapper.getCRS();
+		Envelope sourceBounds = sourceWrapper.getParsingGeometry().getEnvelopeInternal();
+		GeneralEnvelope sourceEnvelope = new GeneralEnvelope(sourceCrs);
+		sourceEnvelope.setRange(0, sourceBounds.getMinX(), sourceBounds.getMaxX());
+		sourceEnvelope.setRange(1, sourceBounds.getMinY(), sourceBounds.getMaxY());
+		if (sourceCrs.getCoordinateSystem().getDimension() == 3) {
+			double minZ = Double.POSITIVE_INFINITY;
+			double maxZ = Double.NEGATIVE_INFINITY;
+			for (Coordinate coordinate : sourceWrapper.getParsingGeometry().getCoordinates()) {
+				minZ = Math.min(minZ, coordinate.getZ());
+				maxZ = Math.max(maxZ, coordinate.getZ());
+			}
+			sourceEnvelope.setRange(2, minZ, maxZ);
+		}
+		return sourceEnvelope;
 	}
 
 	private void assertDirectCoincidentRelations(DirectOperationComparison comparison) {
@@ -733,6 +748,19 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		}
 		assertEquals(comparison.dump(), CandidateBoundsKind.TRANSFORMED,
 				comparison.sourceIndex.candidateBoundsKind());
+	}
+
+	private void assertDirectOperationEnvelopeAndJenaGeometryAreCovered(
+			DirectOperationComparison comparison) {
+		Envelope candidate = comparison.sourceIndex.indexEnvelope();
+		org.opengis.geometry.Envelope directEnvelope = comparison.directEnvelope;
+		assertTrue(comparison.dump(), candidate.contains(
+				directEnvelope.getMinimum(0), directEnvelope.getMinimum(1)));
+		assertTrue(comparison.dump(), candidate.contains(
+				directEnvelope.getMaximum(0), directEnvelope.getMaximum(1)));
+		for (Coordinate coordinate : comparison.directTransformedGeometry.getCoordinates()) {
+			assertTrue(comparison.dump(), candidate.contains(coordinate.x, coordinate.y));
+		}
 	}
 
 	private void assertExactCoincidentDirection(DirectOperationComparison comparison,
@@ -806,6 +834,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 			IndexGeometry sourceIndex,
 			IndexGeometry targetIndex,
 			CoordinateOperation directOperation,
+			org.opengis.geometry.Envelope directEnvelope,
 			boolean reverseIntersects) {
 
 		boolean isAreaPair() {
@@ -829,24 +858,14 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 					exact target CRS:            %s
 					Jena direct operation:       %s
 					Jena direct geometry:        %s
+					direct operation envelope:   %s
 					source candidate envelope:   %s (%s)
 					target candidate envelope:   %s (%s)
 					""".formatted(sourceCrsUri, targetCrsUri,
 					directOperation.getName(),
-					directTransformedGeometry, sourceIndex.indexEnvelope(), sourceIndex.candidateBoundsKind(),
+					directTransformedGeometry, directEnvelope,
+					sourceIndex.indexEnvelope(), sourceIndex.candidateBoundsKind(),
 					targetIndex.indexEnvelope(), targetIndex.candidateBoundsKind());
-		}
-	}
-
-	private record ThreeDimensionalCandidatePath(
-			CoordinateOperation toWgs84_3d,
-			CoordinateOperation toCrs84) {
-
-		String dump(DirectOperationComparison comparison) {
-			return comparison.dump() + """
-					candidate source→EPSG:4979: %s
-					candidate EPSG:4979→CRS84:  %s
-					""".formatted(toWgs84_3d.getName(), toCrs84.getName());
 		}
 	}
 
