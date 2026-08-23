@@ -15,6 +15,21 @@ This guide explains how to provide and test those CRS data files.
 - Missing CRS definitions or grid-shift files are a configuration problem. They are not permission to reinterpret coordinates as CRS84 or WGS84.
 - A CRS that Apache SIS cannot parse, resolve, or transform fails by default. Missing EPSG or grid data can also reduce transformation accuracy without causing an error, so projected CRSes must be checked with known points.
 
+## Mixed-CRS Candidate Lookup Cost
+
+Mixed-CRS GeoSPARQL property-relation queries may lose spatial selectivity when the unbound candidate is the relation
+subject and exact evaluation transforms the bound object into the candidate's non-CRS84 CRS. To preserve the
+no-false-negative invariant, candidate lookup retains all spatial sources in relevant different CRSes for exact
+evaluation instead of pruning them with independently derived CRS84 envelopes. This transform-cleanup phase is a
+deliberate correctness fallback, not a missing spatial constraint. On a large mixed-CRS dataset it can approach an
+O(N) scan, including reconstruction of source geometry literal snapshots for the retained Lucene documents.
+
+Same-CRS property-relation queries remain on the selective envelope path. Mixed-CRS queries can also remain selective
+when exact evaluation targets CRS84 because transformed candidate envelopes include Jena's pinned CRS84 cleanup
+displacement. Symmetric relations may therefore have substantially different execution costs depending on operand
+order: a CRS84-bound subject can remain geographically selective while the equivalent CRS84-bound object may invoke
+the broad different-CRS cleanup fallback.
+
 ## Default Behavior Without CRS Configuration
 
 The plugin is intended to work out of the box for CRS84 GeoSPARQL data.

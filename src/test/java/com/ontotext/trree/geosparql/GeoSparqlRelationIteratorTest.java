@@ -211,6 +211,34 @@ public class GeoSparqlRelationIteratorTest {
 	}
 
 	@Test
+	public void candidateMaterializedByEnvelopeAndCleanupIsEvaluatedExactlyOnce() {
+		IndexGeometry boundPolygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
+		IndexGeometry candidatePoint = indexGeometry("POINT(1 1)");
+
+		FakeEntities entities = new FakeEntities();
+		entities.add(SUBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/point"));
+		entities.add(OBJECT, SimpleValueFactory.getInstance().createIRI("http://example.com/polygon"));
+
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlRelationIteratorTest.class));
+		ScriptedGeoSparqlIndexer indexer = new ScriptedGeoSparqlIndexer(
+				singletonList(boundPolygon), singletonList(candidatePoint), List.of());
+		indexer.transformCleanupCandidateGeometries = singletonList(candidatePoint);
+		plugin.indexer = indexer;
+
+		GeoSparqlRelationIterator iterator = new GeoSparqlRelationIterator(plugin,
+				GeoSparqlPropertyRelation.SF_INTERSECTS, 0, PREDICATE, OBJECT, entities);
+		try {
+			assertTrue(iterator.next());
+			assertFalse(iterator.next());
+			assertEquals(1, indexer.transformCleanupLookupCount);
+			assertEquals(1, indexer.candidateSourceLookupCount);
+		} finally {
+			iterator.close();
+		}
+	}
+
+	@Test
 	public void boundEmptySourceUsesOneFullScanForDisjointRelation() throws Exception {
 		IndexGeometry polygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
 		IndexGeometry emptyCollection = emptyCollection();
@@ -364,10 +392,13 @@ public class GeoSparqlRelationIteratorTest {
 		private final List<IndexGeometry> firstCandidateGeometries;
 		private final List<IndexGeometry> secondCandidateGeometries;
 		private final CloseableIterator<CandidateEntity> allCandidates;
+		private List<IndexGeometry> transformCleanupCandidateGeometries = List.of();
 		private CloseableIterator<CandidateEntity> nonSpatialCandidates = emptyIterator();
 		private CloseableIterator<EnvelopeDisjointCandidate> definiteCandidates = emptyIterator();
 		private final long candidateEntityId;
 		private int envelopeLookupCount;
+		private int transformCleanupLookupCount;
+		private int candidateSourceLookupCount;
 		private int nonSpatialLookupCount;
 		private int allEntitiesLookupCount;
 
@@ -442,17 +473,23 @@ public class GeoSparqlRelationIteratorTest {
 		@Override
 		public CloseableIterator<CandidateEntity> getTransformCleanupCandidates(
 				IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
-			return emptyIterator();
+			transformCleanupLookupCount++;
+			return transformCleanupCandidateGeometries.isEmpty()
+					? emptyIterator() : candidateIterator(candidateEntityId, transformCleanupCandidateGeometries);
 		}
 
 		@Override
 		public CloseableIterator<SourceGeometryLiteral> getSourceGeometryLiteralsFor(long subject) {
 			if (subject == candidateEntityId) {
+				candidateSourceLookupCount++;
 				LinkedHashSet<SourceGeometryLiteral> sources = new LinkedHashSet<>();
 				for (IndexGeometry geometry : firstCandidateGeometries) {
 					sources.add(geometry.sourceGeometryLiteral());
 				}
 				for (IndexGeometry geometry : secondCandidateGeometries) {
+					sources.add(geometry.sourceGeometryLiteral());
+				}
+				for (IndexGeometry geometry : transformCleanupCandidateGeometries) {
 					sources.add(geometry.sourceGeometryLiteral());
 				}
 				return iterator(new ArrayList<>(sources));

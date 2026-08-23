@@ -13,18 +13,21 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * A local GDA2020 or MGA2020 query over Australia-wide features must retrieve a geographically
- * selective candidate subset, not the whole dataset.
+ * Local queries over Australia-wide features demonstrate the selectivity of ordinary and mixed-CRS candidate
+ * traversal.
  *
  * <p>This is the counterpart to the coverage and differential invariants: selective SIS envelopes must remain
- * selective for ordinary projected Australian data.
+ * selective for ordinary projected Australian data. Mixed-CRS traversal also distinguishes the selective envelope
+ * phase from the broad transform-cleanup phase required when exact evaluation targets the candidate's non-CRS84 CRS.
  */
 public class GeoSparqlCandidateSelectivityTest {
 	private static final String GDA2020 = "http://www.opengis.net/def/crs/EPSG/0/7844";
@@ -45,7 +48,8 @@ public class GeoSparqlCandidateSelectivityTest {
 	}
 
 	@Test
-	public void localBrisbaneQueryDoesNotRetrieveTheAustralianDataset() throws Exception {
+	public void sameCrsAndCrs84TargetQueriesStaySelectiveWhileNonCrs84TargetCleanupRetainsAllCandidates()
+			throws Exception {
 		Path dataDir = tmpFolder.getRoot().toPath().resolve("gda2020-selectivity");
 		Files.createDirectories(dataDir);
 
@@ -90,6 +94,45 @@ public class GeoSparqlCandidateSelectivityTest {
 		assertRelationTraversalIsSelective(indexer, brisbane, true, indexed);
 		assertRelationTraversalIsSelective(indexer, brisbane, false, indexed);
 
+		IndexGeometry crs84Brisbane = geometry(
+				"POLYGON((152.9 -27.6,152.9 -27.3,153.2 -27.3,153.2 -27.6,152.9 -27.6))");
+		assertEquals(CandidateBoundsKind.NATIVE_CRS84, crs84Brisbane.candidateBoundsKind());
+
+		int boundSubjectEnvelopeCandidates = countEntities(
+				indexer.getEnvelopeIntersections(crs84Brisbane, false));
+		int boundSubjectCleanupCandidates = countEntities(
+				indexer.getTransformCleanupCandidates(crs84Brisbane, false));
+		TraversalCounts boundSubjectCounts = countRelationTraversal(indexer, crs84Brisbane, true);
+		assertTrue("CRS84-bound subject envelope phase materialized "
+					+ boundSubjectEnvelopeCandidates + " of " + indexed + " features",
+				boundSubjectEnvelopeCandidates > 0 && boundSubjectEnvelopeCandidates < indexed / 10);
+		assertEquals("CRS84-target exact evaluation must not require transform-cleanup candidates",
+				0, boundSubjectCleanupCandidates);
+		assertEquals(boundSubjectEnvelopeCandidates,
+				boundSubjectCounts.traversalCandidatesMaterialized());
+		assertEquals(boundSubjectCounts.traversalCandidatesMaterialized(),
+				boundSubjectCounts.sourceGeometryLiteralsMaterialized());
+		assertEquals(boundSubjectCounts.traversalCandidatesMaterialized(),
+				boundSubjectCounts.distinctCandidateEntities());
+
+		int boundObjectEnvelopeCandidates = countEntities(
+				indexer.getEnvelopeIntersections(crs84Brisbane, true));
+		int boundObjectCleanupCandidates = countEntities(
+				indexer.getTransformCleanupCandidates(crs84Brisbane, true));
+		TraversalCounts boundObjectCounts = countRelationTraversal(indexer, crs84Brisbane, false);
+		assertTrue("CRS84-bound object envelope phase materialized "
+					+ boundObjectEnvelopeCandidates + " of " + indexed + " features",
+				boundObjectEnvelopeCandidates > 0 && boundObjectEnvelopeCandidates < indexed / 10);
+		assertEquals("non-CRS84 exact-target cleanup must retain every different-CRS entity",
+				indexed, boundObjectCleanupCandidates);
+		assertEquals(boundObjectEnvelopeCandidates + boundObjectCleanupCandidates,
+				boundObjectCounts.traversalCandidatesMaterialized());
+		assertEquals("cleanup traversal reconstructs source literals even for entities materialized by the envelope phase",
+				boundObjectCounts.traversalCandidatesMaterialized(),
+				boundObjectCounts.sourceGeometryLiteralsMaterialized());
+		assertEquals("distinct candidates remain one per entity after both Lucene phases materialize them",
+				indexed, boundObjectCounts.distinctCandidateEntities());
+
 		IndexGeometry mgaBrisbane = geometry("<" + MGA56
 				+ "> POLYGON((450000 6900000,450000 7020000,560000 7020000,560000 6900000,450000 6900000))");
 		assertEquals(CandidateBoundsKind.TRANSFORMED, mgaBrisbane.candidateBoundsKind());
@@ -117,18 +160,37 @@ public class GeoSparqlCandidateSelectivityTest {
 
 	private static void assertRelationTraversalIsSelective(
 			GeoSparqlIndexer indexer, IndexGeometry bound, boolean boundSubject, int indexed) {
-		int candidates = 0;
-		try (RelationCandidateTraversal traversal = new RelationCandidateTraversal(
-				indexer, GeoSparqlPropertyRelation.SF_INTERSECTS,
-				List.of(bound), boundSubject, LoggerFactory.getLogger(GeoSparqlCandidateSelectivityTest.class))) {
-			while (traversal.hasNext()) {
-				traversal.next();
-				candidates++;
-			}
-		}
+		int candidates = countRelationTraversal(indexer, bound, boundSubject).traversalCandidatesMaterialized();
 		String direction = boundSubject ? "subject-bound" : "object-bound";
 		assertTrue(direction + " relation traversal retrieved " + candidates + " of " + indexed
 					+ " same-CRS GDA2020 features",
 				candidates > 0 && candidates < indexed / 10);
+	}
+
+	private static TraversalCounts countRelationTraversal(
+			GeoSparqlIndexer indexer, IndexGeometry bound, boolean boundSubject) {
+		int candidates = 0;
+		int sourceGeometryLiterals = 0;
+		Set<Long> exactCandidateEntityIds = new HashSet<>();
+		try (RelationCandidateTraversal traversal = new RelationCandidateTraversal(
+				indexer, GeoSparqlPropertyRelation.SF_INTERSECTS,
+				List.of(bound), boundSubject, LoggerFactory.getLogger(GeoSparqlCandidateSelectivityTest.class))) {
+			while (traversal.hasNext()) {
+				RelationCandidateTraversal.Candidate candidate = traversal.next();
+				assertEquals(RelationCandidateTraversal.MatchCertainty.REQUIRES_EXACT_EVALUATION,
+						candidate.matchCertainty());
+				candidates++;
+				sourceGeometryLiterals += candidate.exactCandidateEntity()
+						.matchingSourceGeometryLiterals().size();
+				exactCandidateEntityIds.add(candidate.entityId());
+			}
+		}
+		return new TraversalCounts(candidates, sourceGeometryLiterals, exactCandidateEntityIds.size());
+	}
+
+	private record TraversalCounts(
+			int traversalCandidatesMaterialized,
+			int sourceGeometryLiteralsMaterialized,
+			int distinctCandidateEntities) {
 	}
 }
