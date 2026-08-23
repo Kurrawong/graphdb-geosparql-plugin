@@ -119,6 +119,43 @@ public class LuceneCandidateLookupTest {
 	}
 
 	@Test
+	public void envelopeLookupKeepsOneEntityGroupedAcrossSearchPages() throws Exception {
+		LuceneGeoIndexer indexer = createIndexer("single-entity-envelope-paging");
+		int sourceCount = 1005;
+		IndexGeometry bound = rectangle(-1, 1, -1, 1);
+		List<IndexGeometry> firstEntityGeometries = new ArrayList<>(sourceCount);
+		Set<SourceGeometryLiteral> expectedFirstEntitySources = new HashSet<>();
+		for (int i = 0; i < sourceCount; i++) {
+			IndexGeometry source = geometry("POINT(" + (i + 1) / 10000.0 + " 0)");
+			firstEntityGeometries.add(source);
+			expectedFirstEntitySources.add(source.sourceGeometryLiteral());
+		}
+		IndexGeometry secondEntityGeometry = geometry("POINT(0 0.5)");
+
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "many sources", firstEntityGeometries);
+		indexer.indexGeometryList(2L, id -> "one source", List.of(secondEntityGeometry));
+		indexer.commit();
+		indexer.complete();
+
+		try (CloseableIterator<CandidateEntity> candidates = indexer.getEnvelopeIntersections(bound)) {
+			assertTrue(candidates.hasNext());
+			CandidateEntity first = candidates.next();
+			assertEquals(1L, first.entityId());
+			assertEquals(sourceCount, first.matchingSourceGeometryLiterals().size());
+			assertEquals(expectedFirstEntitySources,
+					new HashSet<>(first.matchingSourceGeometryLiterals()));
+
+			assertTrue(candidates.hasNext());
+			CandidateEntity second = candidates.next();
+			assertEquals(2L, second.entityId());
+			assertEquals(List.of(secondEntityGeometry.sourceGeometryLiteral()),
+					second.matchingSourceGeometryLiterals());
+			assertFalse(candidates.hasNext());
+		}
+	}
+
+	@Test
 	public void separatedIndexEnvelopesProveSfAndEhDisjoint() {
 		List<IndexGeometry> geometries = generatedEnvelopeFixtures();
 		geometries.add(geometry("GEOMETRYCOLLECTION(POINT(-150 -70),LINESTRING(-145 -65,-140 -60))"));
