@@ -19,6 +19,17 @@
 		<dependency.check.version>8.2.1</dependency.check.version>
 		<maven.compiler.release>21</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<!--
+			Packaging smoke intentionally uses GraphDB 10.8.x, the last GraphDB Free
+			runtime that can start without a separately issued licence. GraphDB 11+
+			requires a registered licence even for Free, so it cannot be used in
+			unattended public CI without licence provisioning.
+
+			The build and functional tests still target ${graphdb.version}; this
+			container smoke validates the assembled plugin archive, host loading,
+			HTTP startup, and external SIS data wiring on the last licence-free
+			GraphDB runtime.
+		-->
 		<graphdb.packaging-smoke.graphdb-image>ontotext/graphdb:10.8.12</graphdb.packaging-smoke.graphdb-image>
 		<graphdb.packaging-smoke.java-image>eclipse-temurin:21.0.11_10-jdk-jammy</graphdb.packaging-smoke.java-image>
 		<graphdb.packaging-smoke.plugin-zip>${project.build.directory}/${project.artifactId}-graphdb-plugin.zip</graphdb.packaging-smoke.plugin-zip>
