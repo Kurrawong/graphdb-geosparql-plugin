@@ -25,7 +25,8 @@ import java.util.stream.Stream;
 
 /** Identifies the CRS transformation inputs used to derive persisted candidate envelopes. */
 final class CrsEnvironmentFingerprint {
-	private static final String CANDIDATE_PROJECTION_COMPATIBILITY = "crs84-conservative-envelope-v2-jena-cleanup";
+	private static final String CANDIDATE_PROJECTION_COMPATIBILITY =
+			"crs84-conservative-envelope-v3-jena-cleanup-3d-horizontal-union";
 	private static final String SIS_DATA = "SIS_DATA";
 	private static final String DATUM_CHANGES_DIRECTORY = "DatumChanges";
 

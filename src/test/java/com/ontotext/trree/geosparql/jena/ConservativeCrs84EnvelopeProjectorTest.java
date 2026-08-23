@@ -102,26 +102,37 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 	}
 
 	@Test
-	public void threeDimensionalSourcesUseTheDirectSourceToCrs84Operation() throws Exception {
+	public void threeDimensionalSourcesCoverDirectAndHorizontalSourceToCrs84Operations() throws Exception {
 		for (String wkt : List.of(
 				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 3000)",
 				"<" + GDA2020_3D + "> POINT Z(-27.47 153.03 3000)",
 				"<" + GDA94_3D + "> POINT Z(-27.47 153.03 3000)",
-				"<" + NAD83_CSRS_3D + "> POINT Z(49.25 -123.1 10000)")) {
+				"<" + NAD83_CSRS_3D + "> POINT Z(49.25 -123.1 300000)")) {
 			SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(wkt);
 			GeometryWrapper sourceWrapper = source.asGeometryWrapper();
 			CoordinateReferenceSystem sourceCrs = sourceWrapper.getCRS();
+			CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
 			Coordinate coordinate = sourceWrapper.getParsingGeometry().getCoordinate();
 			GeneralEnvelope sourceEnvelope = new GeneralEnvelope(sourceCrs);
 			sourceEnvelope.setRange(0, coordinate.x, coordinate.x);
 			sourceEnvelope.setRange(1, coordinate.y, coordinate.y);
 			sourceEnvelope.setRange(2, coordinate.getZ(), coordinate.getZ());
-			CoordinateOperation direct = CRS.findOperation(
-					sourceCrs, SRSRegistry.getCRS(IndexGeometry.INDEX_CRS), null);
-			Envelope expected = ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(
+			CoordinateOperation direct = CRS.findOperation(sourceCrs, targetCrs, null);
+			Envelope directBounds = ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(
 					Envelopes.transform(direct, sourceEnvelope));
 
-			assertEquals(wkt + "\ndirect operation: " + direct.getName(), expected, PROJECTOR.project(source));
+			CoordinateReferenceSystem horizontalCrs = CRS.getHorizontalComponent(sourceCrs);
+			GeneralEnvelope horizontalEnvelope = new GeneralEnvelope(horizontalCrs);
+			horizontalEnvelope.setRange(0, coordinate.x, coordinate.x);
+			horizontalEnvelope.setRange(1, coordinate.y, coordinate.y);
+			CoordinateOperation horizontal = CRS.findOperation(horizontalCrs, targetCrs, null);
+			Envelope horizontalBounds = ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(
+					Envelopes.transform(horizontal, horizontalEnvelope));
+
+			Envelope candidate = PROJECTOR.project(source);
+			assertTrue(wkt + "\ndirect operation: " + direct.getName(), candidate.contains(directBounds));
+			assertTrue(wkt + "\nhorizontal operation: " + horizontal.getName(),
+					candidate.contains(horizontalBounds));
 		}
 	}
 

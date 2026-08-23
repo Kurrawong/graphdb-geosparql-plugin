@@ -20,9 +20,11 @@ import org.opengis.util.FactoryException;
  *
  * <p>Native CRS84 sources use their source envelope. Empty sources yield a null envelope. Other non-empty sources
  * transform the source-CRS bounding box with Apache SIS {@code Envelopes.transform(CoordinateOperation, Envelope)}.
- * Sources with a three-dimensional CRS retain their vertical range in a direct source-to-CRS84 operation. Other
- * sources use an operation on their two-dimensional horizontal CRS. The result is used only for Lucene candidate
- * lookup. Exact evaluation uses the source geometry literal and its native CRS.
+ * Sources with a three-dimensional CRS combine a direct source-to-CRS84 transformation that retains their vertical
+ * range with a height-independent transformation of their two-dimensional horizontal envelope. The direct component
+ * covers mixed-CRS exact evaluation, while the horizontal component preserves the height-independent topology of
+ * same-CRS JTS evaluation. Other sources use an operation on their two-dimensional horizontal CRS. The result is used
+ * only for Lucene candidate lookup. Exact evaluation uses the source geometry literal and its native CRS.
  *
  * <p>The plugin uses the SIS
  * <a href="https://sis.apache.org/apidocs/org.apache.sis.referencing/org/apache/sis/geometry/Envelopes.html">
@@ -56,13 +58,14 @@ import org.opengis.util.FactoryException;
  * into CRS84 remains covered. This widening is distinct from the SIS envelope approximation. When exact evaluation
  * would instead round in another CRS, relation traversal retains the pair through exact evaluation rather than
  * treating CRS84 bounds as an exclusion or disjoint proof. When the exact target is CRS84 and the right operand has a
- * three-dimensional CRS, exact evaluation and candidate projection select the same direct source-to-CRS84 operation.
+ * three-dimensional CRS, the direct component selects the same source-to-CRS84 operation as exact evaluation. The
+ * horizontal component ensures that height does not separate same-CRS sources whose JTS XY geometries intersect.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is
  * used only when the result still cannot be stored as one Lucene geographic rectangle: inverted lower/upper ordering,
  * non-finite ordinates, bounds outside the geographic world, missing two-dimensional horizontal CRS, or transform
- * failure. Unit-in-the-last-place widening does not close a geographically large miss.
+ * failure. Cleanup-displacement and unit-in-the-last-place widening do not close a geographically large miss.
  *
  * <p>If a future SIS implementation, EPSG dataset, datum grid, or selected coordinate operation violates the
  * assumption, candidate pruning could produce a false negative. The transformed-envelope coverage and differential
@@ -100,26 +103,43 @@ final class ConservativeCrs84EnvelopeProjector {
 	private static ProjectedCandidateBounds transformSourceBounds(GeometryWrapper sourceWrapper)
 			throws FactoryException, TransformException {
 		CoordinateReferenceSystem sourceCrs = sourceWrapper.getCRS();
-		CoordinateSystem sourceCoordinateSystem = sourceCrs.getCoordinateSystem();
-		if (sourceCoordinateSystem != null && sourceCoordinateSystem.getDimension() == 3) {
-			return transformThreeDimensionalSourceBounds(sourceWrapper, sourceCrs);
-		}
 		CoordinateReferenceSystem horizontal;
 		try {
 			horizontal = horizontalCrs(sourceCrs);
 		} catch (TransformException e) {
 			return ProjectedCandidateBounds.worldFallback(FALLBACK_MISSING_HORIZONTAL_CRS);
 		}
+		CoordinateSystem sourceCoordinateSystem = sourceCrs.getCoordinateSystem();
+		if (sourceCoordinateSystem != null && sourceCoordinateSystem.getDimension() == 3) {
+			return transformThreeDimensionalSourceBounds(sourceWrapper, sourceCrs, horizontal);
+		}
 		return transformHorizontalSourceBounds(sourceWrapper, horizontal);
 	}
 
 	private static ProjectedCandidateBounds transformThreeDimensionalSourceBounds(
-			GeometryWrapper sourceWrapper, CoordinateReferenceSystem sourceCrs)
+			GeometryWrapper sourceWrapper, CoordinateReferenceSystem sourceCrs,
+			CoordinateReferenceSystem horizontal)
 			throws FactoryException, TransformException {
 		CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
 		GeneralEnvelope sourceEnvelope = createThreeDimensionalSourceEnvelope(sourceWrapper, sourceCrs);
 		CoordinateOperation operation = CRS.findOperation(sourceCrs, targetCrs, null);
-		return toLuceneGeoBounds(Envelopes.transform(operation, sourceEnvelope));
+		org.opengis.geometry.Envelope threeDimensionalBounds =
+				Envelopes.transform(operation, sourceEnvelope);
+
+		GeneralEnvelope horizontalSourceEnvelope = createSourceEnvelope(sourceWrapper, horizontal);
+		CoordinateOperation horizontalOperation = CRS.findOperation(horizontal, targetCrs, null);
+		org.opengis.geometry.Envelope horizontalBounds =
+				Envelopes.transform(horizontalOperation, horizontalSourceEnvelope);
+
+		GeneralEnvelope combinedBounds = new GeneralEnvelope(targetCrs);
+		for (int dimension = 0; dimension < 2; dimension++) {
+			combinedBounds.setRange(dimension,
+					Math.min(threeDimensionalBounds.getMinimum(dimension),
+							horizontalBounds.getMinimum(dimension)),
+					Math.max(threeDimensionalBounds.getMaximum(dimension),
+							horizontalBounds.getMaximum(dimension)));
+		}
+		return toLuceneGeoBounds(combinedBounds);
 	}
 
 	private static ProjectedCandidateBounds transformHorizontalSourceBounds(

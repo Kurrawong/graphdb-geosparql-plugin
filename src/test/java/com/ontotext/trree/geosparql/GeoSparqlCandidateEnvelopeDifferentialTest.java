@@ -183,6 +183,44 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
+	public void sameCrsThreeDimensionalHeightDoesNotChangeTwoDimensionalCandidateTopology() throws Exception {
+		SourceGeometryLiteral low = SourceGeometryLiteral.fromWkt(
+				"<" + NAD83_CSRS_3D + "> POINT Z(49.25 -123.1 0)");
+		SourceGeometryLiteral high = SourceGeometryLiteral.fromWkt(
+				"<" + NAD83_CSRS_3D + "> POINT Z(49.25 -123.1 300000)");
+		IndexGeometry lowIndex = IndexGeometry.fromSourceGeometryLiteral(low);
+		IndexGeometry highIndex = IndexGeometry.fromSourceGeometryLiteral(high);
+
+		assertTrue(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(low, high));
+		assertFalse(GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(low, high));
+		assertFalse(GeoSparqlPropertyRelation.EH_DISJOINT.evaluate(low, high));
+
+		for (IndexSettings setting : maximumPrecisionIndexSettings()) {
+			Map<Long, List<IndexGeometry>> sources = new LinkedHashMap<>();
+			sources.put(1L, List.of(lowIndex));
+			sources.put(2L, List.of(highIndex));
+			String settingName = setting.prefixTree.name().toLowerCase(Locale.ROOT) + "-" + setting.precision;
+			Fixture fixture = createFixture("same-crs-3d-height-" + settingName,
+					sources, setting.prefixTree, setting.precision);
+			String diagnostics = settingName + "\nlow=" + lowIndex.indexEnvelope()
+					+ "\nhigh=" + highIndex.indexEnvelope();
+
+			assertTrue(diagnostics,
+					runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 1L, 0).contains(2L));
+			assertTrue(diagnostics,
+					runIndexed(fixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L).contains(1L));
+			for (GeoSparqlPropertyRelation disjoint : List.of(
+					GeoSparqlPropertyRelation.SF_DISJOINT,
+					GeoSparqlPropertyRelation.EH_DISJOINT)) {
+				assertFalse(diagnostics + "\n" + disjoint,
+						runIndexed(fixture, disjoint, 1L, 0).contains(2L));
+				assertFalse(diagnostics + "\n" + disjoint,
+						runIndexed(fixture, disjoint, 0, 2L).contains(1L));
+			}
+		}
+	}
+
+	@Test
 	public void directJenaOperationCrsMatrixRemainsIndexCandidates() throws Exception {
 		List<DirectOperationComparison> comparisons = List.of(
 				directOperationComparison("epsg4326-to-crs84", IndexGeometry.INDEX_CRS, EPSG_4326,
