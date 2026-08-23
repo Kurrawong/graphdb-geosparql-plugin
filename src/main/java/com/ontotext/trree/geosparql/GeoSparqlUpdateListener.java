@@ -23,6 +23,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	private GeoSparqlConfig configBeforeTransaction;
 	private byte[] configFileBeforeTransaction;
 	private boolean configFileExistedBeforeTransaction;
+	private boolean graphDbTransactionActive;
 	private boolean indexTransactionStarted;
 
 	GeoSparqlUpdateListener(GeoSparqlPlugin parent, long asWKT, long asGML, long hasDefaultGeometry) {
@@ -67,6 +68,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		parent.tmpPrefixTree = null;
 		parent.tmpPrecision = 0;
 		captureConfigState();
+		graphDbTransactionActive = true;
 		indexTransactionStarted = false;
 		if (! parent.getConfig().isEnabled()) {
 			return;
@@ -211,7 +213,12 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		configBeforeTransaction = null;
 		configFileBeforeTransaction = null;
 		configFileExistedBeforeTransaction = false;
+		graphDbTransactionActive = false;
 		indexTransactionStarted = false;
+	}
+
+	boolean isGraphDbTransactionActive() {
+		return graphDbTransactionActive;
 	}
 
 	private boolean hasIndexTransaction() {

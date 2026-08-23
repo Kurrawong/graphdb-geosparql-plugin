@@ -23,8 +23,9 @@ import static org.junit.Assert.assertThrows;
 
 public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 	@Test
-	public void testIndexCommitFailureAbortsRdfTransaction() {
+	public void ignoreErrorsDoesNotHideIndexCommitFailure() {
 		enablePlugin();
+		executePluginControl(GeoSparqlPlugin.IGNORE_ERRORS_PREDICATE_IRI, VF.createLiteral(true));
 
 		GeoSparqlPlugin plugin = (GeoSparqlPlugin) ((OwlimSchemaRepository) ((SailRepository) repository).getSail())
 				.getPlugin("GeoSPARQL");
