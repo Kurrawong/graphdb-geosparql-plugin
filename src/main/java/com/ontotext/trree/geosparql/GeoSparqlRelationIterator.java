@@ -97,22 +97,18 @@ class GeoSparqlRelationIterator extends StatementIterator {
 					candidateLookup.boundSourceGeometryLiteral().isEmpty()
 							? candidate.matchingSourceGeometryLiterals()
 							: geometriesForEntity(candidateEntityId).sourceGeometryLiterals();
+			boolean holds;
 			if (boundSubject == 0) {
-				boolean holds = relationHolds(candidateSourceGeometryLiterals,
+				holds = relationHolds(candidateSourceGeometryLiterals,
 						boundObjectGeometries().sourceGeometryLiterals());
-				if (holds
-						&& emittedCandidateEntityIds.add(candidateEntityId)) {
-					setCurrentMatch(candidateEntityId);
-					return true;
-				}
 			} else {
-				boolean holds = relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
+				holds = relationHolds(boundSubjectGeometries().sourceGeometryLiterals(),
 						candidateSourceGeometryLiterals);
-				if (holds
-						&& emittedCandidateEntityIds.add(candidateEntityId)) {
-					setCurrentMatch(candidateEntityId);
-					return true;
-				}
+			}
+			if (holds
+					&& emittedCandidateEntityIds.add(candidateEntityId)) {
+				setCurrentMatch(candidateEntityId);
+				return true;
 			}
 		}
 
