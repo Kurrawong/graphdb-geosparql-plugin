@@ -12,6 +12,7 @@ import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -86,17 +87,17 @@ public class GeoSparqlPropertyRelationTest {
 	}
 
 	@Test
-	public void twoUnevaluableSourcePairsPropagateTheEvaluationError() {
+	public void allUnevaluableSourcePairsDoNotEstablishThePropertyRelation() {
 		SourceGeometryLiteral utm32n = source("<" + UTM_32N + "> POINT(500000 5200000)");
 		SourceGeometryLiteral otherUtm32n = source("<" + UTM_32N + "> POINT(400000 5100000)");
 		SourceGeometryLiteral epsg4979 = source("<" + EPSG_4979 + "> POINT Z(-27.47 153.03 55)");
 
-		try {
-			GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(List.of(utm32n, otherUtm32n), List.of(epsg4979));
-			fail("two unevaluable pairs against EPSG:4979 must propagate the evaluation error");
-		} catch (JenaGeoSparqlException expected) {
-			// Jena cannot reduce EPSG:4979 to UTM 32N for these pairs.
-		}
+		assertThrows(JenaGeoSparqlException.class,
+				() -> GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(utm32n, epsg4979));
+		assertThrows(JenaGeoSparqlException.class,
+				() -> GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(otherUtm32n, epsg4979));
+		assertFalse(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				List.of(utm32n, otherUtm32n), List.of(epsg4979)));
 	}
 
 	@Test

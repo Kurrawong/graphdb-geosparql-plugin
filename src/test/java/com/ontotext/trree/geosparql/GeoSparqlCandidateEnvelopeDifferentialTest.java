@@ -97,16 +97,14 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
-	public void indexBackedRelationsDoNotOmitExactMatchesOrSuppressUnevaluableEntitiesAcrossFamiliesAndCrs()
+	public void indexBackedRelationsAgreeWithEntityLevelReferenceAcrossFamiliesAndCrs()
 			throws Exception {
 		Fixture fixture = createFixture("candidate-envelope-differential", representativeGeometries());
 
 		for (GeoSparqlPropertyRelation relation : GeoSparqlPropertyRelation.values()) {
 			for (long boundEntityId : fixture.sources.keySet()) {
-				assertIndexedContainsReferenceOrPropagatesUnevaluableEntity(
-						fixture, relation, 0, boundEntityId);
-				assertIndexedContainsReferenceOrPropagatesUnevaluableEntity(
-						fixture, relation, boundEntityId, 0);
+				assertIndexedEqualsReference(fixture, relation, 0, boundEntityId);
+				assertIndexedEqualsReference(fixture, relation, boundEntityId, 0);
 			}
 		}
 	}
@@ -485,7 +483,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
-	public void allUnevaluableCandidatesPropagateAcrossEnvelopeAndTransformCleanupPhases() throws Exception {
+	public void allUnevaluableCandidatesDoNotMatchAcrossEnvelopeAndTransformCleanupPhases() throws Exception {
 		IndexGeometry utm32 = geometries(
 				"<" + UTM_32N + "> POINT(-100000000 0)").get(0);
 		// The UTM point projects to the 99°E transform-domain edge. The nearby 3D point remains inside its widened
@@ -499,19 +497,25 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 				utm32.sourceGeometryLiteral(), nearbyEpsg4979.sourceGeometryLiteral()));
 		assertThrows(JenaGeoSparqlException.class, () -> GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
 				utm32.sourceGeometryLiteral(), distantEpsg4979.sourceGeometryLiteral()));
+		assertFalse(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				List.of(utm32.sourceGeometryLiteral()),
+				List.of(nearbyEpsg4979.sourceGeometryLiteral())));
+		assertFalse(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				List.of(utm32.sourceGeometryLiteral()),
+				List.of(distantEpsg4979.sourceGeometryLiteral())));
 
 		Fixture envelopeFixture = createFixture("unevaluable-envelope-candidate",
 				Map.of(1L, List.of(utm32), 2L, List.of(nearbyEpsg4979)));
 		assertTrue(envelopeHits(envelopeFixture, nearbyEpsg4979).contains(1L));
-		assertThrows(JenaGeoSparqlException.class,
-				() -> runIndexed(envelopeFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertEquals(Set.of(2L),
+				runIndexed(envelopeFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
 
 		Fixture cleanupFixture = createFixture("unevaluable-transform-cleanup-candidate",
 				Map.of(1L, List.of(utm32), 2L, List.of(distantEpsg4979)));
 		assertFalse(envelopeHits(cleanupFixture, distantEpsg4979).contains(1L));
 		assertTrue(transformCleanupHits(cleanupFixture, distantEpsg4979, true).contains(1L));
-		assertThrows(JenaGeoSparqlException.class,
-				() -> runIndexed(cleanupFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertEquals(Set.of(2L),
+				runIndexed(cleanupFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
 	}
 
 	@Test
@@ -645,42 +649,14 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		}
 	}
 
-	private void assertIndexedContainsReferenceOrPropagatesUnevaluableEntity(
+	private void assertIndexedEqualsReference(
 			Fixture fixture, GeoSparqlPropertyRelation relation, long subject, long object) throws Exception {
 		String direction = subject == 0 ? "object-bound" : "subject-bound";
 		long boundEntityId = subject == 0 ? object : subject;
 		String message = relation + " " + direction + " entity " + boundEntityId;
-		try {
-			assertTrue(message + " omitted exact matches",
-					runIndexed(fixture, relation, subject, object)
-							.containsAll(runReference(fixture, relation, subject, object)));
-		} catch (JenaGeoSparqlException expected) {
-			assertTrue(message + " propagated without an all-unevaluable entity",
-					hasAllUnevaluableEntity(fixture, relation, subject, object));
-		}
-	}
-
-	private boolean hasAllUnevaluableEntity(
-			Fixture fixture, GeoSparqlPropertyRelation relation, long subject, long object) {
-		long boundEntityId = subject == 0 ? object : subject;
-		List<SourceGeometryLiteral> boundSources = fixture.sources.get(boundEntityId).stream()
-				.map(IndexGeometry::sourceGeometryLiteral)
-				.toList();
-		for (List<IndexGeometry> candidateGeometries : fixture.sources.values()) {
-			List<SourceGeometryLiteral> candidateSources = candidateGeometries.stream()
-					.map(IndexGeometry::sourceGeometryLiteral)
-					.toList();
-			try {
-				if (subject == 0) {
-					relation.evaluate(candidateSources, boundSources);
-				} else {
-					relation.evaluate(boundSources, candidateSources);
-				}
-			} catch (JenaGeoSparqlException expected) {
-				return true;
-			}
-		}
-		return false;
+		assertEquals(message,
+				runReference(fixture, relation, subject, object),
+				runIndexed(fixture, relation, subject, object));
 	}
 
 	private Set<Long> runReference(Fixture fixture, GeoSparqlPropertyRelation relation,
@@ -712,11 +688,20 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 
 	private Boolean exactRelationOrUnknown(GeoSparqlPropertyRelation relation,
 			List<SourceGeometryLiteral> subjectSources, List<SourceGeometryLiteral> objectSources) {
-		try {
-			return relation.evaluate(subjectSources, objectSources);
-		} catch (com.ontotext.trree.geosparql.jena.JenaGeoSparqlException ignored) {
-			return null;
+		boolean evaluated = false;
+		for (SourceGeometryLiteral subjectSource : subjectSources) {
+			for (SourceGeometryLiteral objectSource : objectSources) {
+				try {
+					if (relation.evaluate(subjectSource, objectSource)) {
+						return true;
+					}
+					evaluated = true;
+				} catch (JenaGeoSparqlException ignored) {
+					// Keep unevaluable distinct from false for exact-reference diagnostics.
+				}
+			}
 		}
+		return evaluated ? false : null;
 	}
 
 	private static Set<Long> envelopeHits(Fixture fixture, IndexGeometry bound) throws Exception {

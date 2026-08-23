@@ -113,31 +113,24 @@ public enum GeoSparqlPropertyRelation {
 	/**
 	 * Returns whether any subject/object source pair satisfies this relation.
 	 *
-	 * <p>Multiple geometry literals on an entity are existential: a true pair matches immediately. An unevaluable
-	 * pair does not hide a later evaluable true pair. If at least one pair evaluates to false and none are true, the
-	 * relation does not hold. If every pair is unevaluable, the last evaluation error is propagated.
+	 * <p>Property relations use existential entity semantics. An unevaluable source pair cannot establish the relation
+	 * and does not prevent another source pair or entity from matching.
 	 */
 	public boolean evaluate(Collection<SourceGeometryLiteral> subjectGeometries,
 			Collection<SourceGeometryLiteral> objectGeometries) {
 		if (subjectGeometries.isEmpty() || objectGeometries.isEmpty()) {
 			return false;
 		}
-		JenaGeoSparqlException lastError = null;
-		boolean evaluated = false;
 		for (SourceGeometryLiteral subjectGeometry : subjectGeometries) {
 			for (SourceGeometryLiteral objectGeometry : objectGeometries) {
 				try {
 					if (evaluate(subjectGeometry, objectGeometry)) {
 						return true;
 					}
-					evaluated = true;
-				} catch (JenaGeoSparqlException e) {
-					lastError = e;
+				} catch (JenaGeoSparqlException ignored) {
+					// This source pair cannot establish the property relation.
 				}
 			}
-		}
-		if (!evaluated && lastError != null) {
-			throw lastError;
 		}
 		return false;
 	}

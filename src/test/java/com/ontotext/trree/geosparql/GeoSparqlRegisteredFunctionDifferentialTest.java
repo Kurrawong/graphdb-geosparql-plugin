@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.eclipse.rdf4j.model.Value;
 import org.locationtech.jts.geom.Coordinate;
@@ -11,6 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 /**
  * Compares registered GeoSPARQL filter functions with index-backed property relations through GraphDB SPARQL.
@@ -25,7 +27,12 @@ public class GeoSparqlRegisteredFunctionDifferentialTest extends AbstractGeoSpar
 			+ "PREFIX ex: <" + EXAMPLE_NAMESPACE + ">\n";
 	private static final String UTM_32N = "http://www.opengis.net/def/crs/EPSG/0/32632";
 	private static final String UTM_33N = "http://www.opengis.net/def/crs/EPSG/0/32633";
+	private static final String EPSG_4979 = "http://www.opengis.net/def/crs/EPSG/0/4979";
 	private static final String UTM_32_POINT = "<" + UTM_32N + "> POINT(500000 5200000)";
+	private static final String UNEVALUABLE_UTM_32_POINT = "<" + UTM_32N + "> POINT(-100000000 0)";
+	private static final String ENVELOPE_INTERSECTION_BOUND_POINT =
+			"<" + EPSG_4979 + "> POINT Z(0 99.0000001 55)";
+	private static final String CLEANUP_BOUND_POINT = "<" + EPSG_4979 + "> POINT Z(-27.47 153.03 55)";
 
 	@Before
 	public void insertFixtureAndEnablePlugin() throws Exception {
@@ -46,6 +53,16 @@ public class GeoSparqlRegisteredFunctionDifferentialTest extends AbstractGeoSpar
 				+ feature("emptyCollection", "emptyCollectionGeom", "GEOMETRYCOLLECTION EMPTY")
 				+ feature("collection", "collectionGeom",
 						"GEOMETRYCOLLECTION(POINT(5 5),LINESTRING(20 20,21 21))")
+				+ feature("envelopeUnevaluableCandidate", "envelopeUnevaluableCandidateGeom",
+						UNEVALUABLE_UTM_32_POINT)
+				+ feature("envelopeMatchingCandidate", "envelopeMatchingCandidateGeom",
+						ENVELOPE_INTERSECTION_BOUND_POINT)
+				+ feature("envelopeBound", "envelopeBoundGeom", ENVELOPE_INTERSECTION_BOUND_POINT)
+				+ feature("transformCleanupUnevaluableCandidate", "transformCleanupUnevaluableCandidateGeom",
+						UNEVALUABLE_UTM_32_POINT)
+				+ feature("transformCleanupMatchingCandidate", "transformCleanupMatchingCandidateGeom",
+						CLEANUP_BOUND_POINT)
+				+ feature("transformCleanupBound", "transformCleanupBoundGeom", CLEANUP_BOUND_POINT)
 				+ "  ex:multiSource a geo:Feature ;\n"
 				+ "    geo:hasDefaultGeometry ex:multiFarGeom, ex:multiInsideGeom .\n"
 				+ "  ex:multiFarGeom a geo:Geometry ; geo:asWKT \"POINT(-40 -10)\"^^geo:wktLiteral .\n"
@@ -77,6 +94,46 @@ public class GeoSparqlRegisteredFunctionDifferentialTest extends AbstractGeoSpar
 	@Test
 	public void multipleDefaultGeometrySourcesUseExistentialEntitySemantics() throws Exception {
 		assertDifferential("sfIntersects", "leftArea", false, "multiSource");
+	}
+
+	@Test
+	public void envelopeIntersectionUnevaluableCandidateDoesNotAbortPropertyRelationQuery() throws Exception {
+		assertUnevaluableCandidateDoesNotAbortPropertyRelation(
+				"envelopeUnevaluableCandidate", UNEVALUABLE_UTM_32_POINT,
+				"envelopeMatchingCandidate", "envelopeBound", ENVELOPE_INTERSECTION_BOUND_POINT);
+	}
+
+	@Test
+	public void transformCleanupUnevaluableCandidateDoesNotAbortPropertyRelationQuery() throws Exception {
+		assertUnevaluableCandidateDoesNotAbortPropertyRelation(
+				"transformCleanupUnevaluableCandidate", UNEVALUABLE_UTM_32_POINT,
+				"transformCleanupMatchingCandidate", "transformCleanupBound", CLEANUP_BOUND_POINT);
+	}
+
+	private void assertUnevaluableCandidateDoesNotAbortPropertyRelation(
+			String unevaluableCandidate, String unevaluableCandidateWkt,
+			String matchingCandidate, String bound, String boundWkt) throws Exception {
+		SourceGeometryLiteral candidateSource = SourceGeometryLiteral.fromWkt(unevaluableCandidateWkt);
+		SourceGeometryLiteral boundSource = SourceGeometryLiteral.fromWkt(boundWkt);
+		assertThrows(JenaGeoSparqlException.class, () -> GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
+				candidateSource, boundSource));
+
+		Set<Value> propertyResults = queryCandidates(""
+				+ "SELECT DISTINCT ?candidate WHERE {\n"
+				+ "  ?candidate geo:sfIntersects ex:" + bound + " .\n"
+				+ "}");
+		propertyResults.retainAll(candidateIris(new String[] { unevaluableCandidate, matchingCandidate }));
+		Set<Value> functionResults = queryCandidates(""
+				+ "SELECT DISTINCT ?candidate WHERE {\n"
+				+ candidateValues(new String[] { unevaluableCandidate, matchingCandidate })
+				+ "  ?candidate geo:hasDefaultGeometry/geo:asWKT ?candidateWkt .\n"
+				+ "  ex:" + bound + " geo:hasDefaultGeometry/geo:asWKT ?boundWkt .\n"
+				+ "  FILTER(geof:sfIntersects(?candidateWkt, ?boundWkt))\n"
+				+ "}");
+
+		Set<Value> expected = Set.of(VF.createIRI(EXAMPLE_NAMESPACE, matchingCandidate));
+		assertEquals("property relation", expected, propertyResults);
+		assertEquals("registered filter function", expected, functionResults);
 	}
 
 	private void assertDifferential(String relation, String bound, boolean boundSubject, String... candidates)
