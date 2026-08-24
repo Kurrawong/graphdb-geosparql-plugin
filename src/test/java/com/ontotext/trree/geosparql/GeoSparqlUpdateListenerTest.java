@@ -27,6 +27,10 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertThrows;
 
+/**
+ * Verifies transaction rollback and durable publication ordering for GeoSPARQL configuration and index state.
+ * Regression provenance: https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/2.
+ */
 public class GeoSparqlUpdateListenerTest {
 	@Rule
 	public TemporaryLocalFolder tmpFolder = new TemporaryLocalFolder();
@@ -57,6 +61,42 @@ public class GeoSparqlUpdateListenerTest {
 	}
 
 	@Test
+	public void configMutationDoesNotReplaceConfigWhenMarkerCannotBeCreated() throws Exception {
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		GeoSparqlConfig config = new GeoSparqlConfig();
+		Path dataDir = tmpFolder.newFolder("config-marker-failure").toPath();
+		plugin.setConfig(config);
+		plugin.setDataDir(dataDir.toFile());
+		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
+		GeoSparqlUtils.saveConfig(config, dataDir);
+		Path configPath = GeoSparqlConfig.resolveConfigPath(dataDir);
+		byte[] originalConfigFile = Files.readAllBytes(configPath);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+
+		listener.transactionStarted(emptyPluginConnection());
+		Files.createDirectories(GeoSparqlTransactionMarker.resolvePath(dataDir));
+		plugin.tmpPrefixTree = GeoSparqlConfig.PrefixTree.GEOHASH;
+		plugin.tmpPrecision = 20;
+
+		assertThrows(PluginException.class, () -> listener.transactionCommit(emptyPluginConnection()));
+		assertArrayEquals(originalConfigFile, Files.readAllBytes(configPath));
+	}
+
+	@Test
+	public void unrelatedAbortDoesNotRewriteGeoSparqlConfig() throws Exception {
+		Path dataDir = tmpFolder.newFolder("unrelated-abort").toPath();
+		GeoSparqlPlugin plugin = enabledPlugin(dataDir);
+		GeoSparqlUtils.saveConfig(plugin.getConfig(), dataDir);
+		CountingConfigRestoreListener listener = new CountingConfigRestoreListener(plugin);
+
+		listener.transactionStarted(emptyPluginConnection());
+		listener.transactionAborted(emptyPluginConnection());
+
+		assertEquals(0, listener.configRestoreCount);
+		assertFalse(Files.exists(GeoSparqlTransactionMarker.resolvePath(dataDir)));
+	}
+
+	@Test
 	public void abortRestoresCurrentSettingsChangedDuringForceReindex() throws Exception {
 		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
 		GeoSparqlConfig config = new GeoSparqlConfig();
@@ -72,7 +112,7 @@ public class GeoSparqlUpdateListenerTest {
 		config.setPrefixTree(GeoSparqlConfig.PrefixTree.GEOHASH);
 		config.setPrecision(20);
 		config.updateCurrentSettings();
-		GeoSparqlUtils.saveConfig(config, dataDir);
+		listener.saveConfigForTransaction();
 		listener.transactionAborted(null);
 
 		assertEquals(GeoSparqlConfig.PrefixTree.QUAD, plugin.getConfig().getCurrentPrefixTree());
@@ -97,6 +137,7 @@ public class GeoSparqlUpdateListenerTest {
 		PluginConnection connection = emptyPluginConnection();
 
 		listener.transactionStarted(connection);
+		listener.beginIndexTransactionForPersistentMutation();
 		indexer.indexGeometryList(1L, id -> "geometry",
 				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
 		listener.transactionCommit(connection);
@@ -125,7 +166,8 @@ public class GeoSparqlUpdateListenerTest {
 		LuceneGeoIndexer indexer = new LuceneGeoIndexer(plugin);
 		indexer.initialize();
 		plugin.indexer = indexer;
-		indexer.begin();
+		listener.saveConfigForTransaction();
+		listener.beginIndexTransactionForPersistentMutation();
 		indexer.indexGeometryList(1L, id -> "geometry",
 				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
 		indexer.commit();
@@ -154,6 +196,7 @@ public class GeoSparqlUpdateListenerTest {
 		PluginConnection connection = emptyPluginConnection();
 
 		listener.transactionStarted(connection);
+		listener.beginIndexTransactionForPersistentMutation();
 		indexer.indexGeometryList(1L, id -> "geometry",
 				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
 		listener.transactionCommit(connection);
@@ -186,7 +229,8 @@ public class GeoSparqlUpdateListenerTest {
 		plugin.getConfig().setPrecision(20);
 		plugin.getConfig().updateCurrentSettings();
 		indexer.initSettings();
-		GeoSparqlUtils.saveConfig(plugin.getConfig(), dataDir);
+		listener.saveConfigForTransaction();
+		listener.beginIndexTransactionForPersistentMutation();
 		indexer.freshIndex();
 		indexer.indexGeometryList(1L, id -> "geometry",
 				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
@@ -323,6 +367,20 @@ public class GeoSparqlUpdateListenerTest {
 			if (failConfigRestore) {
 				throw new IOException("Simulated configuration restoration failure");
 			}
+			super.restoreConfigFile(configPath);
+		}
+	}
+
+	private static final class CountingConfigRestoreListener extends GeoSparqlUpdateListener {
+		private int configRestoreCount;
+
+		private CountingConfigRestoreListener(GeoSparqlPlugin parent) {
+			super(parent, 1L, 2L, 3L);
+		}
+
+		@Override
+		protected void restoreConfigFile(Path configPath) throws IOException {
+			configRestoreCount++;
 			super.restoreConfigFile(configPath);
 		}
 	}

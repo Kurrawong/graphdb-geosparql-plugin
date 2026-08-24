@@ -27,6 +27,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	private GeoSparqlConfig configBeforeTransaction;
 	private byte[] configFileBeforeTransaction;
 	private boolean configFileExistedBeforeTransaction;
+	private boolean configMutationAttempted;
+	private boolean configPersistenceStarted;
 	private boolean graphDbTransactionActive;
 	private boolean indexTransactionStarted;
 	private boolean markerExistedBeforeTransaction;
@@ -79,17 +81,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		indexTransactionStarted = false;
 		markerExistedBeforeTransaction = transactionMarker.exists();
 		persistentMutationMarked = false;
-		if (! parent.getConfig().isEnabled()) {
-			return;
-		}
-
-		try {
-			preparePersistentMutation();
-			parent.indexer.begin();
-			indexTransactionStarted = true;
-		} catch (Exception e) {
-			throw new PluginException("Unable to start indexer transaction.", e);
-		}
+		configMutationAttempted = false;
+		configPersistenceStarted = false;
 	}
 
 	@Override
@@ -117,6 +110,10 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 				}
 			}
 			return;
+		}
+
+		if (!geometriesToUpdate.isEmpty() || !featuresToUpdate.isEmpty()) {
+			beginIndexTransactionForPersistentMutation();
 		}
 
 		final TLongHashSet processedFeatures = new TLongHashSet();
@@ -150,11 +147,13 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 
 		cleanupAfterTransaction();
 
-		try {
-			parent.indexer.commit();
-			indexTransactionStarted = true;
-		} catch (Exception e) {
-			throw new PluginException("Unable to commit the GeoSPARQL Lucene index.", e);
+		if (hasIndexTransaction()) {
+			try {
+				parent.indexer.commit();
+				indexTransactionStarted = true;
+			} catch (Exception e) {
+				throw new PluginException("Unable to commit the GeoSPARQL Lucene index.", e);
+			}
 		}
 	}
 
@@ -201,8 +200,23 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		}
 	}
 
-	void saveConfigForTransaction() {
+	void beginIndexTransactionForPersistentMutation() {
 		preparePersistentMutation();
+		if (hasIndexTransaction()) {
+			return;
+		}
+		try {
+			parent.indexer.begin();
+			indexTransactionStarted = true;
+		} catch (Exception e) {
+			throw new PluginException("Unable to start indexer transaction.", e);
+		}
+	}
+
+	void saveConfigForTransaction() {
+		configMutationAttempted = true;
+		preparePersistentMutation();
+		configPersistenceStarted = true;
 		GeoSparqlUtils.saveConfig(parent.getConfig(), parent.getDataDir().toPath());
 	}
 
@@ -225,10 +239,13 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	}
 
 	private boolean restoreConfigState() {
-		if (configBeforeTransaction == null) {
+		if (!configMutationAttempted || configBeforeTransaction == null) {
 			return true;
 		}
 		parent.setConfig(configBeforeTransaction);
+		if (!configPersistenceStarted) {
+			return true;
+		}
 		Path configPath = GeoSparqlConfig.resolveConfigPath(parent.getDataDir().toPath());
 		try {
 			restoreConfigFile(configPath);
@@ -262,6 +279,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		configBeforeTransaction = null;
 		configFileBeforeTransaction = null;
 		configFileExistedBeforeTransaction = false;
+		configMutationAttempted = false;
+		configPersistenceStarted = false;
 		graphDbTransactionActive = false;
 		indexTransactionStarted = false;
 		markerExistedBeforeTransaction = false;

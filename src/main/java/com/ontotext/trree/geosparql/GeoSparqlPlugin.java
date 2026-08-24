@@ -356,15 +356,15 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         config.updateCurrentSettings();
         indexer.initSettings();
         try {
+			boolean luceneTransactionAlreadyActive = indexer.isTransactionActive();
+			if (!luceneTransactionAlreadyActive) {
+				updateListener.beginIndexTransactionForPersistentMutation();
+			}
             if (forced) {
                 getLogger().info(">>>>>>>> GeoSPARQL: Initializing force reindexing process...");
                 new GeoSparqlFullIndexer(indexer, this).reindex(pluginConnection);
             } else {
                 getLogger().info(">>>>>>>> GeoSPARQL: Initializing indexing process...");
-                boolean luceneTransactionAlreadyActive = indexer.isTransactionActive();
-                if (!luceneTransactionAlreadyActive) {
-                    indexer.begin();
-                }
                 new GeoSparqlFullIndexer(indexer, this).reindex(pluginConnection);
                 // The enclosing GraphDB transaction, or an existing Lucene transaction, owns the outcome.
                 if (!updateListener.isGraphDbTransactionActive() && !luceneTransactionAlreadyActive) {
