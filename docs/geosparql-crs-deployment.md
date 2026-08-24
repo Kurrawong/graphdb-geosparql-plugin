@@ -28,9 +28,7 @@ including when Jena cleans transformed coordinates in a non-CRS84 target CRS. Tr
 pinned cleanup displacement in CRS84 units. Apache SIS does not provide a universal mathematical proof that its
 transformed envelopes contain every possible transformed geometry. This is an intentional engineering trade-off: the
 plugin does not scan every different-CRS source merely because that formal proof is unavailable. A reproducible
-under-bound remains a correctness defect, while
-[issue #6](https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/6) records the residual SIS-envelope
-qualification risk.
+under-bound remains a correctness defect.
 
 Transform failures and results that cannot be represented safely as one Lucene geographic rectangle use the world
 CRS84 fallback. CRS-environment fingerprint changes require a force reindex, and differential coverage across the
