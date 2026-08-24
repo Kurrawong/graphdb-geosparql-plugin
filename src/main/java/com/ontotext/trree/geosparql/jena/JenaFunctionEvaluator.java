@@ -268,7 +268,7 @@ public final class JenaFunctionEvaluator {
 		Geometry rightGeometry = transformedRight.getXYGeometry();
 		if (GeoConstants.GEOF_SF_EQUALS.stringValue().equals(functionUri)
 				|| GeoConstants.GEOF_EH_EQUALS.stringValue().equals(functionUri)) {
-			return RelateNG.relate(leftGeometry, rightGeometry, RelatePredicate.equalsTopo());
+			return RelateNG.relate(leftGeometry, rightGeometry, SimpleFeaturesIntersectionPattern.EQUALS);
 		}
 		if (GeoConstants.GEOF_RCC8_EQ.stringValue().equals(functionUri)) {
 			return RelateNG.relate(leftGeometry, rightGeometry, RCC8IntersectionPattern.EQUALS);
