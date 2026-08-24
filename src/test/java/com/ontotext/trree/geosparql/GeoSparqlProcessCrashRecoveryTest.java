@@ -12,6 +12,9 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
@@ -19,7 +22,8 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Process-crash coverage for the plugin transaction invariant from
+ * Verifies that a process crash while GeoSPARQL state awaits a GraphDB transaction outcome leaves restart fail closed
+ * and requiring force reindex, so an enabled configuration never trusts a stale Lucene index. Regression provenance:
  * https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/2.
  */
 public class GeoSparqlProcessCrashRecoveryTest {
@@ -28,45 +32,47 @@ public class GeoSparqlProcessCrashRecoveryTest {
 
 	@Test
 	public void restartFailsClosedAfterPendingMarkerCreation() throws Exception {
-		assertRestartFailsClosed("AFTER_MARKER", false);
+		assertRestartFailsClosed(GeoSparqlCrashProcess.CrashBoundary.AFTER_MARKER);
 	}
 
 	@Test
 	public void restartFailsClosedAfterConfigurationReplacement() throws Exception {
-		assertRestartFailsClosed("AFTER_CONFIG_REPLACEMENT", true);
+		assertRestartFailsClosed(GeoSparqlCrashProcess.CrashBoundary.AFTER_CONFIG_REPLACEMENT);
 	}
 
 	@Test
 	public void restartFailsClosedAfterProvisionalLuceneCommit() throws Exception {
-		assertRestartFailsClosed("AFTER_PROVISIONAL_COMMIT", true);
+		assertRestartFailsClosed(GeoSparqlCrashProcess.CrashBoundary.AFTER_PROVISIONAL_COMMIT);
 	}
 
 	@Test
 	public void restartFailsClosedAfterGraphDbCommitBeforeMarkerRemoval() throws Exception {
-		assertRestartFailsClosed("AFTER_GRAPHDB_COMMIT", true);
+		assertRestartFailsClosed(GeoSparqlCrashProcess.CrashBoundary.AFTER_GRAPHDB_COMMIT);
 	}
 
 	@Test
 	public void restartFailsClosedDuringAbortRestoration() throws Exception {
-		assertRestartFailsClosed("DURING_ABORT_RESTORATION", false);
+		assertRestartFailsClosed(GeoSparqlCrashProcess.CrashBoundary.DURING_ABORT_RESTORATION);
 	}
 
-	private void assertRestartFailsClosed(String boundary, boolean expectedEnabled) throws Exception {
-		Path dataDir = tmpFolder.newFolder(boundary.toLowerCase()).toPath();
+	private void assertRestartFailsClosed(GeoSparqlCrashProcess.CrashBoundary boundary) throws Exception {
+		Path managerDir = tmpFolder.newFolder(boundary.name().toLowerCase()).toPath();
 		Process process = new ProcessBuilder(
 				Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-				"-cp", testClassPath(), GeoSparqlCrashProcess.class.getName(), boundary, dataDir.toString())
+				"-cp", testClassPath(), GeoSparqlCrashProcess.class.getName(), boundary.name(), managerDir.toString())
 				.redirectErrorStream(true)
 				.start();
 		assertTrue("Crash process did not terminate", process.waitFor(30, TimeUnit.SECONDS));
 		String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 		assertEquals(output, GeoSparqlCrashProcess.HALT_CODE, process.exitValue());
 
+		Path dataDir = findPluginDataDir(managerDir);
 		GeoSparqlConfig persistedConfig = GeoSparqlUtils.readConfig(dataDir);
-		assertEquals(expectedEnabled, persistedConfig.isEnabled());
+		assertEquals(boundary.enabledAfterCrash(), persistedConfig.isEnabled());
 		assertTrue(Files.exists(GeoSparqlTransactionMarker.resolvePath(dataDir)));
-		assertEquals(hasProvisionalCommit(boundary) ? "POINT(2 2)" : "POINT(1 1)",
-				committedSourceLexicalForm(dataDir));
+		assertEquals(boundary.newIndexCommitPublished()
+					? List.of("POINT(1 1)", "POINT(2 2)") : List.of("POINT(1 1)"),
+				committedSourceLexicalForms(dataDir));
 
 		LuceneGeoIndexer restarted = new LuceneGeoIndexer(
 				GeoSparqlCrashProcess.plugin(dataDir, persistedConfig));
@@ -81,16 +87,24 @@ public class GeoSparqlProcessCrashRecoveryTest {
 		return System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
 	}
 
-	private boolean hasProvisionalCommit(String boundary) {
-		return "AFTER_PROVISIONAL_COMMIT".equals(boundary)
-				|| "AFTER_GRAPHDB_COMMIT".equals(boundary)
-				|| "DURING_ABORT_RESTORATION".equals(boundary);
+	private Path findPluginDataDir(Path managerDir) throws Exception {
+		try (var paths = Files.walk(managerDir)) {
+			Path marker = paths.filter(path -> path.getFileName().toString().equals("pending-graphdb-transaction"))
+					.findFirst()
+					.orElseThrow(() -> new AssertionError("Crash process did not leave a pending marker."));
+			return marker.getParent().getParent().getParent();
+		}
 	}
 
-	private String committedSourceLexicalForm(Path dataDir) throws Exception {
+	private List<String> committedSourceLexicalForms(Path dataDir) throws Exception {
 		try (FSDirectory directory = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(dataDir));
 				DirectoryReader reader = DirectoryReader.open(directory)) {
-			return reader.document(0).get("geoExactLexicalForm");
+			List<String> lexicalForms = new ArrayList<>();
+			for (int documentId = 0; documentId < reader.maxDoc(); documentId++) {
+				lexicalForms.add(reader.document(documentId).get("geoExactLexicalForm"));
+			}
+			Collections.sort(lexicalForms);
+			return lexicalForms;
 		}
 	}
 }

@@ -214,6 +214,20 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	@Override
+	public void discardUncommittedChanges() throws Exception {
+		if (!transactionActive || indexWriter == null || !indexWriter.isOpen()) {
+			return;
+		}
+		indexWriter.rollback();
+		indexWriter = null;
+		provisionalCommitPublished = false;
+		schemaMismatchDetected = schemaMismatchAtTransactionStart;
+		crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
+		compatibilityMetadataPending = false;
+		schemaRebuildInProgress = false;
+	}
+
+	@Override
 	public void complete() throws Exception {
 		if (!transactionActive) {
 			return;

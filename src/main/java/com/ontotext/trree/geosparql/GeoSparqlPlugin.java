@@ -162,16 +162,9 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
                 if (config.isEnabled()) {
                     initializeGeoIndexer();
                 }
-                updateListener.preparePersistentMutation();
-                GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+                updateListener.saveConfigForTransaction();
                 if (config.isEnabled()) {
                     indexAllData(false, pluginConnection);
-                } else {
-                    try {
-                        indexer.rollback();
-                    } catch (Exception e) {
-                        throw new PluginException("Unable to rollback plugin data", e);
-                    }
                 }
             }
         } else if (predicate == prefixTreePredicateId) {
@@ -194,15 +187,13 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
             String ignoreErrorsString = pluginConnection.getEntities().get(object).stringValue();
             boolean ignoreErrors = Boolean.parseBoolean(ignoreErrorsString);
             config.setIgnoreErrors(ignoreErrors);
-            updateListener.preparePersistentMutation();
-            GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+            updateListener.saveConfigForTransaction();
         } else if (predicate == maxBufferedDocsPredicateId) {
             String maxBufferedDocsString = pluginConnection.getEntities().get(object).stringValue();
             try {
                 int maxBufferedDocs = Integer.parseInt(maxBufferedDocsString);
                 config.setMaxBufferedDocs(maxBufferedDocs);
-                updateListener.preparePersistentMutation();
-                GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+                updateListener.saveConfigForTransaction();
             } catch (NumberFormatException e) {
                 throw new PluginException("Maximum buffered documents must be an integer number.");
             }
@@ -211,8 +202,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
             try {
                 double ramBufferSize = Double.parseDouble(ramBufferSizeString);
                 config.setRamBufferSizeMb(ramBufferSize);
-                updateListener.preparePersistentMutation();
-                GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+                updateListener.saveConfigForTransaction();
             } catch (NumberFormatException e) {
                 throw new PluginException("Ram buffer size must be a double number.");
             }
@@ -381,7 +371,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
                     indexer.commit();
                 }
             }
-            GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+            updateListener.saveConfigForTransaction();
             getLogger().info(">>>>>>>> GeoSPARQL: Indexing completed!");
         } catch (Exception e) {
             throw new PluginException("Unable to index GeoSPARQL geometries.", e);

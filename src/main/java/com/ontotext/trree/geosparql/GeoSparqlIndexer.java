@@ -101,6 +101,12 @@ public interface GeoSparqlIndexer {
 
 	void commit() throws Exception;
 
+	/** Discards writer changes while retaining state needed to finalize the GraphDB transaction outcome. */
+	default void discardUncommittedChanges() throws Exception {
+		throw new UnsupportedOperationException(
+				"Discarding index changes while retaining transaction outcome state is not supported.");
+	}
+
 	/**
 	 * Makes the most recently committed index transaction final after GraphDB completes the RDF transaction.
 	 */

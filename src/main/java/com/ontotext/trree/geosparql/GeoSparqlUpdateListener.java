@@ -104,12 +104,19 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			GeoSparqlUtils.validateParams(prefixTree, precision);
 			config.setPrefixTree(prefixTree);
 			config.setPrecision(precision);
-			preparePersistentMutation();
-			GeoSparqlUtils.saveConfig(config, parent.getDataDir().toPath());
+			saveConfigForTransaction();
 		}
 
 		if (! parent.getConfig().isEnabled()) {
-		    return;
+			cleanupAfterTransaction();
+			if (hasIndexTransaction()) {
+				try {
+					parent.indexer.discardUncommittedChanges();
+				} catch (Exception e) {
+					throw new PluginException("Unable to discard uncommitted GeoSPARQL Lucene changes.", e);
+				}
+			}
+			return;
 		}
 
 		final TLongHashSet processedFeatures = new TLongHashSet();
@@ -183,7 +190,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	}
 
 	void preparePersistentMutation() {
-		if (!graphDbTransactionActive) {
+		if (!graphDbTransactionActive || persistentMutationMarked) {
 			return;
 		}
 		try {
@@ -192,6 +199,11 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		} catch (IOException e) {
 			throw new PluginException("Unable to persist the GeoSPARQL transaction marker.", e);
 		}
+	}
+
+	void saveConfigForTransaction() {
+		preparePersistentMutation();
+		GeoSparqlUtils.saveConfig(parent.getConfig(), parent.getDataDir().toPath());
 	}
 
 	private void cleanupAfterTransaction() {
