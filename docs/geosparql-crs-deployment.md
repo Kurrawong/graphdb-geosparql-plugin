@@ -26,11 +26,23 @@ the left operand's CRS when required.
 This policy treats independently derived CRS84 index envelopes as conservative for non-disjoint candidate lookup,
 including when Jena cleans transformed coordinates in a non-CRS84 target CRS. Transformed envelopes include Jena's
 pinned cleanup displacement in CRS84 units. Apache SIS does not provide a universal mathematical proof that its
-transformed envelopes contain every possible transformed geometry.
+transformed envelopes contain every possible transformed geometry. This is an intentional engineering trade-off: the
+plugin does not scan every different-CRS source merely because that formal proof is unavailable. A reproducible
+under-bound remains a correctness defect, while
+[issue #6](https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/6) records the residual SIS-envelope
+qualification risk.
+
+Transform failures and results that cannot be represented safely as one Lucene geographic rectangle use the world
+CRS84 fallback. CRS-environment fingerprint changes require a force reindex, and differential coverage across the
+maintained CRS and runtime matrix is a correctness control. These safeguards do not turn the SIS result into a
+mathematical enclosure guarantee.
 
 Disjoint relations keep a separate mixed-CRS exact-evaluation phase. Candidate lookup does not use independently
 derived CRS84 envelopes to make a definite disjoint classification when coordinate cleanup occurs in another CRS.
 This phase can process all spatial sources in relevant different CRSes.
+
+This asymmetry keeps ordinary non-disjoint queries selective while preventing independently derived envelopes from
+establishing a positive disjoint result without exact evaluation.
 
 ## Default Behavior Without CRS Configuration
 
