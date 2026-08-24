@@ -68,7 +68,7 @@ Useful upstream references:
 
 When GeoSPARQL is enabled and repository data contains a geometry whose CRS cannot be parsed, resolved, or transformed with the available CRS data, indexing fails by default and reports the geometry and CRS. This can happen during incremental indexing after inserts or during a full reindex.
 
-If `ignoreErrors=true`, invalid or unsupported repository geometries are skipped during indexing with a warning. This can help load incomplete data, but it does not make the skipped geometries queryable.
+If `ignoreErrors=true`, invalid or unsupported repository geometries are skipped during indexing with a warning. This can help load incomplete data, but it does not make the skipped geometries queryable. `ignoreErrors` does not apply to Lucene index storage or writer failures; those abort the GraphDB transaction so a deletion cannot be published without its replacement documents.
 
 Set the option with this SPARQL update:
 

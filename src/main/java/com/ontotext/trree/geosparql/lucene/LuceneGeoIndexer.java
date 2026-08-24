@@ -23,7 +23,6 @@ import org.apache.lucene.store.FSDirectory;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.spatial4j.context.SpatialContext;
 import org.locationtech.spatial4j.shape.Rectangle;
-import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -78,7 +77,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	private boolean recoveryRequired;
 	private boolean recoveryRequiredAtTransactionStart;
 	private Path pendingTransactionMarker;
-    private Logger logger;
 	private boolean schemaMismatchDetected;
 	private boolean crsEnvironmentMismatchDetected;
 	private boolean compatibilityMetadataPending;
@@ -104,8 +102,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public void initialize() throws Exception {
-		this.logger = parent.getLogger();
-
 		this.ctx = SpatialContext.GEO;
 
         this.indexDir = GeoSparqlConfig.resolveIndexPath(parent.getDataDir().toPath());
@@ -296,13 +292,13 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		try {
 			List<org.apache.lucene.document.Document> documents = LuceneGeoDocumentSchema.toDocuments(
 					subject, geometries, strategy, ctx);
-			indexWriter.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(subject));
+			deleteEntityDocuments(subject);
 			if (!documents.isEmpty()) {
-				indexWriter.addDocuments(documents);
+				addEntityDocuments(documents);
 				compatibilityMetadataPending = true;
 			}
 		} catch (Exception e) {
-			handleCreateDocumentUnhandledException(subject, subjectMapper, e);
+			throw luceneMutationFailure(subject, subjectMapper, e);
 		}
 	}
 
@@ -310,11 +306,23 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	public void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
 		assertWritableCurrentSchema();
 		try {
-			indexWriter.addDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
+			addEntityDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
 			compatibilityMetadataPending = true;
 		} catch (Exception e) {
-			handleCreateDocumentUnhandledException(subject, subjectMapper, e);
+			throw luceneMutationFailure(subject, subjectMapper, e);
 		}
+	}
+
+	void deleteEntityDocuments(long subject) throws IOException {
+		indexWriter.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(subject));
+	}
+
+	void addEntityDocuments(List<org.apache.lucene.document.Document> documents) throws IOException {
+		indexWriter.addDocuments(documents);
+	}
+
+	void addEntityDocument(org.apache.lucene.document.Document document) throws IOException {
+		indexWriter.addDocument(document);
 	}
 
 	@Override
@@ -512,15 +520,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		return DirectoryReader.open(directory);
 	}
 
-	private void handleCreateDocumentUnhandledException(long subject, Function<Long, String> subjectMapper, Exception e) {
-		String subjectIri = subjectMapper.apply(subject);
-
-		if (parent.getConfig().isIgnoreErrors()) {
-			logger.warn("Could not create GeoDocument for subject " + subjectIri, e);
-		} else {
-			throw new PluginException("Could not create GeoDocument for subject " + subjectIri +
-					"\nIf you want to ignore this message and still build the index configure ignoreErrors = true (refer to documentation) and rebuild the index", e);
+	private PluginException luceneMutationFailure(long subject, Function<Long, String> subjectMapper, Exception e) {
+		if (e instanceof PluginException) {
+			return (PluginException) e;
 		}
+		return new PluginException("Unable to persist GeoSPARQL Lucene documents for subject "
+				+ subjectMapper.apply(subject), e);
 	}
 
 	private void assertReadableCurrentSchema() {
