@@ -36,11 +36,21 @@ public interface GeoSparqlIndexer {
 	CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry);
 
 	/**
+	 * Returns mixed-CRS source documents that a partitioned disjoint traversal must exact-evaluate because coordinate
+	 * cleanup in the target CRS prevents a safe definite envelope classification.
+	 */
+	default CloseableIterator<CandidateEntity> getDisjointTransformCleanupCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		return getAllEntities();
+	}
+
+	/**
 	 * Returns uncertain candidates for one bound source in a partitioned disjoint traversal.
 	 *
-	 * <p>Adapters may safely remove candidates whose exact envelope metadata proves they cannot be disjoint. The
-	 * returned candidates carry complete source payloads. Callers own and must close the iterator. Implementations
-	 * without a definite-non-match proof retain ordinary conservative envelope intersections.
+	 * <p>Under the candidate-envelope containment contract, adapters may remove candidates whose precise envelope
+	 * ordinate metadata proves they cannot be disjoint. The returned candidates carry complete source payloads.
+	 * Callers own and must close the iterator. Implementations without a definite-non-match proof retain ordinary
+	 * conservative envelope intersections.
 	 *
 	 * @param boundSourceIndexGeometry derived index envelope for one bound source geometry literal
 	 * @return a closeable iterator over uncertain entity groups and their matching source geometry literal snapshots
@@ -59,6 +69,11 @@ public interface GeoSparqlIndexer {
 	 */
 	CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
 			IndexGeometry boundSourceIndexGeometry);
+
+	default CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		return getEnvelopeDisjointCandidates(boundSourceIndexGeometry);
+	}
 
 	/** Returns entities represented by non-spatial empty-sentinel source documents for exact evaluation. */
 	CloseableIterator<CandidateEntity> getNonSpatialCandidates();
@@ -79,9 +94,37 @@ public interface GeoSparqlIndexer {
 
 	void begin() throws Exception;
 
+	/** Returns whether this indexer is retaining transaction outcome state. */
+	default boolean isTransactionActive() {
+		return false;
+	}
+
 	void commit() throws Exception;
 
+	/** Discards writer changes while retaining state needed to finalize the GraphDB transaction outcome. */
+	default void discardUncommittedChanges() throws Exception {
+		throw new UnsupportedOperationException(
+				"Discarding index changes while retaining transaction outcome state is not supported.");
+	}
+
+	/**
+	 * Makes the most recently committed index transaction final after GraphDB completes the RDF transaction.
+	 */
+	default void complete() throws Exception {
+	}
+
 	void rollback() throws Exception;
+
+	/**
+	 * Restores the pre-transaction index while retaining fail-closed recovery state when another durable plugin state
+	 * could not be restored.
+	 */
+	default void rollback(boolean recoveryRequired) throws Exception {
+		if (recoveryRequired) {
+			throw new UnsupportedOperationException("Retaining index recovery state is not supported.");
+		}
+		rollback();
+	}
 
 	/** Appends the index geometry derived from one source geometry literal during a streaming full index build. */
 	void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry);

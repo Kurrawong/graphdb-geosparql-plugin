@@ -15,6 +15,33 @@ This guide explains how to provide and test those CRS data files.
 - Missing CRS definitions or grid-shift files are a configuration problem. They are not permission to reinterpret coordinates as CRS84 or WGS84.
 - A CRS that Apache SIS cannot parse, resolve, or transform fails by default. Missing EPSG or grid data can also reduce transformation accuracy without causing an error, so projected CRSes must be checked with known points.
 
+## Mixed-CRS Candidate Lookup
+
+Non-disjoint GeoSPARQL property relations use CRS84 index-envelope intersection for candidate lookup in both binding
+directions. A local bound geometry can therefore select a geographic candidate subset when the indexed source
+geometry literals use a different CRS. Broad or world-fallback index envelopes can still retain many candidates.
+Exact evaluation preserves source CRS semantics and subject/object order while transforming the right operand into
+the left operand's CRS when required.
+
+This policy treats independently derived CRS84 index envelopes as conservative for non-disjoint candidate lookup,
+including when Jena cleans transformed coordinates in a non-CRS84 target CRS. Transformed envelopes include Jena's
+pinned cleanup displacement in CRS84 units. Apache SIS does not provide a universal mathematical proof that its
+transformed envelopes contain every possible transformed geometry. This is an intentional engineering trade-off: the
+plugin does not scan every different-CRS source merely because that formal proof is unavailable. A reproducible
+under-bound remains a correctness defect.
+
+Transform failures and results that cannot be represented safely as one Lucene geographic rectangle use the world
+CRS84 fallback. CRS-environment fingerprint changes require a force reindex, and differential coverage across the
+maintained CRS and runtime matrix is a correctness control. These safeguards do not turn the SIS result into a
+mathematical enclosure guarantee.
+
+Disjoint relations keep a separate mixed-CRS exact-evaluation phase. Candidate lookup does not use independently
+derived CRS84 envelopes to make a definite disjoint classification when coordinate cleanup occurs in another CRS.
+This phase can process all spatial sources in relevant different CRSes.
+
+This asymmetry keeps ordinary non-disjoint queries selective while preventing independently derived envelopes from
+establishing a positive disjoint result without exact evaluation.
+
 ## Default Behavior Without CRS Configuration
 
 The plugin is intended to work out of the box for CRS84 GeoSPARQL data.
@@ -41,7 +68,7 @@ Useful upstream references:
 
 When GeoSPARQL is enabled and repository data contains a geometry whose CRS cannot be parsed, resolved, or transformed with the available CRS data, indexing fails by default and reports the geometry and CRS. This can happen during incremental indexing after inserts or during a full reindex.
 
-If `ignoreErrors=true`, invalid or unsupported repository geometries are skipped during indexing with a warning. This can help load incomplete data, but it does not make the skipped geometries queryable.
+If `ignoreErrors=true`, invalid or unsupported repository geometries are skipped during indexing with a warning. This can help load incomplete data, but it does not make the skipped geometries queryable. `ignoreErrors` does not apply to Lucene index storage or writer failures; those abort the GraphDB transaction so a deletion cannot be published without its replacement documents.
 
 Set the option with this SPARQL update:
 
@@ -163,7 +190,7 @@ The repository includes an opt-in smoke test that packages the plugin and suppli
 mvn -Pgraphdb-packaging-smoke verify
 ```
 
-This test uses GraphDB 10.8.12. EPSG:3006 is outside the subset built into Apache SIS, so the test fails if the external EPSG database is missing. It checks the packaging and `SIS_DATA` setup, but it does not replace testing in the target GraphDB 11 runtime.
+This test intentionally uses GraphDB 10.8.12 because GraphDB 10.8.x is the last generation that can start in unattended public CI without provisioning a separately issued licence; GraphDB 11+ requires a registered licence even for the Free edition. EPSG:3006 is outside the subset built into Apache SIS, so the test fails if the external EPSG database is missing. The smoke test checks assembled-plugin packaging and `SIS_DATA` wiring; it does not establish GraphDB 10.8 as the production target or replace testing in the target GraphDB 11 runtime.
 
 ### Target runtime check
 

@@ -106,13 +106,13 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
-	@Test public void relationFunctionAcceptsLegacyOptimizationArgument() throws RDF4JException {
+	@Test public void relationFunctionTypeErrorsOnExtraArgument() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:3"), vf().createLiteral("POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
 				"SELECT ?value1 ?value2 WHERE { <u:1> <u:1> ?value1 . <u:1> <u:2> ?value2 . FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?value2, ?value1, <opt:##byrdf>))}");
-		assertEquals(1, count(tq.evaluate()));
+		assertEquals(0, count(tq.evaluate()));
 		tq = conn().prepareTupleQuery(QueryLanguage.SPARQL,
 				"SELECT ?value1 ?value2 WHERE { <u:1> <u:1> ?value1 . <u:1> <u:2> ?value2 . FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?value1, ?value2, <opt:##byrdf>))}");
 		assertEquals(0, count(tq.evaluate()));
@@ -137,9 +137,10 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 				() -> evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)")));
 	}
 
-	@Test public void relateFourArgs() throws RDF4JException {
-		//extra arguments are currently just ignored...
-		evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"), vf().createLiteral("T**FF*FF*"), vf().createLiteral(false));
+	@Test public void relateRejectsFourArguments() throws RDF4JException {
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_RELATE, asLiteral("POINT(0 0)"), asLiteral("POINT(0 0)"),
+						vf().createLiteral("T**FF*FF*"), vf().createLiteral(false)));
 	}
 
 	@Test public void distance() throws RDF4JException {

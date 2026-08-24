@@ -159,16 +159,12 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
             String pluginEnabledStringLiteral = pluginConnection.getEntities().get(object).stringValue();
             config.setEnabled(XMLDatatypeUtil.parseBoolean(pluginEnabledStringLiteral));
             if (config.isEnabled() != wasPluginEnabled) {
-                GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
                 if (config.isEnabled()) {
                     initializeGeoIndexer();
+                }
+                updateListener.saveConfigForTransaction();
+                if (config.isEnabled()) {
                     indexAllData(false, pluginConnection);
-                } else {
-                    try {
-                        indexer.rollback();
-                    } catch (Exception e) {
-                        throw new PluginException("Unable to rollback plugin data", e);
-                    }
                 }
             }
         } else if (predicate == prefixTreePredicateId) {
@@ -191,13 +187,13 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
             String ignoreErrorsString = pluginConnection.getEntities().get(object).stringValue();
             boolean ignoreErrors = Boolean.parseBoolean(ignoreErrorsString);
             config.setIgnoreErrors(ignoreErrors);
-            GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+            updateListener.saveConfigForTransaction();
         } else if (predicate == maxBufferedDocsPredicateId) {
             String maxBufferedDocsString = pluginConnection.getEntities().get(object).stringValue();
             try {
                 int maxBufferedDocs = Integer.parseInt(maxBufferedDocsString);
                 config.setMaxBufferedDocs(maxBufferedDocs);
-                GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+                updateListener.saveConfigForTransaction();
             } catch (NumberFormatException e) {
                 throw new PluginException("Maximum buffered documents must be an integer number.");
             }
@@ -206,7 +202,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
             try {
                 double ramBufferSize = Double.parseDouble(ramBufferSizeString);
                 config.setRamBufferSizeMb(ramBufferSize);
-                GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+                updateListener.saveConfigForTransaction();
             } catch (NumberFormatException e) {
                 throw new PluginException("Ram buffer size must be a double number.");
             }
@@ -356,19 +352,26 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
     }
 
     private void indexAllData(boolean forced, PluginConnection pluginConnection) {
+        updateListener.prepareConfigMutation();
         config.updateCurrentSettings();
         indexer.initSettings();
         try {
+			boolean luceneTransactionAlreadyActive = indexer.isTransactionActive();
+			if (!luceneTransactionAlreadyActive) {
+				updateListener.beginIndexTransactionForPersistentMutation();
+			}
             if (forced) {
                 getLogger().info(">>>>>>>> GeoSPARQL: Initializing force reindexing process...");
                 new GeoSparqlFullIndexer(indexer, this).reindex(pluginConnection);
             } else {
                 getLogger().info(">>>>>>>> GeoSPARQL: Initializing indexing process...");
-                indexer.begin();
                 new GeoSparqlFullIndexer(indexer, this).reindex(pluginConnection);
-                indexer.commit();
+                // The enclosing GraphDB transaction, or an existing Lucene transaction, owns the outcome.
+                if (!updateListener.isGraphDbTransactionActive() && !luceneTransactionAlreadyActive) {
+                    indexer.commit();
+                }
             }
-            GeoSparqlUtils.saveConfig(config, getDataDir().toPath());
+            updateListener.saveConfigForTransaction();
             getLogger().info(">>>>>>>> GeoSPARQL: Indexing completed!");
         } catch (Exception e) {
             throw new PluginException("Unable to index GeoSPARQL geometries.", e);

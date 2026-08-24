@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.sis.geometry.DirectPosition2D;
+import org.apache.sis.geometry.Envelopes;
 import org.apache.sis.geometry.GeneralEnvelope;
 import org.apache.sis.referencing.CRS;
 import org.junit.Before;
@@ -14,6 +15,8 @@ import org.locationtech.spatial4j.context.SpatialContext;
 import org.opengis.geometry.DirectPosition;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.operation.CoordinateOperation;
+
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -27,6 +30,10 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String EPSG_32601 = "http://www.opengis.net/def/crs/EPSG/0/32601";
 	private static final String EPSG_4326 = "http://www.opengis.net/def/crs/EPSG/0/4326";
+	private static final String WGS84_3D = "http://www.opengis.net/def/crs/EPSG/0/4979";
+	private static final String GDA2020_3D = "http://www.opengis.net/def/crs/EPSG/0/7843";
+	private static final String GDA94_3D = "http://www.opengis.net/def/crs/EPSG/0/4939";
+	private static final String NAD83_CSRS_3D = "http://www.opengis.net/def/crs/EPSG/0/4955";
 	private static final String PROJECTED_LINE_WKT =
 			"<" + EPSG_32634 + "> LINESTRING(200000 7000000, 800000 7000000)";
 	private static final String PROJECTED_POINT_WKT =
@@ -46,6 +53,8 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 
 		assertTrue(sentinel.indexEnvelope().isNull());
 		assertFalse(sentinel.isSpatialCandidate());
+		assertEquals(CandidateBoundsKind.EMPTY, sentinel.candidateBoundsKind());
+		assertTrue(sentinel.candidateBoundsFallbackReason().isEmpty());
 		assertTrue(PROJECTOR.project(sentinel.sourceGeometryLiteral()).isNull());
 	}
 
@@ -57,8 +66,26 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 
 		assertEquals(new Envelope(1.0, 5.0, 2.0, 6.0), PROJECTOR.project(source));
 		assertEquals(new Envelope(1.0, 5.0, 2.0, 6.0), index.indexEnvelope());
+		assertEquals(CandidateBoundsKind.NATIVE_CRS84, index.candidateBoundsKind());
+		assertTrue(index.candidateBoundsFallbackReason().isEmpty());
 		assertTrue(index.isSpatialCandidate());
 		assertFalse(worldEnvelope().equals(index.indexEnvelope()));
+	}
+
+	@Test
+	public void gda2020PolygonUsesTransformedSelectiveBoundsRatherThanWorldFallback() {
+		IndexGeometry brisbane = IndexGeometry.fromSourceGeometryLiteral(
+				SourceGeometryLiteral.fromWkt(
+						"<http://www.opengis.net/def/crs/EPSG/0/7844> "
+								+ "POLYGON((-27.6 152.9,-27.3 152.9,-27.3 153.2,-27.6 153.2,-27.6 152.9))"));
+
+		assertEquals(CandidateBoundsKind.TRANSFORMED, brisbane.candidateBoundsKind());
+		assertTrue(brisbane.candidateBoundsFallbackReason().isEmpty());
+		assertTrue(brisbane.isSpatialCandidate());
+		assertFalse(worldEnvelope().equals(brisbane.indexEnvelope()));
+		assertTrue(brisbane.indexEnvelope().getWidth() < 1.0);
+		assertTrue(brisbane.indexEnvelope().getHeight() < 1.0);
+		assertTrue(brisbane.indexEnvelope().contains(153.03, -27.47));
 	}
 
 	@Test
@@ -68,9 +95,45 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 						"<" + EPSG_32634 + "> POINT(799997.80 4589779.63)"));
 
 		assertTrue(point.isSpatialCandidate());
+		assertEquals(CandidateBoundsKind.TRANSFORMED, point.candidateBoundsKind());
 		assertFalse(worldEnvelope().equals(point.indexEnvelope()));
 		assertTrue(point.indexEnvelope().getWidth() < 1.0);
 		assertTrue(point.indexEnvelope().getHeight() < 1.0);
+	}
+
+	@Test
+	public void threeDimensionalSourcesCoverDirectAndHorizontalSourceToCrs84Operations() throws Exception {
+		for (String wkt : List.of(
+				"<" + WGS84_3D + "> POINT Z(-27.47 153.03 3000)",
+				"<" + GDA2020_3D + "> POINT Z(-27.47 153.03 3000)",
+				"<" + GDA94_3D + "> POINT Z(-27.47 153.03 3000)",
+				"<" + NAD83_CSRS_3D + "> POINT Z(49.25 -123.1 300000)")) {
+			SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(wkt);
+			GeometryWrapper sourceWrapper = source.asGeometryWrapper();
+			CoordinateReferenceSystem sourceCrs = sourceWrapper.getCRS();
+			CoordinateReferenceSystem targetCrs = SRSRegistry.getCRS(IndexGeometry.INDEX_CRS);
+			Coordinate coordinate = sourceWrapper.getParsingGeometry().getCoordinate();
+			GeneralEnvelope sourceEnvelope = new GeneralEnvelope(sourceCrs);
+			sourceEnvelope.setRange(0, coordinate.x, coordinate.x);
+			sourceEnvelope.setRange(1, coordinate.y, coordinate.y);
+			sourceEnvelope.setRange(2, coordinate.getZ(), coordinate.getZ());
+			CoordinateOperation direct = CRS.findOperation(sourceCrs, targetCrs, null);
+			Envelope directBounds = ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(
+					Envelopes.transform(direct, sourceEnvelope));
+
+			CoordinateReferenceSystem horizontalCrs = CRS.getHorizontalComponent(sourceCrs);
+			GeneralEnvelope horizontalEnvelope = new GeneralEnvelope(horizontalCrs);
+			horizontalEnvelope.setRange(0, coordinate.x, coordinate.x);
+			horizontalEnvelope.setRange(1, coordinate.y, coordinate.y);
+			CoordinateOperation horizontal = CRS.findOperation(horizontalCrs, targetCrs, null);
+			Envelope horizontalBounds = ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(
+					Envelopes.transform(horizontal, horizontalEnvelope));
+
+			Envelope candidate = PROJECTOR.project(source);
+			assertTrue(wkt + "\ndirect operation: " + direct.getName(), candidate.contains(directBounds));
+			assertTrue(wkt + "\nhorizontal operation: " + horizontal.getName(),
+					candidate.contains(horizontalBounds));
+		}
 	}
 
 	@Test
@@ -171,6 +234,10 @@ public class ConservativeCrs84EnvelopeProjectorTest {
 	public void invertedOrOutOfRangeEnvelopesUseTheWorldFallback() {
 		assertEquals(worldEnvelope(),
 				ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(range(170, -170, 10, 20)));
+		assertEquals(CandidateBoundsKind.WORLD_FALLBACK,
+				ConservativeCrs84EnvelopeProjector.toLuceneGeoBounds(range(170, -170, 10, 20)).kind());
+		assertEquals(ConservativeCrs84EnvelopeProjector.FALLBACK_UNREPRESENTABLE_RECTANGLE,
+				ConservativeCrs84EnvelopeProjector.toLuceneGeoBounds(range(170, -170, 10, 20)).fallbackReason());
 		assertEquals(worldEnvelope(),
 				ConservativeCrs84EnvelopeProjector.toLuceneGeoEnvelope(range(170, 190, 10, 20)));
 		assertEquals(worldEnvelope(),

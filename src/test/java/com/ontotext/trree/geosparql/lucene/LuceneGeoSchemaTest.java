@@ -72,14 +72,78 @@ public class LuceneGeoSchemaTest {
 	}
 
 	private LuceneGeoIndexer createIndexer(File dataDir) throws Exception {
+		return createIndexer(dataDir, "test-crs-environment");
+	}
+
+	private LuceneGeoIndexer createIndexer(File dataDir, String crsEnvironmentFingerprint) throws Exception {
 		GeoSparqlPlugin parent = new GeoSparqlPlugin();
 		parent.setConfig(new GeoSparqlConfig());
 		parent.setLogger(LOG);
 		parent.setDataDir(dataDir);
 
-		LuceneGeoIndexer indexer = new LuceneGeoIndexer(parent);
+		LuceneGeoIndexer indexer = new LuceneGeoIndexer(parent, () -> crsEnvironmentFingerprint);
 		indexer.initialize();
 		return indexer;
+	}
+
+	@Test
+	public void projectedIndexRejectsChangedCrsEnvironment() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("changed-crs-environment");
+		Files.createDirectories(dataDir);
+		LuceneGeoIndexer builder = createIndexer(dataDir.toFile(), "environment-a");
+		builder.begin();
+		builder.indexGeometryList(1L, subject -> "Subject " + subject, List.of(
+				TestIndexGeometries.fromSource(SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT))));
+		builder.commit();
+		builder.complete();
+
+		LuceneGeoIndexer reopened = createIndexer(dataDir.toFile(), "environment-b");
+		PluginException exception = assertThrows(PluginException.class,
+				() -> reopened.getSourceGeometryLiteralsFor(0));
+
+		assertTrue(exception.getMessage().contains("CRS transformation environment"));
+		assertTrue(exception.getMessage().contains("force-reindex"));
+	}
+
+	@Test
+	public void projectedIndexReopensWithIdenticalCrsEnvironment() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("identical-crs-environment");
+		Files.createDirectories(dataDir);
+		LuceneGeoIndexer builder = createIndexer(dataDir.toFile(), "environment-a");
+		builder.begin();
+		builder.indexGeometryList(1L, subject -> "Subject " + subject, List.of(
+				TestIndexGeometries.fromSource(SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT))));
+		builder.commit();
+		builder.complete();
+
+		LuceneGeoIndexer reopened = createIndexer(dataDir.toFile(), "environment-a");
+		try (CloseableIterator<SourceGeometryLiteral> geometries = reopened.getSourceGeometryLiteralsFor(1L)) {
+			assertTrue(geometries.hasNext());
+			assertEquals(PROJECTED_POINT_WKT, geometries.next().lexicalForm());
+		}
+	}
+
+	@Test
+	public void forceReindexAdoptsCurrentCrsEnvironment() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("reindexed-crs-environment");
+		Files.createDirectories(dataDir);
+		LuceneGeoIndexer builder = createIndexer(dataDir.toFile(), "environment-a");
+		builder.begin();
+		builder.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		builder.commit();
+		builder.complete();
+
+		LuceneGeoIndexer rebuilder = createIndexer(dataDir.toFile(), "environment-b");
+		rebuilder.begin();
+		rebuilder.freshIndex();
+		rebuilder.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		rebuilder.commit();
+		rebuilder.complete();
+
+		LuceneGeoIndexer reopened = createIndexer(dataDir.toFile(), "environment-b");
+		try (CloseableIterator<SourceGeometryLiteral> geometries = reopened.getSourceGeometryLiteralsFor(1L)) {
+			assertTrue(geometries.hasNext());
+		}
 	}
 
 	private FailingCommitLuceneGeoIndexer createFailingCommitIndexer(File dataDir) throws Exception {
@@ -142,6 +206,32 @@ public class LuceneGeoSchemaTest {
 
         assertForceReindexMessage(exception);
     }
+
+	@Test
+	public void missingCandidateBoundsKindRequiresReindex() {
+		Document document = currentSchemaDocument(1L, sampleGeometry);
+		document.removeFields(LuceneGeoDocumentSchema.FIELD_CANDIDATE_BOUNDS_KIND);
+
+		PluginException exception = assertThrows(PluginException.class,
+				() -> LuceneGeoDocumentSchema.sourceGeometryLiteral(
+						document, new SourceGeometryLiteralResolver()));
+
+		assertForceReindexMessage(exception);
+	}
+
+	@Test
+	public void sourceCrsMustBeIndexedForSelectiveMixedCrsLookup() {
+		Document document = currentSchemaDocument(1L, sampleGeometry);
+		String sourceCrs = document.get(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS);
+		document.removeFields(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS);
+		document.add(new StoredField(LuceneGeoDocumentSchema.FIELD_SOURCE_CRS, sourceCrs));
+
+		PluginException exception = assertThrows(PluginException.class,
+				() -> LuceneGeoDocumentSchema.sourceGeometryLiteral(
+						document, new SourceGeometryLiteralResolver()));
+
+		assertForceReindexMessage(exception);
+	}
 
     @Test
     public void testMalformedSourceWkbRequiresForceReindex() throws Exception {
@@ -274,6 +364,22 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
+    public void testSchemaLayoutWithoutOrdinatePreservingSourceWkbRequiresReindex()
+            throws Exception {
+        Path missingSourceOrdinatesDataDir = tmpFolder.getRoot().toPath()
+                .resolve("schema-layout-without-source-ordinates");
+        Files.createDirectories(missingSourceOrdinatesDataDir);
+        writeSchemaLayoutWithoutOrdinatePreservingSourceWkb(missingSourceOrdinatesDataDir);
+
+        LuceneGeoIndexer indexer = createIndexer(missingSourceOrdinatesDataDir.toFile());
+
+        PluginException exception = assertThrows(PluginException.class,
+                () -> indexer.getSourceGeometryLiteralsFor(0));
+
+        assertForceReindexMessage(exception);
+    }
+
+    @Test
     public void testMarkedCurrentSchemaV2IndexPassesStartupGate() throws Exception {
         Path markedDataDir = tmpFolder.getRoot().toPath().resolve("marked-schema-v2");
         Files.createDirectories(markedDataDir);
@@ -301,6 +407,7 @@ public class LuceneGeoSchemaTest {
         indexer.begin();
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
         indexer.commit();
+		indexer.complete();
 
         try (FSDirectory dir = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(emptyDataDir));
              IndexReader reader = DirectoryReader.open(dir)) {
@@ -359,6 +466,25 @@ public class LuceneGeoSchemaTest {
         assertForceReindexMessage(exception);
     }
 
+	@Test
+	public void forceReindexPostCommitAbortRestoresPreviousSchemaGateAfterRestart() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("post-commit-reindex-abort");
+		Files.createDirectories(dataDir);
+		writeCurrentSchemaIndexWithoutCommitMarker(dataDir);
+
+		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+		indexer.begin();
+		indexer.freshIndex();
+		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		indexer.commit();
+		indexer.rollback();
+
+		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
+		PluginException exception = assertThrows(PluginException.class,
+				() -> restarted.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(exception);
+	}
+
     @Test
     public void testForceReindexInProgressKeepsReadsBlockedUntilCommit() throws Exception {
         Path missingMarkerDataDir = tmpFolder.getRoot().toPath().resolve("in-progress-reindex-mismatch");
@@ -393,11 +519,14 @@ public class LuceneGeoSchemaTest {
         indexer.failCommitClose();
 
         assertThrows(IOException.class, indexer::commit);
-        PluginException exception = assertThrows(PluginException.class,
+		PluginException pending = assertThrows(PluginException.class,
                 () -> indexer.getSourceGeometryLiteralsFor(0));
+		assertTrue(pending.getMessage().contains("pending GraphDB transaction"));
 
-        assertForceReindexMessage(exception);
         indexer.rollback();
+		PluginException mismatch = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(mismatch);
     }
 
     @Test
@@ -411,6 +540,7 @@ public class LuceneGeoSchemaTest {
         indexer.freshIndex();
         indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
         indexer.commit();
+		indexer.complete();
 
         CloseableIterator<SourceGeometryLiteral> iterator =
                 indexer.getSourceGeometryLiteralsFor(0);
@@ -439,6 +569,7 @@ public class LuceneGeoSchemaTest {
                 SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT));
         projectedIndexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(projectedGeometry));
         projectedIndexer.commit();
+		projectedIndexer.complete();
 
         try (FSDirectory dir = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(projectedDataDir));
              IndexReader reader = DirectoryReader.open(dir)) {
@@ -603,6 +734,21 @@ public class LuceneGeoSchemaTest {
         }
     }
 
+    private void writeSchemaLayoutWithoutOrdinatePreservingSourceWkb(Path dataDir) throws Exception {
+        Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
+        Files.createDirectories(indexDir);
+        try (FSDirectory dir = FSDirectory.open(indexDir);
+             IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+            writer.addDocument(currentSchemaDocument(1L, sampleGeometry));
+            Map<String, String> commitData = new HashMap<>();
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_KEY,
+                    LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
+            commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
+                    "prefix-envelope-source-wkb-envelope-marker-topology-dv-envelope-points");
+            writer.setLiveCommitData(commitData.entrySet());
+        }
+    }
+
     private void writeMarkedDocument(Path dataDir, Document document) throws Exception {
         writeMarkedDocuments(dataDir, List.of(document));
     }
@@ -626,9 +772,10 @@ public class LuceneGeoSchemaTest {
         }
     }
 
-    private void markCurrentSchema(IndexWriter writer) {
-        writer.setLiveCommitData(LuceneGeoDocumentSchema.currentSchemaCommitData(writer.getLiveCommitData()));
-    }
+	private void markCurrentSchema(IndexWriter writer) {
+		writer.setLiveCommitData(LuceneGeoDocumentSchema.currentCompatibilityCommitData(
+				writer.getLiveCommitData(), "test-crs-environment"));
+	}
 
     private IndexWriterConfig noMergeIndexWriterConfig() {
         IndexWriterConfig config = new IndexWriterConfig();

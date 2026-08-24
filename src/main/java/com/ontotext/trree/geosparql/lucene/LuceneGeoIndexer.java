@@ -6,6 +6,7 @@ import com.ontotext.trree.geosparql.EnvelopeDisjointCandidate;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
+import com.ontotext.trree.geosparql.GeoSparqlTransactionMarker;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginException;
@@ -23,12 +24,13 @@ import org.apache.lucene.store.FSDirectory;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.spatial4j.context.SpatialContext;
 import org.locationtech.spatial4j.shape.Rectangle;
-import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Lucene-backed GeoSPARQL candidate indexer.
@@ -38,22 +40,19 @@ import java.util.function.Function;
  * document. Candidate queries group matching source documents by entity, while direct entity reads stream source
  * geometry literal snapshots. Returned iterators own their Lucene readers and are closed by their callers.
  *
- * <p>During startup, the indexer performs only an index-level schema check. A
- * non-empty index must have the schema v2 commit marker; missing or mismatched
- * commit metadata causes query and update paths to fail with the force-reindex
- * message. Because this check reads commit metadata rather than stored
- * documents, startup remains independent of the number of indexed geometries.
+ * <p>During startup, the indexer performs index-level schema and CRS transformation environment checks. A non-empty
+ * index must have the current schema metadata and the fingerprint of the transformation inputs used for candidate
+ * envelopes. Missing or mismatched commit metadata causes query and update paths to fail with a force-reindex
+ * message. These checks read commit metadata rather than stored documents, so startup remains independent of the
+ * number of indexed geometries. The fingerprint is required conservatively for every non-empty index.
  *
- * <p>Fresh indexes and empty indexes can accept v2 writes. Successful
- * v2 writes schedule the schema marker to be written on commit. Document-level
- * schema validation remains defensive: a marked index with malformed or mixed
- * documents fails during document decoding rather than silently using invalid
- * source geometry literal data.
+ * <p>Fresh indexes and empty indexes can accept v2 writes. Successful v2 writes schedule the compatibility metadata
+ * to be written on commit. Document-level schema validation remains defensive: a marked index with malformed or
+ * mixed documents fails during document decoding rather than silently using invalid source geometry literal data.
  *
  * <p>During force reindex, writes are allowed after {@link #freshIndex()}, but
- * reads remain gated by the previously committed schema state until commit
- * succeeds. Rollback or failed commit restores that previous schema state, so an
- * abandoned reindex cannot make this indexer trust an old non-current index.
+ * reads remain gated by the previously committed compatibility state until commit succeeds. Rollback or failed
+ * commit restores that previous state, so an abandoned reindex cannot make this indexer trust an incompatible index.
  */
 public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	private GeoSparqlPlugin parent;
@@ -65,33 +64,54 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
     private Directory directory;
 
-	private IndexWriterConfig iwConfig;
 	private IndexWriter indexWriter;
-    private Logger logger;
+	private SnapshotDeletionPolicy snapshotDeletionPolicy;
+	private IndexCommit preTransactionCommit;
+	private boolean transactionActive;
+	private boolean provisionalCommitPublished;
+	private boolean schemaMismatchAtTransactionStart;
+	private boolean crsEnvironmentMismatchAtTransactionStart;
+	private boolean recoveryRequired;
+	private boolean recoveryRequiredAtTransactionStart;
+	private GeoSparqlTransactionMarker pendingTransactionMarker;
 	private boolean schemaMismatchDetected;
-	private boolean schemaMarkerPending;
+	private boolean crsEnvironmentMismatchDetected;
+	private boolean compatibilityMetadataPending;
 	private boolean schemaRebuildInProgress;
-	private boolean schemaMismatchBeforeRebuild;
+	private final Supplier<String> crsEnvironmentFingerprintSupplier;
+	private String currentCrsEnvironmentFingerprint;
 
 	static final String SCHEMA_MISMATCH_MESSAGE = LuceneGeoDocumentSchema.SCHEMA_MISMATCH_MESSAGE;
+	static final String CRS_ENVIRONMENT_MISMATCH_MESSAGE =
+			"The GeoSPARQL Lucene index was built with a different CRS transformation environment. "
+			+ "Apache SIS, EPSG definitions, or datum transformation grids have changed. "
+			+ "Queries are unavailable until a full GeoSPARQL force-reindex completes.";
 
 	public LuceneGeoIndexer(GeoSparqlPlugin parent) {
+		this(parent, CrsEnvironmentFingerprint::current);
+	}
+
+	LuceneGeoIndexer(GeoSparqlPlugin parent, Supplier<String> crsEnvironmentFingerprintSupplier) {
 		this.parent = parent;
+		this.crsEnvironmentFingerprintSupplier = crsEnvironmentFingerprintSupplier;
 	}
 
 
 	@Override
 	public void initialize() throws Exception {
-		this.logger = parent.getLogger();
-
 		this.ctx = SpatialContext.GEO;
 
         this.indexDir = GeoSparqlConfig.resolveIndexPath(parent.getDataDir().toPath());
 
 		this.directory = FSDirectory.open(indexDir);
+		this.pendingTransactionMarker = new GeoSparqlTransactionMarker(parent.getDataDir().toPath());
+		this.snapshotDeletionPolicy = new SnapshotDeletionPolicy(new KeepOnlyLastCommitDeletionPolicy());
 
 		initSettings();
+		currentCrsEnvironmentFingerprint = crsEnvironmentFingerprintSupplier.get();
 		schemaMismatchDetected = detectSchemaMismatch();
+		crsEnvironmentMismatchDetected = detectCrsEnvironmentMismatch();
+		recoveryRequired = pendingTransactionMarker.exists();
 	}
 
 	@Override
@@ -112,35 +132,80 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public void begin() throws Exception {
-		iwConfig = new IndexWriterConfig();
+		if (transactionActive) {
+			throw new IllegalStateException("A GeoSPARQL index transaction is already active.");
+		}
+		Files.createDirectories(indexDir);
+		boolean existingCommit = DirectoryReader.indexExists(directory);
+		indexWriter = new IndexWriter(directory, newIndexWriterConfig());
+		try {
+			preTransactionCommit = existingCommit ? snapshotExistingCommit() : null;
+			transactionActive = true;
+			provisionalCommitPublished = false;
+			schemaMismatchAtTransactionStart = schemaMismatchDetected;
+			crsEnvironmentMismatchAtTransactionStart = crsEnvironmentMismatchDetected;
+			recoveryRequiredAtTransactionStart = recoveryRequired;
+		} catch (Exception e) {
+			try {
+				releasePreTransactionCommit();
+			} catch (IOException cleanupFailure) {
+				e.addSuppressed(cleanupFailure);
+			}
+			try {
+				indexWriter.rollback();
+			} catch (IOException cleanupFailure) {
+				e.addSuppressed(cleanupFailure);
+			}
+			indexWriter = null;
+			throw e;
+		}
+	}
+
+	IndexCommit snapshotExistingCommit() throws IOException {
+		return snapshotDeletionPolicy.snapshot();
+	}
+
+	private IndexWriterConfig newIndexWriterConfig() {
+		IndexWriterConfig config = new IndexWriterConfig();
 		// Turn off compound file format.
 		// Building the compound file format takes time during indexing (7-33%)
-		iwConfig.setUseCompoundFile(false);
+		config.setUseCompoundFile(false);
 		// Set maxBufferedDocs large enough to prevent the writer from flushing based on document count.
-		iwConfig.setMaxBufferedDocs(parent.getConfig().getMaxBufferedDocs());
+		config.setMaxBufferedDocs(parent.getConfig().getMaxBufferedDocs());
 		//More RAM before flushing means Lucene writes larger segments to begin with which means less merging later.
-		iwConfig.setRAMBufferSizeMB(parent.getConfig().getRamBufferSizeMb());
-		indexWriter = new IndexWriter(directory, iwConfig);
+		config.setRAMBufferSizeMB(parent.getConfig().getRamBufferSizeMb());
+		config.setIndexDeletionPolicy(snapshotDeletionPolicy);
+		return config;
+	}
+
+	@Override
+	public boolean isTransactionActive() {
+		return transactionActive;
 	}
 
 	@Override
 	public void commit() throws Exception {
 		boolean rebuildWasInProgress = schemaRebuildInProgress;
-		boolean committed = false;
 		try {
-			writeSchemaMarkerIfNeeded();
+			if (recoveryRequiredAtTransactionStart && !rebuildWasInProgress) {
+				assertReadableCurrentSchema();
+			}
+			writeCompatibilityMetadataIfNeeded();
+			pendingTransactionMarker.create();
+			recoveryRequired = true;
 			closeIndexWriter(); // also commits
-			committed = true;
+			provisionalCommitPublished = true;
 			if (rebuildWasInProgress) {
 				schemaMismatchDetected = false;
+				crsEnvironmentMismatchDetected = false;
 			}
 		} finally {
-			if (!committed && schemaRebuildInProgress) {
-				schemaMismatchDetected = schemaMismatchBeforeRebuild;
+			if (!provisionalCommitPublished) {
+				schemaMismatchDetected = schemaMismatchAtTransactionStart;
+				crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
 			}
-			schemaMarkerPending = false;
+			compatibilityMetadataPending = false;
 			schemaRebuildInProgress = false;
-			schemaMismatchBeforeRebuild = false;
 		}
 	}
 
@@ -149,21 +214,86 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	@Override
-	public void rollback() throws Exception {
-		try {
-			indexWriter.rollback();
-		} finally {
-			restoreSchemaStateAfterUncommittedRebuild();
-			schemaMarkerPending = false;
+	public void discardUncommittedChanges() throws Exception {
+		if (!transactionActive || indexWriter == null || !indexWriter.isOpen()) {
+			return;
 		}
+		indexWriter.rollback();
+		indexWriter = null;
+		provisionalCommitPublished = false;
+		schemaMismatchDetected = schemaMismatchAtTransactionStart;
+		crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
+		compatibilityMetadataPending = false;
+		schemaRebuildInProgress = false;
+	}
+
+	@Override
+	public void complete() throws Exception {
+		if (!transactionActive) {
+			return;
+		}
+		IOException cleanupFailure = null;
+		try {
+			releasePreTransactionCommit();
+			deleteObsoleteCommits();
+		} catch (IOException e) {
+			cleanupFailure = e;
+		}
+		try {
+			pendingTransactionMarker.remove();
+		} catch (IOException e) {
+			if (cleanupFailure == null) {
+				cleanupFailure = e;
+			} else {
+				cleanupFailure.addSuppressed(e);
+			}
+		}
+		recoveryRequired = false;
+		clearTransactionState();
+		if (cleanupFailure != null) {
+			throw cleanupFailure;
+		}
+	}
+
+	@Override
+	public void rollback() throws Exception {
+		rollback(false);
+	}
+
+	@Override
+	public void rollback(boolean requireRecovery) throws Exception {
+		if (!transactionActive) {
+			return;
+		}
+		boolean pendingCommit = pendingTransactionMarker.exists();
+		if (indexWriter != null && indexWriter.isOpen()) {
+			indexWriter.rollback();
+		}
+		boolean commitWasPublished = provisionalCommitPublished
+				|| pendingCommit && hasCommitAfterPreTransactionCommit();
+		if (commitWasPublished) {
+			restorePreTransactionCommit();
+		}
+		releasePreTransactionCommit();
+		deleteObsoleteCommits();
+		schemaMismatchDetected = schemaMismatchAtTransactionStart;
+		crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
+		recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
+		if (requireRecovery && !pendingTransactionMarker.exists()) {
+			pendingTransactionMarker.create();
+		}
+		if (!recoveryRequired) {
+			pendingTransactionMarker.remove();
+		}
+		initSettings();
+		clearTransactionState();
 	}
 
 	@Override
 	public void freshIndex() throws Exception {
 		indexWriter.deleteAll();
-		schemaMismatchBeforeRebuild = schemaMismatchDetected;
 		schemaRebuildInProgress = true;
-		schemaMarkerPending = true;
+		compatibilityMetadataPending = true;
 	}
 
 	@Override
@@ -173,13 +303,13 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		try {
 			List<org.apache.lucene.document.Document> documents = LuceneGeoDocumentSchema.toDocuments(
 					subject, geometries, strategy, ctx);
-			indexWriter.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(subject));
+			deleteEntityDocuments(subject);
 			if (!documents.isEmpty()) {
-				indexWriter.addDocuments(documents);
-				schemaMarkerPending = true;
+				addEntityDocuments(documents);
+				compatibilityMetadataPending = true;
 			}
 		} catch (Exception e) {
-			handleCreateDocumentUnhandledException(subject, subjectMapper, e);
+			throw luceneMutationFailure(subject, subjectMapper, e);
 		}
 	}
 
@@ -187,11 +317,23 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	public void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
 		assertWritableCurrentSchema();
 		try {
-			indexWriter.addDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
-			schemaMarkerPending = true;
+			addEntityDocument(LuceneGeoDocumentSchema.toDocument(subject, geometry, strategy, ctx));
+			compatibilityMetadataPending = true;
 		} catch (Exception e) {
-			handleCreateDocumentUnhandledException(subject, subjectMapper, e);
+			throw luceneMutationFailure(subject, subjectMapper, e);
 		}
+	}
+
+	void deleteEntityDocuments(long subject) throws IOException {
+		indexWriter.deleteDocuments(LuceneGeoDocumentSchema.entityIdQuery(subject));
+	}
+
+	void addEntityDocuments(List<org.apache.lucene.document.Document> documents) throws IOException {
+		indexWriter.addDocuments(documents);
+	}
+
+	void addEntityDocument(org.apache.lucene.document.Document document) throws IOException {
+		indexWriter.addDocument(document);
 	}
 
 	@Override
@@ -202,6 +344,18 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 		Query envelopeIntersections = envelopeIntersectionsQuery(boundSourceIndexGeometry);
 		return getCandidateEntitiesForQuery(envelopeIntersections);
+	}
+
+	@Override
+	public CloseableIterator<CandidateEntity> getDisjointTransformCleanupCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		assertReadableCurrentSchema();
+		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
+			return getCandidateEntitiesForQuery(
+					new MatchNoDocsQuery("Empty source has no disjoint transform-cleanup candidates."));
+		}
+		return getCandidateEntitiesForQuery(
+				disjointTransformCleanupCandidatesQuery(boundSourceIndexGeometry, candidateIsSubject));
 	}
 
 	@Override
@@ -217,17 +371,20 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			return getCandidateEntitiesForQuery(envelopeIntersections);
 		}
 		/*
-		 * Every source geometry lies inside its exact index envelope. When the bound source fills its own envelope,
-		 * a candidate envelope wholly inside that rectangle proves the source pair cannot be disjoint. The inclusive
-		 * ranges also remove boundary-contained sources: touching the closed bound still makes sfDisjoint,
-		 * ehDisjoint, and rcc8dc false.
+		 * A native CRS84 source lies inside its source-derived index envelope. A transformed source is treated as lying
+		 * inside its SIS-derived index envelope under the conservative-envelope engineering assumption documented by
+		 * ConservativeCrs84EnvelopeProjector. On that premise, when the native CRS84 bound source fills its own
+		 * envelope, a candidate envelope wholly inside that rectangle proves the source pair cannot be disjoint. The
+		 * inclusive ranges also remove boundary-contained sources: touching the closed bound still makes sfDisjoint,
+		 * ehDisjoint, and rcc8dc false. A mixed-CRS candidate subject whose cleanup target is non-CRS84 is retained
+		 * separately because the CRS84 containment proof does not model that displacement.
 		 */
-		Query uncertain = new BooleanQuery.Builder()
-				.add(envelopeIntersections, BooleanClause.Occur.FILTER)
+		Query ordinaryUncertain = new BooleanQuery.Builder()
+				.add(envelopeIntersectionsQuery(boundSourceIndexGeometry), BooleanClause.Occur.FILTER)
 				.add(LuceneGeoDocumentSchema.envelopeWithinQuery(
 						boundSourceIndexGeometry.indexEnvelope()), BooleanClause.Occur.MUST_NOT)
 				.build();
-		return getCandidateEntitiesForQuery(uncertain);
+		return getCandidateEntitiesForQuery(ordinaryUncertain);
 	}
 
 	@Override
@@ -238,17 +395,35 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			return getEnvelopeDisjointCandidatesForQuery(
 					new MatchNoDocsQuery("Empty source has no envelope-disjoint partition."));
 		}
-		Query envelopeIntersections = envelopeIntersectionsQuery(boundSourceIndexGeometry);
+		return getEnvelopeDisjointCandidatesForQuery(
+				envelopeDisjointQuery(envelopeIntersectionsQuery(boundSourceIndexGeometry)));
+	}
+
+	@Override
+	public CloseableIterator<EnvelopeDisjointCandidate> getEnvelopeDisjointCandidates(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		assertReadableCurrentSchema();
+		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
+			return getEnvelopeDisjointCandidatesForQuery(
+					new MatchNoDocsQuery("Empty source has no envelope-disjoint partition."));
+		}
+		Query envelopeIntersections = disjointCleanupSafeEnvelopeIntersectionsQuery(
+				boundSourceIndexGeometry, candidateIsSubject);
 		/*
-		 * Prefix-tree Intersects is conservative for indexed envelopes: approximation may retain false positives,
-		 * but does not omit an envelope that intersects the bound. Its complement therefore contains only
-		 * envelope-separated source documents, which the relation traversal can classify without source payloads.
+		 * Given direct containment for native CRS84 envelopes and the documented conservative-envelope engineering
+		 * assumption for SIS-transformed envelopes, prefix-tree Intersects is conservative for source geometries:
+		 * approximation may retain false positives but does not omit an envelope that intersects the bound. Its
+		 * complement therefore contains only envelope-separated source documents, which relation traversal can classify
+		 * without source payloads.
 		 */
-		Query envelopeDisjoint = new BooleanQuery.Builder()
+		return getEnvelopeDisjointCandidatesForQuery(envelopeDisjointQuery(envelopeIntersections));
+	}
+
+	private Query envelopeDisjointQuery(Query envelopeIntersections) {
+		return new BooleanQuery.Builder()
 				.add(LuceneGeoDocumentSchema.hasEnvelopeQuery(true), BooleanClause.Occur.FILTER)
 				.add(envelopeIntersections, BooleanClause.Occur.MUST_NOT)
 				.build();
-		return getEnvelopeDisjointCandidatesForQuery(envelopeDisjoint);
 	}
 
 	@Override
@@ -306,6 +481,32 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(indexGeometry)));
 	}
 
+	private Query disjointCleanupSafeEnvelopeIntersectionsQuery(
+			IndexGeometry indexGeometry, boolean candidateIsSubject) {
+		return new BooleanQuery.Builder()
+				.add(envelopeIntersectionsQuery(indexGeometry), BooleanClause.Occur.SHOULD)
+				.add(disjointTransformCleanupCandidatesQuery(indexGeometry, candidateIsSubject),
+						BooleanClause.Occur.SHOULD)
+				.setMinimumNumberShouldMatch(1)
+				.build();
+	}
+
+	private Query disjointTransformCleanupCandidatesQuery(
+			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+		String boundSourceCrs = boundSourceIndexGeometry.sourceGeometryLiteral().effectiveCrsUri();
+		if (!candidateIsSubject && IndexGeometry.INDEX_CRS.equals(boundSourceCrs)) {
+			return new MatchNoDocsQuery("CRS84 cleanup does not prevent disjoint envelope classification.");
+		}
+		BooleanQuery.Builder query = new BooleanQuery.Builder()
+				.add(LuceneGeoDocumentSchema.hasEnvelopeQuery(true), BooleanClause.Occur.FILTER)
+				.add(LuceneGeoDocumentSchema.sourceCrsQuery(boundSourceCrs), BooleanClause.Occur.MUST_NOT);
+		if (candidateIsSubject) {
+			query.add(LuceneGeoDocumentSchema.sourceCrsQuery(IndexGeometry.INDEX_CRS),
+					BooleanClause.Occur.MUST_NOT);
+		}
+		return query.build();
+	}
+
 	private CloseableIterator<CandidateEntity> getCandidateEntitiesForQuery(Query query) {
 		try {
 			IndexReader indexReader = openReader();
@@ -330,20 +531,24 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		return DirectoryReader.open(directory);
 	}
 
-	private void handleCreateDocumentUnhandledException(long subject, Function<Long, String> subjectMapper, Exception e) {
-		String subjectIri = subjectMapper.apply(subject);
-
-		if (parent.getConfig().isIgnoreErrors()) {
-			logger.warn("Could not create GeoDocument for subject " + subjectIri, e);
-		} else {
-			throw new PluginException("Could not create GeoDocument for subject " + subjectIri +
-					"\nIf you want to ignore this message and still build the index configure ignoreErrors = true (refer to documentation) and rebuild the index", e);
+	private PluginException luceneMutationFailure(long subject, Function<Long, String> subjectMapper, Exception e) {
+		if (e instanceof PluginException) {
+			return (PluginException) e;
 		}
+		return new PluginException("Unable to persist GeoSPARQL Lucene documents for subject "
+				+ subjectMapper.apply(subject), e);
 	}
 
 	private void assertReadableCurrentSchema() {
+		if (recoveryRequired) {
+			throw new PluginException("The GeoSPARQL Lucene index has a pending GraphDB transaction. "
+					+ "Queries are unavailable until a full force-reindex completes.");
+		}
 		if (schemaMismatchDetected) {
 			throw new PluginException(SCHEMA_MISMATCH_MESSAGE);
+		}
+		if (crsEnvironmentMismatchDetected) {
+			throw new PluginException(CRS_ENVIRONMENT_MISMATCH_MESSAGE);
 		}
 	}
 
@@ -372,19 +577,83 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 	}
 
-	private void writeSchemaMarkerIfNeeded() throws IOException {
-		if (!schemaMarkerPending) {
-			return;
+	private boolean detectCrsEnvironmentMismatch() {
+		try {
+			if (!DirectoryReader.indexExists(directory)) {
+				return false;
+			}
+			try (DirectoryReader reader = DirectoryReader.open(directory)) {
+				if (reader.numDocs() == 0
+						|| !LuceneGeoDocumentSchema.hasCurrentSchemaCommitData(reader.getIndexCommit().getUserData())) {
+					return false;
+				}
+				return !currentCrsEnvironmentFingerprint.equals(reader.getIndexCommit().getUserData()
+						.get(LuceneGeoDocumentSchema.COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY));
+			}
+		} catch (IndexNotFoundException e) {
+			return false;
+		} catch (IOException e) {
+			throw new PluginException("Unable to inspect the GeoSPARQL Lucene index CRS environment.", e);
 		}
-		indexWriter.setLiveCommitData(LuceneGeoDocumentSchema.currentSchemaCommitData(
-				indexWriter.getLiveCommitData()));
 	}
 
-	private void restoreSchemaStateAfterUncommittedRebuild() {
-		if (schemaRebuildInProgress) {
-			schemaMismatchDetected = schemaMismatchBeforeRebuild;
-			schemaRebuildInProgress = false;
-			schemaMismatchBeforeRebuild = false;
+	private void writeCompatibilityMetadataIfNeeded() throws IOException {
+		if (!compatibilityMetadataPending) {
+			return;
 		}
+		indexWriter.setLiveCommitData(LuceneGeoDocumentSchema.currentCompatibilityCommitData(
+				indexWriter.getLiveCommitData(), currentCrsEnvironmentFingerprint));
+	}
+
+	protected void restorePreTransactionCommit() throws IOException {
+		IndexWriterConfig restoreConfig = newIndexWriterConfig();
+		if (preTransactionCommit == null) {
+			restoreConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+		} else {
+			restoreConfig.setIndexCommit(preTransactionCommit);
+		}
+		try (IndexWriter restoreWriter = new IndexWriter(directory, restoreConfig)) {
+			if (preTransactionCommit != null) {
+				restoreWriter.setLiveCommitData(preTransactionCommit.getUserData().entrySet());
+			}
+			restoreWriter.commit();
+		}
+	}
+
+	private boolean hasCommitAfterPreTransactionCommit() throws IOException {
+		if (!DirectoryReader.indexExists(directory)) {
+			return false;
+		}
+		if (preTransactionCommit == null) {
+			return true;
+		}
+		try (DirectoryReader reader = DirectoryReader.open(directory)) {
+			return reader.getIndexCommit().getGeneration() != preTransactionCommit.getGeneration();
+		}
+	}
+
+	private void releasePreTransactionCommit() throws IOException {
+		if (preTransactionCommit != null) {
+			snapshotDeletionPolicy.release(preTransactionCommit);
+			preTransactionCommit = null;
+		}
+	}
+
+	private void deleteObsoleteCommits() throws IOException {
+		IndexWriter cleanupWriter = new IndexWriter(directory, newIndexWriterConfig());
+		try {
+			cleanupWriter.deleteUnusedFiles();
+		} finally {
+			cleanupWriter.rollback();
+		}
+	}
+
+	private void clearTransactionState() {
+		transactionActive = false;
+		provisionalCommitPublished = false;
+		indexWriter = null;
+		compatibilityMetadataPending = false;
+		schemaRebuildInProgress = false;
+		recoveryRequiredAtTransactionStart = false;
 	}
 }

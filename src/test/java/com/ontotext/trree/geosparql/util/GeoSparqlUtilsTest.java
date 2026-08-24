@@ -1,11 +1,13 @@
 package com.ontotext.trree.geosparql.util;
 
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
+import com.ontotext.trree.sdk.PluginException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,6 +55,20 @@ public class GeoSparqlUtilsTest {
         assertTrue(migrated.isIgnoreErrors());
     }
 
+    @Test
+    public void failedConfigReplacementLeavesPreviousFileReadable() throws Exception {
+        Path pluginDataDir = tmpFolder.newFolder("failed-config-replacement").toPath();
+        GeoSparqlConfig previous = new GeoSparqlConfig();
+        GeoSparqlUtils.saveConfig(previous, pluginDataDir);
+
+        GeoSparqlConfig replacement = new GeoSparqlConfig();
+        replacement.setEnabled(true);
+
+        assertThrows(PluginException.class,
+                () -> GeoSparqlUtils.saveConfig(replacement, pluginDataDir, new FailingAtomicMove()));
+        assertFalse(GeoSparqlUtils.readConfig(pluginDataDir).isEnabled());
+    }
+
     private void assertConfigRoundTrip(boolean enabled, GeoSparqlConfig.PrefixTree prefixTree, int precision,
                       GeoSparqlConfig.PrefixTree currentPrefixTree, int currentPrecision, boolean ignoreErrors) {
         GeoSparqlConfig config1 = new GeoSparqlConfig();
@@ -75,5 +91,12 @@ public class GeoSparqlUtilsTest {
         assertEquals(currentPrefixTree, config2.getCurrentPrefixTree());
         assertEquals(currentPrecision, config2.getCurrentPrecision());
         assertEquals(ignoreErrors, config2.isIgnoreErrors());
+    }
+
+    private static final class FailingAtomicMove extends DurableFileOperations {
+        @Override
+        protected void replaceAtomically(Path stagingPath, Path targetPath) throws IOException {
+            throw new IOException("Simulated atomic replacement failure");
+        }
     }
 }

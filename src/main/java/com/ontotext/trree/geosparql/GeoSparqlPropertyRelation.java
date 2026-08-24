@@ -6,14 +6,18 @@ import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import org.eclipse.rdf4j.model.IRI;
 import org.locationtech.jts.geom.Dimension;
 
+import java.util.Collection;
+import java.util.List;
+
 import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
 
 /**
  * GeoSPARQL property relations exposed by GraphDB.
  *
- * <p>Every non-disjoint relation uses envelope intersection for conservative candidate lookup. Disjoint relations
- * partition source documents into envelope-proven matches and uncertain candidates that still require exact
- * evaluation. Jena exact evaluation always preserves subject/object argument order.
+ * <p>Non-disjoint relations use CRS84 index-envelope intersection for candidate lookup in both binding directions.
+ * Disjoint relations partition source documents into envelope-proven matches and uncertain candidates. Mixed-CRS
+ * pairs whose cleanup occurs in another CRS are retained for disjoint exact evaluation because CRS84 envelopes cannot
+ * safely classify them. Jena exact evaluation always preserves subject/object argument order.
  */
 public enum GeoSparqlPropertyRelation {
 	// Simple Features
@@ -104,5 +108,40 @@ public enum GeoSparqlPropertyRelation {
 		} catch (Exception e) {
 			throw new JenaGeoSparqlException("Unable to evaluate GeoSPARQL relation " + predicateUri, e);
 		}
+	}
+
+	/**
+	 * Returns whether any subject/object source pair satisfies this relation.
+	 *
+	 * <p>Property relations use existential entity semantics. An unevaluable source pair cannot establish the relation
+	 * and does not prevent another source pair or entity from matching.
+	 */
+	public boolean evaluate(Collection<SourceGeometryLiteral> subjectGeometries,
+			Collection<SourceGeometryLiteral> objectGeometries) {
+		if (subjectGeometries.isEmpty() || objectGeometries.isEmpty()) {
+			return false;
+		}
+		for (SourceGeometryLiteral subjectGeometry : subjectGeometries) {
+			for (SourceGeometryLiteral objectGeometry : objectGeometries) {
+				try {
+					if (evaluate(subjectGeometry, objectGeometry)) {
+						return true;
+					}
+				} catch (JenaGeoSparqlException ignored) {
+					// This source pair cannot establish the property relation.
+				}
+			}
+		}
+		return false;
+	}
+
+	public boolean evaluate(Collection<SourceGeometryLiteral> subjectGeometries,
+			SourceGeometryLiteral objectGeometry) {
+		return evaluate(subjectGeometries, List.of(objectGeometry));
+	}
+
+	public boolean evaluate(SourceGeometryLiteral subjectGeometry,
+			Collection<SourceGeometryLiteral> objectGeometries) {
+		return evaluate(List.of(subjectGeometry), objectGeometries);
 	}
 }

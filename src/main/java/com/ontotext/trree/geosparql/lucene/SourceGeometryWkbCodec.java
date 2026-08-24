@@ -6,9 +6,11 @@ import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
 import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
 import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
+import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.CoordinateSequence;
+import org.locationtech.jts.geom.CoordinateSequenceFilter;
 import org.locationtech.jts.geom.PrecisionModel;
 import org.locationtech.jts.geom.impl.PackedCoordinateSequenceFactory;
 import org.locationtech.jts.geom.util.GeometryEditor;
@@ -20,7 +22,10 @@ import org.locationtech.jts.io.WKBWriter;
 
 import java.util.EnumSet;
 
-/** Encodes the complete native-CRS source geometry used to reconstruct Jena exact-evaluation input. */
+/**
+ * Encodes the complete native-CRS source geometry used to reconstruct Jena exact-evaluation input.
+ * Axis-order conversion preserves vertical and measure ordinates.
+ */
 final class SourceGeometryWkbCodec {
 	private static final GeometryFactory WKB_WRITE_GEOMETRY_FACTORY = new GeometryFactory(
 			new PrecisionModel(), 0, PackedCoordinateSequenceFactory.DOUBLE_FACTORY);
@@ -31,7 +36,7 @@ final class SourceGeometryWkbCodec {
 	static byte[] encode(SourceGeometryLiteral source) {
 		GeometryWrapper wrapper = source.asGeometryWrapper();
 		CoordinateSequenceDimensions dimensions = wrapper.getCoordinateSequenceDimensions();
-		Geometry geometry = wrapper.getXYGeometry();
+		Geometry geometry = xyGeometryPreservingOrdinates(wrapper);
 		EnumSet<Ordinate> ordinates = switch (dimensions) {
 			case XY -> Ordinate.createXY();
 			case XYZ -> Ordinate.createXYZ();
@@ -42,6 +47,32 @@ final class SourceGeometryWkbCodec {
 		writer.setOutputOrdinates(ordinates);
 		return writer.write(dimensions == CoordinateSequenceDimensions.XYM
 				? repackXymForWkb(geometry) : geometry);
+	}
+
+	private static Geometry xyGeometryPreservingOrdinates(GeometryWrapper wrapper) {
+		Geometry geometry = wrapper.getParsingGeometry().copy();
+		if (SRSRegistry.getAxisXY(wrapper.getSrsURI())) {
+			return geometry;
+		}
+		geometry.apply(new CoordinateSequenceFilter() {
+			@Override
+			public void filter(CoordinateSequence sequence, int index) {
+				double x = sequence.getX(index);
+				sequence.setOrdinate(index, 0, sequence.getY(index));
+				sequence.setOrdinate(index, 1, x);
+			}
+
+			@Override
+			public boolean isDone() {
+				return false;
+			}
+
+			@Override
+			public boolean isGeometryChanged() {
+				return true;
+			}
+		});
+		return geometry;
 	}
 
 	private static Geometry repackXymForWkb(Geometry geometry) {

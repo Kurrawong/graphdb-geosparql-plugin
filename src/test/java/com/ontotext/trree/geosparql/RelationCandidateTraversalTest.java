@@ -107,6 +107,69 @@ public class RelationCandidateTraversalTest {
 	}
 
 	@Test
+	public void objectBoundNativeCrs84TraversalUsesEnvelopeCandidates() {
+		IndexGeometry bound = geometry("POINT(0 0)");
+		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
+		indexer.addEnvelopeCandidates(bound, candidate(1L, geometry("POINT(0 0)")));
+
+		RelationCandidateTraversal traversal = new RelationCandidateTraversal(indexer,
+				GeoSparqlPropertyRelation.SF_INTERSECTS, List.of(bound), false, LOG);
+
+		assertEquals(1L, traversal.next().entityId());
+		assertFalse(traversal.hasNext());
+		assertEquals(0, indexer.fullScanLookupCount);
+		assertEquals(List.of(bound.sourceGeometryLiteral()), indexer.envelopeLookupSources);
+	}
+
+	@Test
+	public void nonDisjointTraversalUsesOnlyEnvelopeCandidates() {
+		IndexGeometry bound = geometry("POINT(0 0)");
+		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
+		indexer.disjointCleanupCandidates = List.of(candidate(1L,
+				geometry("<http://www.opengis.net/def/crs/EPSG/0/32632> POINT(500000 5200000)")));
+
+		RelationCandidateTraversal traversal = new RelationCandidateTraversal(indexer,
+				GeoSparqlPropertyRelation.SF_INTERSECTS, List.of(bound), false, LOG);
+
+		assertFalse(traversal.hasNext());
+	}
+
+	@Test
+	public void objectBoundDisjointCleanupCandidatesRetainBoundSourceForExactEvaluation() {
+		IndexGeometry bound = geometry("POINT(0 0)");
+		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
+		indexer.disjointCleanupCandidates = List.of(candidate(1L,
+				geometry("<http://www.opengis.net/def/crs/EPSG/0/32632> POINT(500000 5200000)")));
+
+		RelationCandidateTraversal traversal = new RelationCandidateTraversal(indexer,
+				GeoSparqlPropertyRelation.SF_DISJOINT, List.of(bound), false, LOG);
+		RelationCandidateTraversal.Candidate candidate = traversal.next();
+
+		assertEquals(1L, candidate.entityId());
+		assertSame(bound.sourceGeometryLiteral(), candidate.boundSourceGeometryLiteral().orElseThrow());
+		assertFalse(traversal.hasNext());
+	}
+
+	@Test
+	public void subjectBoundDisjointUsesSelectivePartitionsAndMixedCrsCleanup() {
+		IndexGeometry bound = geometry(
+				"<http://www.opengis.net/def/crs/EPSG/0/32632> POINT(500000 5200000)");
+		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
+		indexer.disjointCleanupCandidates = List.of(candidate(1L, geometry("POINT(9 46.953529)")));
+
+		RelationCandidateTraversal traversal = new RelationCandidateTraversal(indexer,
+				GeoSparqlPropertyRelation.SF_DISJOINT, List.of(bound), true, LOG);
+
+		RelationCandidateTraversal.Candidate candidate = traversal.next();
+		assertEquals(RelationCandidateTraversal.MatchCertainty.REQUIRES_EXACT_EVALUATION,
+				candidate.matchCertainty());
+		assertSame(bound.sourceGeometryLiteral(), candidate.boundSourceGeometryLiteral().orElseThrow());
+		assertFalse(traversal.hasNext());
+		assertEquals(0, indexer.fullScanLookupCount);
+		assertEquals(List.of(bound.sourceGeometryLiteral()), indexer.envelopeDisjointLookupSources);
+	}
+
+	@Test
 	public void rcc8DefinitePartitionReturnsOnlyAreaAreaSourcePairs() {
 		IndexGeometry areaBound = geometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
 		TrackingGeoSparqlIndexer indexer = new TrackingGeoSparqlIndexer();
@@ -318,6 +381,7 @@ public class RelationCandidateTraversalTest {
 		private final List<SourceGeometryLiteral> envelopeDisjointLookupSources = new ArrayList<>();
 		private final List<String> events = new ArrayList<>();
 		private List<CandidateEntity> fullScanCandidates = List.of();
+		private List<CandidateEntity> disjointCleanupCandidates = List.of();
 		private List<CandidateEntity> nonSpatialCandidates = List.of();
 		private TrackingIterator<CandidateEntity> fullScanIterator;
 		private TrackingIterator<EnvelopeDisjointCandidate> lastDefiniteIterator;
@@ -370,6 +434,13 @@ public class RelationCandidateTraversalTest {
 			fullScanIterator = new TrackingIterator<>(fullScanCandidates, () -> {
 			});
 			return fullScanIterator;
+		}
+
+		@Override
+		public CloseableIterator<CandidateEntity> getDisjointTransformCleanupCandidates(
+				IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
+			return new TrackingIterator<>(disjointCleanupCandidates, () -> {
+			});
 		}
 
 		@Override

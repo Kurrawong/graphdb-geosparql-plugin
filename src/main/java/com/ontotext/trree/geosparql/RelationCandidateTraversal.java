@@ -13,10 +13,12 @@ import java.util.Optional;
 /**
  * Traverses candidate entities for one bound side of a GeoSPARQL property relation.
  *
- * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation. Full-scan traversal returns
- * complete candidate source sets. Partitioned disjoint traversal first returns source documents whose envelopes prove
- * a match, then exact-evaluates uncertain envelope intersections after removing eligible envelope-contained definite
- * non-matches, and finally evaluates non-spatial empty sentinels.
+ * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation and ends after the selective
+ * index-envelope phase. Full-scan traversal returns complete candidate source sets. Under the candidate-envelope
+ * containment contract, partitioned disjoint traversal first returns source documents whose envelopes prove a match,
+ * then exact-evaluates uncertain envelope intersections after removing eligible envelope-contained definite
+ * non-matches. It then exact-evaluates mixed-CRS pairs whose cleanup target prevents a safe envelope classification,
+ * and finally evaluates non-spatial empty sentinels.
  *
  * <p>The traversal owns its active Lucene iterator. It closes every phase before opening the next and closes the
  * active iterator when traversal ends early.
@@ -32,6 +34,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		ENVELOPE_INTERSECTIONS,
 		DEFINITE_MATCHES,
 		UNCERTAIN_CANDIDATES,
+		DISJOINT_TRANSFORM_CLEANUP_CANDIDATES,
 		EMPTY_SENTINELS,
 		DONE
 	}
@@ -39,6 +42,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 	private final GeoSparqlIndexer indexer;
 	private final GeoSparqlPropertyRelation relation;
 	private final List<IndexGeometry> boundIndexGeometries;
+	private final boolean boundSubject;
 	private final Logger logger;
 
 	private TraversalPhase phase;
@@ -51,9 +55,15 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 
 	RelationCandidateTraversal(GeoSparqlIndexer indexer, GeoSparqlPropertyRelation relation,
 			Collection<IndexGeometry> boundIndexGeometries, Logger logger) {
+		this(indexer, relation, boundIndexGeometries, true, logger);
+	}
+
+	RelationCandidateTraversal(GeoSparqlIndexer indexer, GeoSparqlPropertyRelation relation,
+			Collection<IndexGeometry> boundIndexGeometries, boolean boundSubject, Logger logger) {
 		this.indexer = indexer;
 		this.relation = relation;
 		this.boundIndexGeometries = List.copyOf(boundIndexGeometries);
+		this.boundSubject = boundSubject;
 		this.logger = logger;
 		this.phase = initialPhase();
 	}
@@ -127,6 +137,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 				case ENVELOPE_INTERSECTIONS -> loadNextEnvelopeIntersection();
 				case DEFINITE_MATCHES -> loadNextDefiniteMatch();
 				case UNCERTAIN_CANDIDATES -> loadNextUncertainCandidate();
+				case DISJOINT_TRANSFORM_CLEANUP_CANDIDATES -> loadNextDisjointTransformCleanupCandidate();
 				case EMPTY_SENTINELS -> loadNextEmptySentinel();
 				case DONE -> null;
 			};
@@ -196,9 +207,40 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			if (openNextEnvelopeIntersection()) {
 				continue;
 			}
+			beginPhase(TraversalPhase.DISJOINT_TRANSFORM_CLEANUP_CANDIDATES);
+			return null;
+		}
+	}
+
+	private Candidate loadNextDisjointTransformCleanupCandidate() {
+		while (true) {
+			if (currentExactCandidates != null && currentExactCandidates.hasNext()) {
+				return Candidate.exactForBoundSource(currentExactCandidates.next(),
+						currentBoundIndexGeometry.sourceGeometryLiteral());
+			}
+			closeActiveIterator();
+			if (openNextDisjointTransformCleanupCandidates()) {
+				continue;
+			}
 			beginPhase(TraversalPhase.EMPTY_SENTINELS);
 			return null;
 		}
+	}
+
+	private boolean openNextDisjointTransformCleanupCandidates() {
+		while (boundIndex < boundIndexGeometries.size()) {
+			currentBoundIndexGeometry = boundIndexGeometries.get(boundIndex++);
+			if (!currentBoundIndexGeometry.isSpatialCandidate()) {
+				continue;
+			}
+			if (!boundSourceCanParticipateInDisjointPartition(currentBoundIndexGeometry)) {
+				continue;
+			}
+			currentExactCandidates = indexer.getDisjointTransformCleanupCandidates(
+					currentBoundIndexGeometry, !boundSubject);
+			return true;
+		}
+		return false;
 	}
 
 	private Candidate loadNextEmptySentinel() {
@@ -222,7 +264,8 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			if (!boundSourceCanParticipateInDisjointPartition(currentBoundIndexGeometry)) {
 				continue;
 			}
-			currentDefiniteCandidates = indexer.getEnvelopeDisjointCandidates(currentBoundIndexGeometry);
+			currentDefiniteCandidates = indexer.getEnvelopeDisjointCandidates(
+					currentBoundIndexGeometry, !boundSubject);
 			return true;
 		}
 		return false;

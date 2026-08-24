@@ -86,13 +86,17 @@ public class SourceGeometryWkbCodecTest {
 	@Test
 	public void sourceWkbReconstructsAxisOrderSensitiveParsingAndXyGeometry() {
 		SourceGeometryLiteral original = SourceGeometryLiteral.fromWkt(
-				"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(50 10)");
+				"<http://www.opengis.net/def/crs/EPSG/0/7843> POINT Z(-27.47 153.03 55)");
 		SourceGeometryLiteral restored = roundTrip(original);
 
 		assertTrue(original.asGeometryWrapper().getXYGeometry()
 				.equalsExact(restored.asGeometryWrapper().getXYGeometry()));
 		assertTrue(original.asGeometryWrapper().getParsingGeometry()
 				.equalsExact(restored.asGeometryWrapper().getParsingGeometry()));
+		assertEquals(55,
+				restored.asGeometryWrapper().getXYGeometry().getCoordinate().getZ(), 0);
+		assertEquals(55,
+				restored.asGeometryWrapper().getParsingGeometry().getCoordinate().getZ(), 0);
 	}
 
 	@Test

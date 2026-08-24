@@ -8,6 +8,7 @@ import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.TestIndexGeometries;
+import com.ontotext.trree.geosparql.jena.CandidateBoundsKind;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.IndexGeometryFixtures;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
@@ -55,6 +56,7 @@ public class LuceneCandidateLookupTest {
 				List.of(geometry("POLYGON((3 3,3 6,6 6,6 3,3 3))")));
 		indexer.indexGeometryList(3L, id -> "separated", List.of(geometry("POINT(20 20)")));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L, 2L},
 				collectEntityIds(indexer.getEnvelopeIntersections(bound)));
@@ -108,11 +110,49 @@ public class LuceneCandidateLookupTest {
 					List.of(geometry("POINT(" + x + " " + y + ")")));
 		}
 		indexer.commit();
+		indexer.complete();
 
 		long[] candidates = collectEntityIds(indexer.getEnvelopeIntersections(bound));
 		assertEquals(candidateCount, candidates.length);
 		assertEquals(1L, candidates[0]);
 		assertEquals(candidateCount, candidates[candidates.length - 1]);
+	}
+
+	@Test
+	public void envelopeLookupKeepsOneEntityGroupedAcrossSearchPages() throws Exception {
+		LuceneGeoIndexer indexer = createIndexer("single-entity-envelope-paging");
+		int sourceCount = 1005;
+		IndexGeometry bound = rectangle(-1, 1, -1, 1);
+		List<IndexGeometry> firstEntityGeometries = new ArrayList<>(sourceCount);
+		Set<SourceGeometryLiteral> expectedFirstEntitySources = new HashSet<>();
+		for (int i = 0; i < sourceCount; i++) {
+			IndexGeometry source = geometry("POINT(" + (i + 1) / 10000.0 + " 0)");
+			firstEntityGeometries.add(source);
+			expectedFirstEntitySources.add(source.sourceGeometryLiteral());
+		}
+		IndexGeometry secondEntityGeometry = geometry("POINT(0 0.5)");
+
+		indexer.begin();
+		indexer.indexGeometryList(1L, id -> "many sources", firstEntityGeometries);
+		indexer.indexGeometryList(2L, id -> "one source", List.of(secondEntityGeometry));
+		indexer.commit();
+		indexer.complete();
+
+		try (CloseableIterator<CandidateEntity> candidates = indexer.getEnvelopeIntersections(bound)) {
+			assertTrue(candidates.hasNext());
+			CandidateEntity first = candidates.next();
+			assertEquals(1L, first.entityId());
+			assertEquals(sourceCount, first.matchingSourceGeometryLiterals().size());
+			assertEquals(expectedFirstEntitySources,
+					new HashSet<>(first.matchingSourceGeometryLiterals()));
+
+			assertTrue(candidates.hasNext());
+			CandidateEntity second = candidates.next();
+			assertEquals(2L, second.entityId());
+			assertEquals(List.of(secondEntityGeometry.sourceGeometryLiteral()),
+					second.matchingSourceGeometryLiterals());
+			assertFalse(candidates.hasNext());
+		}
 	}
 
 	@Test
@@ -153,6 +193,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "line", List.of(line));
 		indexer.indexGeometryList(2L, id -> "distant", List.of(distantCrs84));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(point)));
@@ -209,22 +250,31 @@ public class LuceneCandidateLookupTest {
 				emptyCollection.sourceGeometryLiteral(), polygon.sourceGeometryLiteral()));
 	}
 
+	/**
+	 * World-envelope Lucene behaviour for {@link CandidateBoundsKind#WORLD_FALLBACK}.
+	 *
+	 * <p>Valid-domain source literals in the CRS families under test produce {@link CandidateBoundsKind#TRANSFORMED}
+	 * through the projector. This fixture therefore injects the world envelope so the Lucene path can be checked
+	 * independently of CRS-data availability.
+	 */
 	@Test
 	public void worldFallbackEnvelopeRemainsACandidateAndIsNotADefiniteDisjointMatch() throws Exception {
 		LuceneGeoIndexer indexer = createIndexer("world-fallback-envelope");
 		IndexGeometry localBound = rectangle(-1, 1, -1, 1);
 		IndexGeometry fallback = IndexGeometryFixtures.withIndexEnvelope(
 				SourceGeometryLiteral.fromWkt("<" + EPSG_32634 + "> POINT(500000 7000000)"),
-				worldCrs84Envelope());
+				worldCrs84Envelope(), CandidateBoundsKind.WORLD_FALLBACK, "unrepresentable-rectangle");
 		IndexGeometry separated = geometry("POINT(20 20)");
 
 		assertFalse(fallback.isEnvelopeCoveringRectangle());
+		assertEquals(CandidateBoundsKind.WORLD_FALLBACK, fallback.candidateBoundsKind());
 		assertEquals(worldCrs84Envelope(), fallback.indexEnvelope());
 
 		indexer.begin();
 		indexer.indexGeometryList(1L, id -> "fallback", List.of(fallback));
 		indexer.indexGeometryList(2L, id -> "separated", List.of(separated));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(localBound)));
@@ -252,6 +302,7 @@ public class LuceneCandidateLookupTest {
 				List.of(geometry("POINT(2 2)"), geometry("LINESTRING(10 10,12 12)")));
 		indexer.indexGeometryList(7L, id -> "boundary touch", List.of(geometry("POINT(0 2)")));
 		indexer.commit();
+		indexer.complete();
 
 		List<EnvelopeDisjointCandidate> definite =
 				collectEnvelopeDisjointCandidates(indexer.getEnvelopeDisjointCandidates(bound));
@@ -281,6 +332,7 @@ public class LuceneCandidateLookupTest {
 					List.of(geometry("POINT(" + x + " " + y + ")")));
 		}
 		indexer.commit();
+		indexer.complete();
 
 		List<EnvelopeDisjointCandidate> candidates =
 				collectEnvelopeDisjointCandidates(indexer.getEnvelopeDisjointCandidates(bound));
@@ -303,6 +355,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "point", List.of(geometry("POINT(10 10)")));
 		indexer.indexGeometryList(2L, id -> "empty", List.of(empty));
 		indexer.commit();
+		indexer.complete();
 
 		assertTrue(collectEnvelopeDisjointCandidates(
 				indexer.getEnvelopeDisjointCandidates(empty)).isEmpty());
@@ -318,6 +371,7 @@ public class LuceneCandidateLookupTest {
 			indexer.indexGeometryList(entityId, id -> "geometry " + id, List.of(geometries.get(i)));
 		}
 		indexer.commit();
+		indexer.complete();
 		for (int boundIndex = 0; boundIndex < geometries.size(); boundIndex++) {
 			IndexGeometry bound = geometries.get(boundIndex);
 			Set<Long> expectedIntersections = new HashSet<>();
@@ -344,6 +398,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "midpoint", List.of(geometry("POINT(0 11)")));
 		indexer.indexGeometryList(2L, id -> "outside latitude", List.of(geometry("POINT(0 20)")));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(bound)));
@@ -375,6 +430,7 @@ public class LuceneCandidateLookupTest {
 			indexer.begin();
 			indexer.indexGeometryList(1L, id -> "false positive", List.of(indexed));
 			indexer.commit();
+			indexer.complete();
 
 			assertArrayEquals("fixture " + i, new long[]{1L},
 					collectEntityIds(indexer.getEnvelopeIntersections(bound)));
@@ -394,6 +450,7 @@ public class LuceneCandidateLookupTest {
 		indexer.begin();
 		indexer.indexGeometryList(1L, id -> "point in hole", List.of(pointInHole));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeDisjointUncertainCandidates(holedPolygon)));
@@ -409,6 +466,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "point", List.of(point));
 		indexer.indexGeometryList(2L, id -> "empty", List.of(empty));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L}, collectEntityIds(indexer.getEnvelopeIntersections(point)));
 		assertArrayEquals(new long[0], collectEntityIds(indexer.getEnvelopeIntersections(empty)));
@@ -432,6 +490,7 @@ public class LuceneCandidateLookupTest {
 		indexer.indexGeometryList(1L, id -> "edge point", List.of(geometry("POINT(99 14)")));
 		indexer.indexGeometryList(2L, id -> "outside", List.of(geometry("POINT(101 14)")));
 		indexer.commit();
+		indexer.complete();
 
 		assertArrayEquals(new long[]{1L},
 				collectEntityIds(indexer.getEnvelopeIntersections(collection)));
