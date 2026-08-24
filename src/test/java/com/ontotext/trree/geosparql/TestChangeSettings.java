@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.OwlimSchemaRepository;
+import com.ontotext.trree.geosparql.lucene.LuceneGeoIndexer;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.MultiTerms;
 import org.apache.lucene.index.Terms;
@@ -23,6 +24,7 @@ import org.junit.Test;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashSet;
@@ -36,7 +38,9 @@ import static org.junit.Assert.*;
 
 /**
  * Verifies that the prefix tree and the precision can be changed and that the changes affect the index on the next
- * full indexing operation.
+ * full indexing operation. When force reindex fails, transaction abort restores the prior runtime configuration and
+ * Lucene index before removing the pending marker. Regression provenance:
+ * https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/2.
  */
 public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
     private static final String SPATIAL_PREFIX_FIELD = "geoData1";
@@ -222,6 +226,29 @@ public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
         assertPrecisionSettings("15", "15", true);
     }
 
+	@Test
+	public void failedForceReindexRestoresRuntimeSettingsAndPreviousIndex() throws Exception {
+		enablePlugin();
+		assertQuery();
+		Set<BytesRef> committedTerms = readSpatialTerms();
+		setMultipleSettings("prefixTree", "geohash", "precision", "20");
+
+		GeoSparqlPlugin plugin = activePlugin();
+		FailingFreshIndexIndexer indexer = new FailingFreshIndexIndexer(plugin);
+		indexer.initialize();
+		plugin.indexer = indexer;
+
+		assertThrows(RepositoryException.class, this::forceReindex);
+
+		assertEquals("quad", getSettingFromFile("prefixtree.current"));
+		assertEquals("11", getSettingFromFile("precision.current"));
+		assertEquals("quad", getSetting("currentPrefixTree"));
+		assertEquals("11", getSetting("currentPrecision"));
+		assertEquals(committedTerms, readSpatialTerms());
+		assertQuery();
+		assertFalse(Files.exists(GeoSparqlTransactionMarker.resolvePath(getGeoSparqlStorageDir().toPath())));
+	}
+
     @Test
     public void invalidPrecisionCombinationsReportApplicablePrefixTreeRange() {
         Object[][] cases = {
@@ -256,5 +283,22 @@ public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
 
 		assertSetting("prefixTree", "prefixtree", "geohash");
 		assertSetting("precision", "precision", "20");
+	}
+
+	private GeoSparqlPlugin activePlugin() {
+		return (GeoSparqlPlugin) ((OwlimSchemaRepository) ((SailRepository) repository).getSail())
+				.getPlugin("GeoSPARQL");
+	}
+
+	private static final class FailingFreshIndexIndexer extends LuceneGeoIndexer {
+		private FailingFreshIndexIndexer(GeoSparqlPlugin parent) {
+			super(parent);
+		}
+
+		@Override
+		public void freshIndex() throws Exception {
+			super.freshIndex();
+			throw new IOException("Simulated GeoSPARQL index rebuild failure.");
+		}
 	}
 }

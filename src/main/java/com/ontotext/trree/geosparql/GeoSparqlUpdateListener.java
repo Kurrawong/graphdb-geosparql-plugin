@@ -213,9 +213,13 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		}
 	}
 
-	void saveConfigForTransaction() {
+	void prepareConfigMutation() {
 		configMutationAttempted = true;
 		preparePersistentMutation();
+	}
+
+	void saveConfigForTransaction() {
+		prepareConfigMutation();
 		configPersistenceStarted = true;
 		GeoSparqlUtils.saveConfig(parent.getConfig(), parent.getDataDir().toPath());
 	}

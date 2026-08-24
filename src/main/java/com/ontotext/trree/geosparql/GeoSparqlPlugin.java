@@ -352,7 +352,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
     }
 
     private void indexAllData(boolean forced, PluginConnection pluginConnection) {
-        updateListener.preparePersistentMutation();
+        updateListener.prepareConfigMutation();
         config.updateCurrentSettings();
         indexer.initSettings();
         try {
