@@ -64,6 +64,23 @@ public class TestPluginEnableTransactionLifecycle extends AbstractGeoSparqlPlugi
 	}
 
 	@Test
+	public void enablePersistsPendingStateBeforeLuceneRebuild() throws Exception {
+		insertPreEnableGeometries();
+		GeoSparqlPlugin plugin = activePlugin();
+		PendingStateObservingIndexer indexer = new PendingStateObservingIndexer(plugin);
+		indexer.initialize();
+		plugin.indexer = indexer;
+
+		connection.begin();
+		enablePluginInCurrentTransaction();
+		connection.commit();
+
+		assertTrue(indexer.enabledConfigObservedBeforeRebuild);
+		assertTrue(indexer.pendingMarkerObservedBeforeRebuild);
+		assertFalse(Files.exists(pendingTransactionMarker()));
+	}
+
+	@Test
 	public void abortedEnableAndGeometryMutationRestoreDisabledConfigAndPreviousIndex() throws Exception {
 		insertPreEnableGeometries();
 		enablePlugin();
@@ -173,6 +190,23 @@ public class TestPluginEnableTransactionLifecycle extends AbstractGeoSparqlPlugi
 		public void commit() throws Exception {
 			commitCount++;
 			super.commit();
+		}
+	}
+
+	private final class PendingStateObservingIndexer extends LuceneGeoIndexer {
+		private boolean enabledConfigObservedBeforeRebuild;
+		private boolean pendingMarkerObservedBeforeRebuild;
+
+		private PendingStateObservingIndexer(GeoSparqlPlugin parent) {
+			super(parent);
+		}
+
+		@Override
+		public void freshIndex() throws Exception {
+			enabledConfigObservedBeforeRebuild =
+					GeoSparqlUtils.readConfig(getGeoSparqlStorageDir().toPath()).isEnabled();
+			pendingMarkerObservedBeforeRebuild = Files.exists(pendingTransactionMarker());
+			super.freshIndex();
 		}
 	}
 }

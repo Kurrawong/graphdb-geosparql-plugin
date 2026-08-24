@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql;
 
+import com.ontotext.trree.geosparql.util.DurableFileOperations;
 import com.ontotext.trree.geosparql.util.GeoSparqlUtils;
 import com.ontotext.trree.sdk.*;
 import gnu.trove.TLongHashSet;
@@ -13,10 +14,13 @@ import java.nio.file.Path;
  * Listener for incremental indexing of GeoSPARQL data.
  */
 class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementListener {
+	private static final DurableFileOperations DURABLE_FILES = new DurableFileOperations();
+
 	private final GeoSparqlPlugin parent;
 	private final long asWKT;
 	private final long asGML;
 	private final long hasDefaultGeometry;
+	private final GeoSparqlTransactionMarker transactionMarker;
 
 	private final TLongHashSet geometriesToUpdate = new TLongHashSet();
 	private final TLongHashSet featuresToUpdate = new TLongHashSet();
@@ -25,12 +29,15 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	private boolean configFileExistedBeforeTransaction;
 	private boolean graphDbTransactionActive;
 	private boolean indexTransactionStarted;
+	private boolean markerExistedBeforeTransaction;
+	private boolean persistentMutationMarked;
 
 	GeoSparqlUpdateListener(GeoSparqlPlugin parent, long asWKT, long asGML, long hasDefaultGeometry) {
 		this.parent = parent;
 		this.asWKT = asWKT;
 		this.asGML = asGML;
 		this.hasDefaultGeometry = hasDefaultGeometry;
+		this.transactionMarker = new GeoSparqlTransactionMarker(parent.getDataDir().toPath());
 	}
 
 	@Override
@@ -70,11 +77,14 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		captureConfigState();
 		graphDbTransactionActive = true;
 		indexTransactionStarted = false;
+		markerExistedBeforeTransaction = transactionMarker.exists();
+		persistentMutationMarked = false;
 		if (! parent.getConfig().isEnabled()) {
 			return;
 		}
 
 		try {
+			preparePersistentMutation();
 			parent.indexer.begin();
 			indexTransactionStarted = true;
 		} catch (Exception e) {
@@ -94,6 +104,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			GeoSparqlUtils.validateParams(prefixTree, precision);
 			config.setPrefixTree(prefixTree);
 			config.setPrecision(precision);
+			preparePersistentMutation();
 			GeoSparqlUtils.saveConfig(config, parent.getDataDir().toPath());
 		}
 
@@ -149,6 +160,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			} catch (Exception e) {
 				parent.getLogger().warn("Unable to finalize the GeoSPARQL Lucene index transaction.", e);
 			}
+		} else {
+			removeTransactionMarkerIfOwned();
 		}
 		clearOutcomeState();
     }
@@ -163,8 +176,22 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			} catch (Exception e) {
 				parent.getLogger().warn("Unable to rollback indexer transaction.", e);
 			}
+		} else if (configRestored) {
+			removeTransactionMarkerIfOwned();
 		}
 		clearOutcomeState();
+	}
+
+	void preparePersistentMutation() {
+		if (!graphDbTransactionActive) {
+			return;
+		}
+		try {
+			transactionMarker.create();
+			persistentMutationMarked = true;
+		} catch (IOException e) {
+			throw new PluginException("Unable to persist the GeoSPARQL transaction marker.", e);
+		}
 	}
 
 	private void cleanupAfterTransaction() {
@@ -202,10 +229,20 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 
 	protected void restoreConfigFile(Path configPath) throws IOException {
 		if (configFileExistedBeforeTransaction) {
-			Files.createDirectories(configPath.getParent());
-			Files.write(configPath, configFileBeforeTransaction);
+			DURABLE_FILES.replace(configPath, configFileBeforeTransaction);
 		} else {
-			Files.deleteIfExists(configPath);
+			DURABLE_FILES.delete(configPath);
+		}
+	}
+
+	private void removeTransactionMarkerIfOwned() {
+		if (!persistentMutationMarked || markerExistedBeforeTransaction) {
+			return;
+		}
+		try {
+			transactionMarker.remove();
+		} catch (IOException e) {
+			parent.getLogger().warn("Unable to finalize the GeoSPARQL transaction marker.", e);
 		}
 	}
 
@@ -215,6 +252,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 		configFileExistedBeforeTransaction = false;
 		graphDbTransactionActive = false;
 		indexTransactionStarted = false;
+		markerExistedBeforeTransaction = false;
+		persistentMutationMarked = false;
 	}
 
 	boolean isGraphDbTransactionActive() {

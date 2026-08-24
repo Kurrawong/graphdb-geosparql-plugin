@@ -6,6 +6,7 @@ import com.ontotext.trree.geosparql.EnvelopeDisjointCandidate;
 import com.ontotext.trree.geosparql.GeoSparqlConfig;
 import com.ontotext.trree.geosparql.GeoSparqlIndexer;
 import com.ontotext.trree.geosparql.GeoSparqlPlugin;
+import com.ontotext.trree.geosparql.GeoSparqlTransactionMarker;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.sdk.PluginException;
@@ -25,12 +26,8 @@ import org.locationtech.spatial4j.context.SpatialContext;
 import org.locationtech.spatial4j.shape.Rectangle;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -76,7 +73,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	private boolean crsEnvironmentMismatchAtTransactionStart;
 	private boolean recoveryRequired;
 	private boolean recoveryRequiredAtTransactionStart;
-	private Path pendingTransactionMarker;
+	private GeoSparqlTransactionMarker pendingTransactionMarker;
 	private boolean schemaMismatchDetected;
 	private boolean crsEnvironmentMismatchDetected;
 	private boolean compatibilityMetadataPending;
@@ -107,14 +104,14 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
         this.indexDir = GeoSparqlConfig.resolveIndexPath(parent.getDataDir().toPath());
 
 		this.directory = FSDirectory.open(indexDir);
-		this.pendingTransactionMarker = indexDir.resolve("pending-graphdb-transaction");
+		this.pendingTransactionMarker = new GeoSparqlTransactionMarker(parent.getDataDir().toPath());
 		this.snapshotDeletionPolicy = new SnapshotDeletionPolicy(new KeepOnlyLastCommitDeletionPolicy());
 
 		initSettings();
 		currentCrsEnvironmentFingerprint = crsEnvironmentFingerprintSupplier.get();
 		schemaMismatchDetected = detectSchemaMismatch();
 		crsEnvironmentMismatchDetected = detectCrsEnvironmentMismatch();
-		recoveryRequired = Files.exists(pendingTransactionMarker);
+		recoveryRequired = pendingTransactionMarker.exists();
 	}
 
 	@Override
@@ -194,7 +191,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 				assertReadableCurrentSchema();
 			}
 			writeCompatibilityMetadataIfNeeded();
-			writePendingTransactionMarker();
+			pendingTransactionMarker.create();
 			recoveryRequired = true;
 			closeIndexWriter(); // also commits
 			provisionalCommitPublished = true;
@@ -229,7 +226,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			cleanupFailure = e;
 		}
 		try {
-			Files.deleteIfExists(pendingTransactionMarker);
+			pendingTransactionMarker.remove();
 		} catch (IOException e) {
 			if (cleanupFailure == null) {
 				cleanupFailure = e;
@@ -254,7 +251,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		if (!transactionActive) {
 			return;
 		}
-		boolean pendingCommit = Files.exists(pendingTransactionMarker);
+		boolean pendingCommit = pendingTransactionMarker.exists();
 		if (indexWriter != null && indexWriter.isOpen()) {
 			indexWriter.rollback();
 		}
@@ -268,11 +265,11 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		schemaMismatchDetected = schemaMismatchAtTransactionStart;
 		crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
 		recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
-		if (requireRecovery && !Files.exists(pendingTransactionMarker)) {
-			writePendingTransactionMarker();
+		if (requireRecovery && !pendingTransactionMarker.exists()) {
+			pendingTransactionMarker.create();
 		}
 		if (!recoveryRequired) {
-			Files.deleteIfExists(pendingTransactionMarker);
+			pendingTransactionMarker.remove();
 		}
 		initSettings();
 		clearTransactionState();
@@ -592,15 +589,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 		indexWriter.setLiveCommitData(LuceneGeoDocumentSchema.currentCompatibilityCommitData(
 				indexWriter.getLiveCommitData(), currentCrsEnvironmentFingerprint));
-	}
-
-	private void writePendingTransactionMarker() throws IOException {
-		byte[] contents = "GeoSPARQL Lucene commit awaiting GraphDB outcome\n".getBytes(StandardCharsets.UTF_8);
-		try (FileChannel channel = FileChannel.open(pendingTransactionMarker,
-				StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-			channel.write(ByteBuffer.wrap(contents));
-			channel.force(true);
-		}
 	}
 
 	protected void restorePreTransactionCommit() throws IOException {
