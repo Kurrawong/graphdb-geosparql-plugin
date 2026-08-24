@@ -36,19 +36,10 @@ public interface GeoSparqlIndexer {
 	CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry);
 
 	/**
-	 * Returns conservative intersection candidates with operand direction available to the adapter.
+	 * Returns mixed-CRS source documents that a partitioned disjoint traversal must exact-evaluate because coordinate
+	 * cleanup in the target CRS prevents a safe definite envelope classification.
 	 */
-	default CloseableIterator<CandidateEntity> getEnvelopeIntersections(
-			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
-		return getEnvelopeIntersections(boundSourceIndexGeometry);
-	}
-
-	/**
-	 * Returns source documents retained because the pair's CRS84 envelopes cannot model cleanup performed in the
-	 * exact-evaluation target CRS. The bound source and operand direction let adapters retain only mixed-CRS pairs
-	 * that need this fallback.
-	 */
-	default CloseableIterator<CandidateEntity> getTransformCleanupCandidates(
+	default CloseableIterator<CandidateEntity> getDisjointTransformCleanupCandidates(
 			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		return getAllEntities();
 	}
@@ -67,11 +58,6 @@ public interface GeoSparqlIndexer {
 	default CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
 			IndexGeometry boundSourceIndexGeometry) {
 		return getEnvelopeIntersections(boundSourceIndexGeometry);
-	}
-
-	default CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
-			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
-		return getEnvelopeDisjointUncertainCandidates(boundSourceIndexGeometry);
 	}
 
 	/**

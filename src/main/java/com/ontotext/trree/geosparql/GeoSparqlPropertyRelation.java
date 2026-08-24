@@ -14,10 +14,10 @@ import static com.ontotext.trree.geosparql.vocabulary.GeoConstants.*;
 /**
  * GeoSPARQL property relations exposed by GraphDB.
  *
- * <p>When Jena exact evaluation rounds in CRS84, non-disjoint relations use envelope intersection for conservative
- * candidate lookup and disjoint relations partition source documents into envelope-proven matches and uncertain
- * candidates. Pairs whose cleanup occurs in another CRS are retained for exact evaluation because CRS84 envelopes
- * cannot safely exclude or classify them. Jena exact evaluation always preserves subject/object argument order.
+ * <p>Non-disjoint relations use CRS84 index-envelope intersection for candidate lookup in both binding directions.
+ * Disjoint relations partition source documents into envelope-proven matches and uncertain candidates. Mixed-CRS
+ * pairs whose cleanup occurs in another CRS are retained for disjoint exact evaluation because CRS84 envelopes cannot
+ * safely classify them. Jena exact evaluation always preserves subject/object argument order.
  */
 public enum GeoSparqlPropertyRelation {
 	// Simple Features

@@ -55,11 +55,12 @@ import org.opengis.util.FactoryException;
  * <p>Jena separately rounds coordinates after transforming the right exact-evaluation operand into the left
  * operand's CRS. The plugin pins that cleanup precision in {@link JenaCalculationPrecision}. Transformed CRS84
  * candidate bounds are widened by the maximum cleanup displacement in CRS84 units so a right operand transformed
- * into CRS84 remains covered. This widening is distinct from the SIS envelope approximation. When exact evaluation
- * would instead round in another CRS, relation traversal retains the pair through exact evaluation rather than
- * treating CRS84 bounds as an exclusion or disjoint proof. When the exact target is CRS84 and the right operand has a
- * three-dimensional CRS, the direct component selects the same source-to-CRS84 operation as exact evaluation. The
- * horizontal component ensures that height does not separate same-CRS sources whose JTS XY geometries intersect.
+	 * into CRS84 remains covered. This widening is distinct from the SIS envelope approximation. Non-disjoint candidate
+	 * lookup treats independently derived CRS84 envelopes as conservative in both binding directions. When disjoint exact
+	 * evaluation would round in another CRS, relation traversal retains the pair for exact evaluation instead of using
+	 * the CRS84 envelopes as a definite classification. When the exact target is CRS84 and the right operand has a
+	 * three-dimensional CRS, the direct component selects the same source-to-CRS84 operation as exact evaluation. The
+	 * horizontal component ensures that height does not separate same-CRS sources whose JTS XY geometries intersect.
  *
  * <p>Antimeridian wraparound may broaden the candidate envelope, including to full longitude while keeping local
  * latitude, when that is what SIS reports through {@code getMinimum}/{@code getMaximum}. The world CRS84 envelope is

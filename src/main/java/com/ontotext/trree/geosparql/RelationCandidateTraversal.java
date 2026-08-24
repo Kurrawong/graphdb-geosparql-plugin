@@ -13,13 +13,12 @@ import java.util.Optional;
 /**
  * Traverses candidate entities for one bound side of a GeoSPARQL property relation.
  *
- * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation. Full-scan traversal returns
- * complete candidate source sets. Mixed-CRS pairs whose cleanup target cannot be safely modeled by CRS84 envelopes
- * are retained separately for exact evaluation; same-CRS pairs remain on the selective envelope path. Transform
- * cleanup changes how an entity is retained for exact evaluation; it does not change entity-level exact-evaluation
- * semantics. Under the candidate-envelope containment contract, partitioned disjoint traversal
- * first returns source documents whose envelopes prove a match, then exact-evaluates uncertain envelope intersections
- * after removing eligible envelope-contained definite non-matches, and finally evaluates non-spatial empty sentinels.
+ * <p>Envelope-intersection traversal returns uncertain source pairs for exact evaluation and ends after the selective
+ * index-envelope phase. Full-scan traversal returns complete candidate source sets. Under the candidate-envelope
+ * containment contract, partitioned disjoint traversal first returns source documents whose envelopes prove a match,
+ * then exact-evaluates uncertain envelope intersections after removing eligible envelope-contained definite
+ * non-matches. It then exact-evaluates mixed-CRS pairs whose cleanup target prevents a safe envelope classification,
+ * and finally evaluates non-spatial empty sentinels.
  *
  * <p>The traversal owns its active Lucene iterator. It closes every phase before opening the next and closes the
  * active iterator when traversal ends early.
@@ -35,7 +34,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 		ENVELOPE_INTERSECTIONS,
 		DEFINITE_MATCHES,
 		UNCERTAIN_CANDIDATES,
-		TRANSFORM_CLEANUP_CANDIDATES,
+		DISJOINT_TRANSFORM_CLEANUP_CANDIDATES,
 		EMPTY_SENTINELS,
 		DONE
 	}
@@ -138,7 +137,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 				case ENVELOPE_INTERSECTIONS -> loadNextEnvelopeIntersection();
 				case DEFINITE_MATCHES -> loadNextDefiniteMatch();
 				case UNCERTAIN_CANDIDATES -> loadNextUncertainCandidate();
-				case TRANSFORM_CLEANUP_CANDIDATES -> loadNextTransformCleanupCandidate();
+				case DISJOINT_TRANSFORM_CLEANUP_CANDIDATES -> loadNextDisjointTransformCleanupCandidate();
 				case EMPTY_SENTINELS -> loadNextEmptySentinel();
 				case DONE -> null;
 			};
@@ -168,7 +167,7 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			}
 			closeActiveIterator();
 			if (!openNextEnvelopeIntersection()) {
-				beginPhase(TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
+				finishTraversal();
 				return null;
 			}
 		}
@@ -208,41 +207,36 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 			if (openNextEnvelopeIntersection()) {
 				continue;
 			}
-			beginPhase(TraversalPhase.TRANSFORM_CLEANUP_CANDIDATES);
+			beginPhase(TraversalPhase.DISJOINT_TRANSFORM_CLEANUP_CANDIDATES);
 			return null;
 		}
 	}
 
-	private Candidate loadNextTransformCleanupCandidate() {
+	private Candidate loadNextDisjointTransformCleanupCandidate() {
 		while (true) {
 			if (currentExactCandidates != null && currentExactCandidates.hasNext()) {
 				return Candidate.exactForBoundSource(currentExactCandidates.next(),
 						currentBoundIndexGeometry.sourceGeometryLiteral());
 			}
 			closeActiveIterator();
-			if (openNextTransformCleanupCandidates()) {
+			if (openNextDisjointTransformCleanupCandidates()) {
 				continue;
 			}
-			if (relation.getCandidateLookupPolicy() == CandidateLookupPolicy.DISJOINT_PARTITIONED) {
-				beginPhase(TraversalPhase.EMPTY_SENTINELS);
-			} else {
-				finishTraversal();
-			}
+			beginPhase(TraversalPhase.EMPTY_SENTINELS);
 			return null;
 		}
 	}
 
-	private boolean openNextTransformCleanupCandidates() {
+	private boolean openNextDisjointTransformCleanupCandidates() {
 		while (boundIndex < boundIndexGeometries.size()) {
 			currentBoundIndexGeometry = boundIndexGeometries.get(boundIndex++);
 			if (!currentBoundIndexGeometry.isSpatialCandidate()) {
 				continue;
 			}
-			if (relation.getCandidateLookupPolicy() == CandidateLookupPolicy.DISJOINT_PARTITIONED
-					&& !boundSourceCanParticipateInDisjointPartition(currentBoundIndexGeometry)) {
+			if (!boundSourceCanParticipateInDisjointPartition(currentBoundIndexGeometry)) {
 				continue;
 			}
-			currentExactCandidates = indexer.getTransformCleanupCandidates(
+			currentExactCandidates = indexer.getDisjointTransformCleanupCandidates(
 					currentBoundIndexGeometry, !boundSubject);
 			return true;
 		}
@@ -288,8 +282,8 @@ final class RelationCandidateTraversal implements CloseableIterator<RelationCand
 				continue;
 			}
 			currentExactCandidates = phase == TraversalPhase.UNCERTAIN_CANDIDATES
-					? indexer.getEnvelopeDisjointUncertainCandidates(currentBoundIndexGeometry, !boundSubject)
-					: indexer.getEnvelopeIntersections(currentBoundIndexGeometry, !boundSubject);
+					? indexer.getEnvelopeDisjointUncertainCandidates(currentBoundIndexGeometry)
+					: indexer.getEnvelopeIntersections(currentBoundIndexGeometry);
 			return true;
 		}
 		return false;

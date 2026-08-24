@@ -15,20 +15,22 @@ This guide explains how to provide and test those CRS data files.
 - Missing CRS definitions or grid-shift files are a configuration problem. They are not permission to reinterpret coordinates as CRS84 or WGS84.
 - A CRS that Apache SIS cannot parse, resolve, or transform fails by default. Missing EPSG or grid data can also reduce transformation accuracy without causing an error, so projected CRSes must be checked with known points.
 
-## Mixed-CRS Candidate Lookup Cost
+## Mixed-CRS Candidate Lookup
 
-Mixed-CRS GeoSPARQL property-relation queries may lose spatial selectivity when the unbound candidate is the relation
-subject and exact evaluation transforms the bound object into the candidate's non-CRS84 CRS. To preserve the
-no-false-negative invariant, candidate lookup retains all spatial sources in relevant different CRSes for exact
-evaluation instead of pruning them with independently derived CRS84 envelopes. This transform-cleanup phase is a
-deliberate correctness fallback, not a missing spatial constraint. On a large mixed-CRS dataset it can approach an
-O(N) scan, including reconstruction of source geometry literal snapshots for the retained Lucene documents.
+Non-disjoint GeoSPARQL property relations use CRS84 index-envelope intersection for candidate lookup in both binding
+directions. A local bound geometry can therefore select a geographic candidate subset when the indexed source
+geometry literals use a different CRS. Broad or world-fallback index envelopes can still retain many candidates.
+Exact evaluation preserves source CRS semantics and subject/object order while transforming the right operand into
+the left operand's CRS when required.
 
-Same-CRS property-relation queries remain on the selective envelope path. Mixed-CRS queries can also remain selective
-when exact evaluation targets CRS84 because transformed candidate envelopes include Jena's pinned CRS84 cleanup
-displacement. Symmetric relations may therefore have substantially different execution costs depending on operand
-order: a CRS84-bound subject can remain geographically selective while the equivalent CRS84-bound object may invoke
-the broad different-CRS cleanup fallback.
+This policy treats independently derived CRS84 index envelopes as conservative for non-disjoint candidate lookup,
+including when Jena cleans transformed coordinates in a non-CRS84 target CRS. Transformed envelopes include Jena's
+pinned cleanup displacement in CRS84 units. Apache SIS does not provide a universal mathematical proof that its
+transformed envelopes contain every possible transformed geometry.
+
+Disjoint relations keep a separate mixed-CRS exact-evaluation phase. Candidate lookup does not use independently
+derived CRS84 envelopes to make a definite disjoint classification when coordinate cleanup occurs in another CRS.
+This phase can process all spatial sources in relevant different CRSes.
 
 ## Default Behavior Without CRS Configuration
 

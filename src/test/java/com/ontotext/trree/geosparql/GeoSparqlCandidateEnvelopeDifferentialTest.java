@@ -320,6 +320,10 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 			String settingName = setting.prefixTree.name().toLowerCase(Locale.ROOT) + "-" + setting.precision;
 			Fixture fixture = createFixture("projected-cleanup-" + settingName,
 					sources, setting.prefixTree, setting.precision);
+			assertTrue(settingName + " UTM 33N bound envelope must retain UTM 32N source",
+					envelopeHits(fixture, sources.get(1L).get(0)).contains(2L));
+			assertTrue(settingName + " UTM 32N bound envelope must retain UTM 33N source",
+					envelopeHits(fixture, sources.get(2L).get(0)).contains(1L));
 
 			for (GeoSparqlPropertyRelation relation : EnumSet.of(
 					GeoSparqlPropertyRelation.SF_INTERSECTS,
@@ -521,7 +525,7 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 	}
 
 	@Test
-	public void allUnevaluableCandidatesDoNotMatchAcrossEnvelopeAndTransformCleanupPhases() throws Exception {
+	public void unevaluableCandidatesDoNotMatchAcrossNonDisjointEnvelopeAndDisjointCleanupPhases() throws Exception {
 		IndexGeometry utm32 = geometries(
 				"<" + UTM_32N + "> POINT(-100000000 0)").get(0);
 		// The UTM point projects to the 99°E transform-domain edge. The nearby 3D point remains inside its widened
@@ -541,6 +545,9 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		assertFalse(GeoSparqlPropertyRelation.SF_INTERSECTS.evaluate(
 				List.of(utm32.sourceGeometryLiteral()),
 				List.of(distantEpsg4979.sourceGeometryLiteral())));
+		assertFalse(GeoSparqlPropertyRelation.SF_DISJOINT.evaluate(
+				List.of(utm32.sourceGeometryLiteral()),
+				List.of(distantEpsg4979.sourceGeometryLiteral())));
 
 		Fixture envelopeFixture = createFixture("unevaluable-envelope-candidate",
 				Map.of(1L, List.of(utm32), 2L, List.of(nearbyEpsg4979)));
@@ -548,12 +555,12 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		assertEquals(Set.of(2L),
 				runIndexed(envelopeFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
 
-		Fixture cleanupFixture = createFixture("unevaluable-transform-cleanup-candidate",
+		Fixture cleanupFixture = createFixture("unevaluable-disjoint-cleanup-candidate",
 				Map.of(1L, List.of(utm32), 2L, List.of(distantEpsg4979)));
 		assertFalse(envelopeHits(cleanupFixture, distantEpsg4979).contains(1L));
-		assertTrue(transformCleanupHits(cleanupFixture, distantEpsg4979, true).contains(1L));
-		assertEquals(Set.of(2L),
-				runIndexed(cleanupFixture, GeoSparqlPropertyRelation.SF_INTERSECTS, 0, 2L));
+		assertTrue(disjointCleanupHits(cleanupFixture, distantEpsg4979, true).contains(1L));
+		assertEquals(Set.of(),
+				runIndexed(cleanupFixture, GeoSparqlPropertyRelation.SF_DISJOINT, 0, 2L));
 	}
 
 	@Test
@@ -747,10 +754,10 @@ public class GeoSparqlCandidateEnvelopeDifferentialTest {
 		return candidateEntityIds(candidates);
 	}
 
-	private static Set<Long> transformCleanupHits(
+	private static Set<Long> disjointCleanupHits(
 			Fixture fixture, IndexGeometry bound, boolean candidatesAreSubjects) throws Exception {
 		CloseableIterator<CandidateEntity> candidates = fixture.plugin.indexer
-				.getTransformCleanupCandidates(bound, candidatesAreSubjects);
+				.getDisjointTransformCleanupCandidates(bound, candidatesAreSubjects);
 		return candidateEntityIds(candidates);
 	}
 

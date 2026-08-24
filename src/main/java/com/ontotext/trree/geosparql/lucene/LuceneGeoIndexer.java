@@ -319,12 +319,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 
 	@Override
 	public CloseableIterator<CandidateEntity> getEnvelopeIntersections(IndexGeometry boundSourceIndexGeometry) {
-		return getEnvelopeIntersections(boundSourceIndexGeometry, false);
-	}
-
-	@Override
-	public CloseableIterator<CandidateEntity> getEnvelopeIntersections(
-			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		assertReadableCurrentSchema();
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getCandidateEntitiesForQuery(new MatchNoDocsQuery("Empty source has no envelope intersections."));
@@ -334,26 +328,20 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	}
 
 	@Override
-	public CloseableIterator<CandidateEntity> getTransformCleanupCandidates(
+	public CloseableIterator<CandidateEntity> getDisjointTransformCleanupCandidates(
 			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		assertReadableCurrentSchema();
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getCandidateEntitiesForQuery(
-					new MatchNoDocsQuery("Empty source has no transform-cleanup candidates."));
+					new MatchNoDocsQuery("Empty source has no disjoint transform-cleanup candidates."));
 		}
 		return getCandidateEntitiesForQuery(
-				transformCleanupCandidatesQuery(boundSourceIndexGeometry, candidateIsSubject));
+				disjointTransformCleanupCandidatesQuery(boundSourceIndexGeometry, candidateIsSubject));
 	}
 
 	@Override
 	public CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
 			IndexGeometry boundSourceIndexGeometry) {
-		return getEnvelopeDisjointUncertainCandidates(boundSourceIndexGeometry, false);
-	}
-
-	@Override
-	public CloseableIterator<CandidateEntity> getEnvelopeDisjointUncertainCandidates(
-			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		assertReadableCurrentSchema();
 		if (boundSourceIndexGeometry == null || !boundSourceIndexGeometry.isSpatialCandidate()) {
 			return getCandidateEntitiesForQuery(
@@ -400,7 +388,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			return getEnvelopeDisjointCandidatesForQuery(
 					new MatchNoDocsQuery("Empty source has no envelope-disjoint partition."));
 		}
-		Query envelopeIntersections = cleanupSafeEnvelopeIntersectionsQuery(
+		Query envelopeIntersections = disjointCleanupSafeEnvelopeIntersectionsQuery(
 				boundSourceIndexGeometry, candidateIsSubject);
 		/*
 		 * Given direct containment for native CRS84 envelopes and the documented conservative-envelope engineering
@@ -474,21 +462,21 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 				new SpatialArgs(SpatialOperation.Intersects, envelopeShape(indexGeometry)));
 	}
 
-	private Query cleanupSafeEnvelopeIntersectionsQuery(
+	private Query disjointCleanupSafeEnvelopeIntersectionsQuery(
 			IndexGeometry indexGeometry, boolean candidateIsSubject) {
 		return new BooleanQuery.Builder()
 				.add(envelopeIntersectionsQuery(indexGeometry), BooleanClause.Occur.SHOULD)
-				.add(transformCleanupCandidatesQuery(indexGeometry, candidateIsSubject),
+				.add(disjointTransformCleanupCandidatesQuery(indexGeometry, candidateIsSubject),
 						BooleanClause.Occur.SHOULD)
 				.setMinimumNumberShouldMatch(1)
 				.build();
 	}
 
-	private Query transformCleanupCandidatesQuery(
+	private Query disjointTransformCleanupCandidatesQuery(
 			IndexGeometry boundSourceIndexGeometry, boolean candidateIsSubject) {
 		String boundSourceCrs = boundSourceIndexGeometry.sourceGeometryLiteral().effectiveCrsUri();
 		if (!candidateIsSubject && IndexGeometry.INDEX_CRS.equals(boundSourceCrs)) {
-			return new MatchNoDocsQuery("CRS84 cleanup is covered by transformed candidate envelopes.");
+			return new MatchNoDocsQuery("CRS84 cleanup does not prevent disjoint envelope classification.");
 		}
 		BooleanQuery.Builder query = new BooleanQuery.Builder()
 				.add(LuceneGeoDocumentSchema.hasEnvelopeQuery(true), BooleanClause.Occur.FILTER)
