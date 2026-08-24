@@ -211,7 +211,7 @@ public class GeoSparqlRelationIteratorTest {
 	}
 
 	@Test
-	public void nonDisjointCandidateUsesOnlyEnvelopeTraversal() {
+	public void nonDisjointCandidateUsesMatchedSourceGeometryLiteralsWithoutEntityReload() {
 		IndexGeometry boundPolygon = indexGeometry("POLYGON((0 0,0 2,2 2,2 0,0 0))");
 		IndexGeometry candidatePoint = indexGeometry("POINT(1 1)");
 
@@ -232,7 +232,7 @@ public class GeoSparqlRelationIteratorTest {
 			assertTrue(iterator.next());
 			assertFalse(iterator.next());
 			assertEquals(0, indexer.disjointCleanupLookupCount);
-			assertEquals(1, indexer.candidateSourceLookupCount);
+			assertEquals(0, indexer.candidateSourceLookupCount);
 		} finally {
 			iterator.close();
 		}
