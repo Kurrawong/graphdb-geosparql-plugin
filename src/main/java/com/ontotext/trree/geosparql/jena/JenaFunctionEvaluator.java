@@ -105,6 +105,9 @@ public final class JenaFunctionEvaluator {
 			if (GeoConstants.GEOF_AS_GEO_JSON.stringValue().equals(functionUri)) {
 				return asGeoJson(valueFactory, functionUri, args);
 			}
+			if (GeoConstants.GEOF_AS_WKT.stringValue().equals(functionUri)) {
+				return asWkt(valueFactory, functionUri, args);
+			}
 			if (GeoConstants.GEO_DIMENSION.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
 				return valueFactory.createLiteral(geometry(args[0]).getTopologicalDimension());
@@ -510,6 +513,12 @@ public final class JenaFunctionEvaluator {
 				? sourceGeometry.getCoordinateDimension()
 				: 2;
 		return JenaGeometryAdapter.toGeoJsonLiteral(valueFactory, crs84, coordinateDimension);
+	}
+
+	private static Literal asWkt(ValueFactory valueFactory, String functionUri, Value... args)
+			throws Exception {
+		requireArgs(functionUri, args, 1);
+		return JenaGeometryAdapter.toWktLiteral(valueFactory, sourceLiteral(args[0]).asGeometryWrapper());
 	}
 
 	private static boolean isValid(Value value) throws ValueExprEvaluationException {

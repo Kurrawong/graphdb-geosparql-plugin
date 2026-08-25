@@ -82,4 +82,9 @@ public final class JenaGeometryAdapter {
 		org.apache.jena.rdf.model.Literal literal = output.asLiteral(GeoConstants.GEO_JSON_LITERAL.stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_JSON_LITERAL);
 	}
+
+	static Literal toWktLiteral(ValueFactory valueFactory, GeometryWrapper wrapper) {
+		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(GeoConstants.GEO_WKT_LITERAL.stringValue());
+		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_WKT_LITERAL);
+	}
 }
