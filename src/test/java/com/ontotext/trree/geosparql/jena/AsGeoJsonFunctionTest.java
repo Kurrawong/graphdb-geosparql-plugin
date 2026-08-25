@@ -3,6 +3,7 @@ package com.ontotext.trree.geosparql.jena;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.geof.nontopological.filter_functions.AsGeoJSONFF;
 import org.apache.jena.sparql.expr.NodeValue;
+import org.apache.sis.referencing.CRS;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
@@ -11,6 +12,7 @@ import org.junit.Test;
 import org.locationtech.jts.algorithm.Orientation;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.Polygon;
+import org.opengis.referencing.operation.OperationNotFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +31,7 @@ public class AsGeoJsonFunctionTest {
 	private static final String EPSG_3857 = "http://www.opengis.net/def/crs/EPSG/0/3857";
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String EPSG_4979 = "http://www.opengis.net/def/crs/EPSG/0/4979";
+	private static final String EPSG_5800 = "http://www.opengis.net/def/crs/EPSG/0/5800";
 	private static final String EPSG_7405 = "http://www.opengis.net/def/crs/EPSG/0/7405";
 
 	@Test
@@ -122,6 +125,8 @@ public class AsGeoJsonFunctionTest {
 	@Test
 	public void generatedGeoJsonDropsUnverifiedVerticalAndMeasureOrdinates() throws Exception {
 		Literal twoDimensionalCrsZ = wkt("POINT Z(1 2 3000)");
+		Literal jenaResult = jenaAsGeoJson(twoDimensionalCrsZ);
+		Literal pluginResult = evaluate(twoDimensionalCrsZ);
 		Literal genuinelyThreeDimensionalCrs = wkt(
 				"<" + EPSG_4979 + "> POINT Z(-27.47 153.03 55)");
 		Literal nonEllipsoidalVerticalCrs = wkt(
@@ -135,6 +140,13 @@ public class AsGeoJsonFunctionTest {
 				gmlFromWkt(nonEllipsoidalVerticalCrs),
 				wkt("POINT M(1 2 9)"),
 				wkt("POINT ZM(1 2 3 9)"));
+
+		assertEquals(3, JenaGeometryAdapter.toSourceGeometryLiteral(jenaResult)
+				.asGeometryWrapper().getCoordinateDimension());
+		assertEquals(3000.0, JenaGeometryAdapter.toSourceGeometryLiteral(jenaResult)
+				.asGeometryWrapper().getParsingGeometry().getCoordinate().getZ(), 0.0);
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(pluginResult)
+				.asGeometryWrapper().getCoordinateDimension());
 
 		for (Literal source : sources) {
 			Literal result = evaluate(source);
@@ -160,15 +172,14 @@ public class AsGeoJsonFunctionTest {
 	}
 
 	@Test
-	public void unsupportedCrsAndCoordinateOperationFailureAreExpressionErrors() {
+	public void unsupportedCrsAndUnavailableCrs84OperationAreExpressionErrors() {
 		Literal unsupported = wkt("<http://example.com/crs/unknown> POINT(1 2)");
-		Literal outsideOperationDomain = wkt(
-				"<" + EPSG_32634 + "> POINT(1E308 1E308)");
-		SourceGeometryLiteral recognized = JenaGeometryAdapter.toSourceGeometryLiteral(outsideOperationDomain);
+		Literal unavailableOperation = wkt("<" + EPSG_5800 + "> POINT(1 2)");
 
-		assertTrue(recognized.asGeometryWrapper().isSRSRecognised());
+		assertThrows(OperationNotFoundException.class, () -> CRS.findOperation(
+				CRS.forCode("EPSG:5800"), CRS.forCode("OGC:CRS84"), null));
 		assertThrows(ValueExprEvaluationException.class, () -> evaluate(unsupported));
-		assertThrows(ValueExprEvaluationException.class, () -> evaluate(outsideOperationDomain));
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(unavailableOperation));
 	}
 
 	@Test
@@ -268,13 +279,17 @@ public class AsGeoJsonFunctionTest {
 	}
 
 	private static void assertJenaEquivalent(Literal source, Literal result, double tolerance) {
-		SourceGeometryLiteral sourceGeometry = JenaGeometryAdapter.toSourceGeometryLiteral(source);
-		NodeValue jenaResult = new AsGeoJSONFF().exec(NodeValue.makeNode(sourceGeometry.asJenaNode()));
-		Geometry expected = JenaGeometryAdapter.toSourceGeometryLiteral(geoJson(jenaResult.asString()))
+		Geometry expected = JenaGeometryAdapter.toSourceGeometryLiteral(jenaAsGeoJson(source))
 				.asGeometryWrapper().getParsingGeometry();
 		Geometry actual = JenaGeometryAdapter.toSourceGeometryLiteral(result)
 				.asGeometryWrapper().getParsingGeometry();
 		assertTrue(expected.equalsExact(actual, tolerance));
+	}
+
+	private static Literal jenaAsGeoJson(Literal source) {
+		SourceGeometryLiteral sourceGeometry = JenaGeometryAdapter.toSourceGeometryLiteral(source);
+		NodeValue result = new AsGeoJSONFF().exec(NodeValue.makeNode(sourceGeometry.asJenaNode()));
+		return geoJson(result.asString());
 	}
 
 	private static void assertEmptyResult(String label, String geometryType, Literal result) throws Exception {
