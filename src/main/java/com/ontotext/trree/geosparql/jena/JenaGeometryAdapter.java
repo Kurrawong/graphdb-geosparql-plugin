@@ -1,6 +1,9 @@
 package com.ontotext.trree.geosparql.jena;
 
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.apache.jena.datatypes.TypeMapper;
+import org.apache.jena.geosparql.implementation.DimensionInfo;
+import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.datatype.GeometryDatatype;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
@@ -8,13 +11,14 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.WKTWriter;
 
 /**
  * Central RDF4J-to-Jena conversion entry point for geometry values.
  *
  * <p>The adapter initializes Jena's geometry registries, preserves RDF literal datatype and lexical form in
-	 * {@link SourceGeometryLiteral}, and derives the CRS84 {@link IndexGeometry} value used by Lucene.
+ * {@link SourceGeometryLiteral}, and derives the CRS84 {@link IndexGeometry} value used by Lucene.
  * Exact relation semantics remain in the Jena evaluator rather than this conversion layer.
  */
 public final class JenaGeometryAdapter {
@@ -25,6 +29,7 @@ public final class JenaGeometryAdapter {
 		JenaCalculationPrecision.configure();
 		SRSRegistry.setupDefaultSRS();
 		GeometryDatatype.registerDatatypes();
+		TypeMapper.getInstance().registerDatatype(GeoJsonGeometryDatatype.INSTANCE);
 	}
 
 	public static SourceGeometryLiteral toSourceGeometryLiteral(Literal literal) {
@@ -49,14 +54,24 @@ public final class JenaGeometryAdapter {
 
 	public static Literal toRdf4jLiteral(ValueFactory valueFactory,
 			org.apache.jena.geosparql.implementation.GeometryWrapper wrapper, IRI datatype) {
-		IRI jenaDatatype = SourceGeometryLiteral.fromLiteral(
-				valueFactory.createLiteral(wrapper.getLexicalForm(), datatype)).jenaDatatype();
+		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
 		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
 			String wkt = new WKTWriter().write(wrapper.getParsingGeometry());
 			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(wrapper.getSrsURI())) {
 				wkt = "<" + wrapper.getSrsURI() + "> " + wkt;
 			}
 			return valueFactory.createLiteral(wkt, datatype);
+		}
+		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
+			Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(
+					wrapper.getParsingGeometry(), 2);
+			GeometryWrapper output = new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84,
+					jenaDatatype.stringValue(), new DimensionInfo(2, 2, geometry.getDimension()));
+			org.apache.jena.rdf.model.Literal literal = output.asLiteral(jenaDatatype.stringValue());
+			return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
+		}
+		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype) && wrapper.isEmpty()) {
+			return valueFactory.createLiteral("", datatype);
 		}
 		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(jenaDatatype.stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);

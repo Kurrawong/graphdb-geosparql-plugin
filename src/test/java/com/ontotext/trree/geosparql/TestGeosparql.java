@@ -28,8 +28,9 @@ import org.junit.*;
 import static org.junit.Assert.*;
 
 /**
- * Repository-level SPARQL coverage for GeoSPARQL functions. Datatype-aware geometry-result behavior is tracked by
- * <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue 11</a>.
+ * Repository-level SPARQL coverage for GeoSPARQL functions. Datatype-aware geometry results and reusable GeoJSON
+ * geometry literals are tracked by <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue
+ * 11</a> and <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/12">issue 12</a>.
  */
 public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	@ClassRule
@@ -260,6 +261,36 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertTrue(gmlResult.stringValue().startsWith("<gml:"));
 		assertEquals("http://www.opengis.net/def/crs/EPSG/0/32634",
 				JenaGeometryAdapter.toSourceGeometryLiteral(gmlResult).effectiveCrsUri());
+	}
+
+	@Test
+	public void storedGeoJsonGraphPatternIsVisibleAndReusableThroughSparql() throws RDF4JException {
+		IRI subject = vf().createIRI("u:geojson");
+		IRI boundsPredicate = vf().createIRI("u:bounds");
+		Literal stored = vf().createLiteral(
+				"{\"type\":\"LineString\",\"coordinates\":[[0,0,10],[1,0.1,20],[2,0,30]]}",
+				GeoConstants.GEO_JSON_LITERAL);
+		Literal bounds = vf().createLiteral(
+				"{\"type\":\"Polygon\",\"coordinates\":[[[-1,-1],[-1,1],[3,1],[3,-1],[-1,-1]]]}",
+				GeoConstants.GEO_JSON_LITERAL);
+		conn().add(subject, GeoConstants.GEO_AS_GEO_JSON, stored);
+		conn().add(subject, boundsPredicate, bounds);
+
+		Literal retrieved = singleLiteralResult("SELECT ?result WHERE { <u:geojson> <"
+				+ GeoConstants.GEO_AS_GEO_JSON + "> ?result }");
+		Literal simplified = singleLiteralResult("SELECT ?result WHERE { <u:geojson> <"
+				+ GeoConstants.GEO_AS_GEO_JSON + "> ?source . BIND(<" + GeoConstants.EXT_SIMPLIFY
+				+ ">(?source, 0.2) AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { <u:geojson> <" + GeoConstants.GEO_AS_GEO_JSON + "> ?source ; "
+						+ "<u:bounds> ?bounds . FILTER(<" + GeoConstants.GEOF_SF_WITHIN
+						+ ">(?source, ?bounds)) }").evaluate();
+
+		assertEquals(stored, retrieved);
+		assertTrue(within);
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, simplified.getDatatype());
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(simplified)
+				.asGeometryWrapper().getCoordinateDimension());
 	}
 
 	@Test public void invalidGeometriesReportValidityAndRejectDifference() throws RDF4JException {
