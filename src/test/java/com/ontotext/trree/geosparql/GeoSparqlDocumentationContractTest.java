@@ -16,6 +16,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginTest {
+	private static final String SERIALIZATION_GUIDE = "docs/geosparql-geometry-serialization.md";
 	private static final String PREFIXES = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
@@ -34,6 +35,22 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 		assertTrue(readme.contains(DOCUMENTED_FORCE_REINDEX_UPDATE));
 		enablePlugin();
 		executeSparqlUpdateQuery(DOCUMENTED_FORCE_REINDEX_UPDATE);
+	}
+
+	@Test
+	public void readmeLinksTheBoundedGeometrySerializationContract() throws IOException {
+		String readme = Files.readString(Path.of("README.md"));
+		String guide = Files.readString(Path.of(SERIALIZATION_GUIDE));
+
+		assertTrue(readme.contains("[Geometry serialization and conversion]("
+				+ SERIALIZATION_GUIDE + ")"));
+		assertTrue(guide.contains("geo:geoJSONLiteral"));
+		assertTrue(guide.contains("geof:asGeoJSON"));
+		assertTrue(guide.contains("geof:asWKT"));
+		assertTrue(guide.contains("geof:asGML"));
+		assertTrue(guide.contains("geof:asKML"));
+		assertTrue(guide.contains("geof:asDGGS"));
+		assertTrue(guide.contains("does not claim complete GeoSPARQL 1.1 conformance"));
 	}
 
 	@Test
