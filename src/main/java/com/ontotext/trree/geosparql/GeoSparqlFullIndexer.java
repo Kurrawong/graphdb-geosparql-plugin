@@ -11,7 +11,7 @@ import java.util.function.Function;
  * Rebuilds the complete GeoSPARQL Lucene index from repository geometry statements.
  *
  * <p>{@link GeoSparqlPlugin} uses this class for enable-time indexing and explicit force reindex. A rebuild starts
- * from a fresh index, then visits {@code geo:asWKT}, {@code geo:asGML}, and Feature
+ * from a fresh index, then visits {@code geo:asWKT}, {@code geo:asGML}, {@code geo:asGeoJSON}, and Feature
  * {@code geo:hasDefaultGeometry} statements in that order. Each source geometry literal is converted and indexed
  * before the repository iterator advances.
  *
@@ -39,6 +39,7 @@ public class GeoSparqlFullIndexer {
 				pluginConnection.getEntities().get(subject).stringValue();
 		indexGeometryResources(pluginConnection, plugin.asWKT, subjectMapper);
 		indexGeometryResources(pluginConnection, plugin.asGML, subjectMapper);
+		indexGeometryResources(pluginConnection, plugin.asGeoJSON, subjectMapper);
 		indexFeatures(pluginConnection, subjectMapper);
 	}
 
@@ -61,6 +62,7 @@ public class GeoSparqlFullIndexer {
 			while (iterator.next()) {
 				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.asWKT, subjectMapper);
 				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.asGML, subjectMapper);
+				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.asGeoJSON, subjectMapper);
 			}
 		} finally {
 			iterator.close();
