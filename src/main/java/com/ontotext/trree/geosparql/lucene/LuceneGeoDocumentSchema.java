@@ -82,10 +82,14 @@ final class LuceneGeoDocumentSchema {
 	/** Commit metadata value requiring source WKB, exact envelope bounds, provenance, and indexed source CRS. */
 	static final String COMMIT_SCHEMA_LAYOUT_VALUE =
 			"prefix-envelope-ordinate-preserving-source-wkb-envelope-marker-topology-dv-envelope-points-bounds-kind-indexed-source-crs";
+	/** Commit metadata key identifying the geometry serialization predicates included during full indexing. */
+	static final String COMMIT_SERIALIZATION_DISCOVERY_KEY = "geosparql.serializationDiscovery";
+	/** Commit metadata value requiring WKT, GML, and GeoJSON serialization discovery. */
+	static final String COMMIT_SERIALIZATION_DISCOVERY_VALUE = "wkt-gml-geojson";
 	/** Commit metadata key identifying the CRS transformation inputs used for candidate envelopes. */
 	static final String COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY = "geosparql.crsEnvironmentFingerprint";
 	static final String SCHEMA_MISMATCH_MESSAGE =
-			"Existing GeoSPARQL Lucene index does not match the required schema v2 layout. "
+			"Existing GeoSPARQL Lucene index does not match the required schema v2 layout and serialization-discovery policy. "
 			+ "Jena-backed CRS-correct evaluation requires a full GeoSPARQL reindex. "
 			+ "Queries are unavailable until reindex completes; run the documented force-reindex control or command.";
 
@@ -194,7 +198,9 @@ final class LuceneGeoDocumentSchema {
 
 	static boolean hasCurrentSchemaCommitData(Map<String, String> commitData) {
 		return COMMIT_SCHEMA_VERSION_VALUE.equals(commitData.get(COMMIT_SCHEMA_VERSION_KEY))
-				&& COMMIT_SCHEMA_LAYOUT_VALUE.equals(commitData.get(COMMIT_SCHEMA_LAYOUT_KEY));
+				&& COMMIT_SCHEMA_LAYOUT_VALUE.equals(commitData.get(COMMIT_SCHEMA_LAYOUT_KEY))
+				&& COMMIT_SERIALIZATION_DISCOVERY_VALUE.equals(
+						commitData.get(COMMIT_SERIALIZATION_DISCOVERY_KEY));
 	}
 
 	static Iterable<Map.Entry<String, String>> currentCompatibilityCommitData(
@@ -207,6 +213,7 @@ final class LuceneGeoDocumentSchema {
 		}
 		commitData.put(COMMIT_SCHEMA_VERSION_KEY, COMMIT_SCHEMA_VERSION_VALUE);
 		commitData.put(COMMIT_SCHEMA_LAYOUT_KEY, COMMIT_SCHEMA_LAYOUT_VALUE);
+		commitData.put(COMMIT_SERIALIZATION_DISCOVERY_KEY, COMMIT_SERIALIZATION_DISCOVERY_VALUE);
 		commitData.put(COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY, crsEnvironmentFingerprint);
 		return commitData.entrySet();
 	}

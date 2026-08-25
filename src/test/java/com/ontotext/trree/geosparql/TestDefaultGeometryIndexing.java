@@ -340,15 +340,6 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 		return connection.prepareBooleanQuery(QueryLanguage.SPARQL, PREFIXES + "ASK { " + pattern + " }").evaluate();
 	}
 
-	private static void assertCauseChainContains(Throwable throwable, String expectedText) {
-		for (Throwable current = throwable; current != null; current = current.getCause()) {
-			if (current.getMessage() != null && current.getMessage().contains(expectedText)) {
-				return;
-			}
-		}
-		throw new AssertionError("Expected exception cause containing: " + expectedText, throwable);
-	}
-
 	private int count(String query) throws Exception {
 		TupleQueryResult result = connection.prepareTupleQuery(QueryLanguage.SPARQL, PREFIXES + query).evaluate();
 		try {
