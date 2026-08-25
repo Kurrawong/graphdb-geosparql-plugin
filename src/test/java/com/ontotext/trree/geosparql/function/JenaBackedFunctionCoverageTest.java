@@ -100,6 +100,7 @@ public class JenaBackedFunctionCoverageTest {
 			GeoConstants.GEOF_ENVELOPE,
 			GeoConstants.GEOF_BOUNDARY,
 			GeoConstants.GEOF_GETSRID,
+			GeoConstants.GEOF_AS_GEO_JSON,
 			GeoConstants.GEO_DIMENSION,
 			GeoConstants.GEO_COORDINATE_DIMENSION,
 			GeoConstants.GEO_SPATIAL_DIMENSION,
@@ -358,6 +359,18 @@ public class JenaBackedFunctionCoverageTest {
 
 		assertThrows(ValueExprEvaluationException.class,
 				() -> evaluate(GeoConstants.GEOF_ENVELOPE, unsupported));
+	}
+
+	@Test
+	public void asGeoJsonRejectsInvalidArgumentsThroughRegisteredFunction() {
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_GEO_JSON));
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_GEO_JSON, wkt("POINT(1 2)"), wkt("POINT(3 4)")));
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_GEO_JSON, VF.createIRI("http://example.com/geometry")));
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_GEO_JSON, wkt("not geometry")));
 	}
 
 	@Test
