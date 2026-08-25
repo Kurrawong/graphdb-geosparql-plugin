@@ -52,11 +52,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			return false;
 		}
 
-		if (predicate == asWKT || predicate == asGML || predicate == asGeoJSON) {
-			geometriesToUpdate.add(subject);
-		} else if (predicate == hasDefaultGeometry) {
-			featuresToUpdate.add(subject);
-		}
+		recordAffectedEntity(subject, predicate);
 		return false;
 	}
 
@@ -67,12 +63,16 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			return false;
 		}
 
+		recordAffectedEntity(subject, predicate);
+		return false;
+	}
+
+	private void recordAffectedEntity(long subject, long predicate) {
 		if (predicate == asWKT || predicate == asGML || predicate == asGeoJSON) {
 			geometriesToUpdate.add(subject);
 		} else if (predicate == hasDefaultGeometry) {
 			featuresToUpdate.add(subject);
 		}
-		return false;
 	}
 
 	@Override
