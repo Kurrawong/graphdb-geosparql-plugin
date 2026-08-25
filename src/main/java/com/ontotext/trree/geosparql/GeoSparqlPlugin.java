@@ -69,6 +69,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 
 	long asWKT;
 	long asGML;
+	long asGeoJSON;
 	long hasDefaultGeometry;
 
 	GeoSparqlIndexer indexer;
@@ -235,7 +236,14 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 		if (!(value instanceof Literal)) {
 			return null;
 		}
-		IRI datatype = predicateId == asGML ? GeoConstants.GEO_GML_LITERAL : GeoConstants.GEO_WKT_LITERAL;
+		IRI datatype;
+		if (predicateId == asGML) {
+			datatype = GeoConstants.GEO_GML_LITERAL;
+		} else if (predicateId == asGeoJSON) {
+			datatype = GeoConstants.GEO_JSON_LITERAL;
+		} else {
+			datatype = GeoConstants.GEO_WKT_LITERAL;
+		}
 		try {
 			return getIndexGeometryFromLiteral((Literal) value, datatype);
 		} catch (JenaGeoSparqlException e) {
@@ -335,6 +343,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
     private void enableGeoSparqlPredicates(Entities entities) {
         asWKT = entities.put(GeoConstants.GEO_AS_WKT, Entities.Scope.DEFAULT);
         asGML = entities.put(GeoConstants.GEO_AS_GML, Entities.Scope.DEFAULT);
+        asGeoJSON = entities.put(GeoConstants.GEO_AS_GEO_JSON, Entities.Scope.DEFAULT);
         hasDefaultGeometry = entities.put(GeoConstants.GEO_HAS_DEFAULT_GEOMETRY, Entities.Scope.DEFAULT);
     }
 

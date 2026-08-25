@@ -1070,6 +1070,9 @@ public class LuceneGeoIndexerTest {
         assertEquals(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_VALUE,
                 ((DirectoryReader) reader).getIndexCommit().getUserData()
                         .get(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY));
+		assertEquals(LuceneGeoDocumentSchema.COMMIT_SERIALIZATION_DISCOVERY_VALUE,
+				((DirectoryReader) reader).getIndexCommit().getUserData()
+						.get(LuceneGeoDocumentSchema.COMMIT_SERIALIZATION_DISCOVERY_KEY));
     }
 
     private boolean hasRequiredEntityIdDocValues(IndexReader reader) {
