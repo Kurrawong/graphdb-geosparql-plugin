@@ -283,8 +283,8 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 		releasePreTransactionCommit();
 		deleteObsoleteCommits();
-		schemaMismatchDetected = schemaMismatchAtTransactionStart;
-		crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
+		schemaMismatchDetected = detectSchemaMismatch();
+		crsEnvironmentMismatchDetected = detectCrsEnvironmentMismatch();
 		recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
 		if (requireRecovery && !pendingTransactionMarker.exists()) {
 			pendingTransactionMarker.create();

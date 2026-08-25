@@ -537,10 +537,27 @@ public class LuceneGeoSchemaTest {
 		indexer.commit();
 		indexer.rollback();
 
+		PluginException liveReadException = assertThrows(PluginException.class, () -> {
+			try (CloseableIterator<SourceGeometryLiteral> ignored = indexer.getSourceGeometryLiteralsFor(0)) {
+				// The compatibility gate rejects the query before iteration starts.
+			}
+		});
+		assertForceReindexMessage(liveReadException);
+
+		indexer.begin();
+		try {
+			PluginException liveWriteException = assertThrows(PluginException.class,
+					() -> indexer.indexGeometryList(
+							2L, subject -> "Subject " + subject, List.of(sampleGeometry)));
+			assertForceReindexMessage(liveWriteException);
+		} finally {
+			indexer.rollback();
+		}
+
 		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
-		PluginException exception = assertThrows(PluginException.class,
+		PluginException restartException = assertThrows(PluginException.class,
 				() -> restarted.getSourceGeometryLiteralsFor(0));
-		assertForceReindexMessage(exception);
+		assertForceReindexMessage(restartException);
 	}
 
     @Test
