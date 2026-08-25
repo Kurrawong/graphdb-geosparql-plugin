@@ -292,6 +292,39 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 				.asGeometryWrapper().getCoordinateDimension());
 	}
 
+	@Test
+	public void asGeoJsonConvertsWktAndComposesThroughSparql() {
+		String asGeoJson = "http://www.opengis.net/def/function/geosparql/asGeoJSON";
+		Literal result = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<"
+						+ asGeoJson
+						+ ">(\"POINT(1 2)\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL
+						+ ">) AS ?result) }");
+		Literal envelope = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<"
+						+ asGeoJson
+						+ ">(\"LINESTRING(1 2,2 3)\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL
+						+ ">) AS ?converted) BIND(<"
+						+ GeoConstants.GEOF_ENVELOPE
+						+ ">(?converted) AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<"
+						+ asGeoJson
+						+ ">(\"POINT(1 2)\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL
+						+ ">) AS ?result) "
+						+ "FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?result, "
+						+ "\"{\\\"type\\\":\\\"Polygon\\\",\\\"coordinates\\\":[[[0,0],[0,3],[3,3],[3,0],[0,0]]]}\""
+						+ "^^<" + GeoConstants.GEO_JSON_LITERAL + ">)) }").evaluate();
+
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, result.getDatatype());
+		assertEquals("{\"type\":\"Point\",\"coordinates\":[1,2]}", result.stringValue());
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, envelope.getDatatype());
+		assertTrue(within);
+	}
+
 	@Test public void invalidGeometriesReportValidityAndRejectDifference() throws RDF4JException {
 		Literal invalidGeo = asLiteral("POLYGON((2 2, 3 3, 3 2, 2 3, 2 2))");
 		Literal validGeo = asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))");

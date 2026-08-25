@@ -8,6 +8,7 @@ import org.apache.jena.geosparql.implementation.UnitsOfMeasure;
 import org.apache.jena.geosparql.implementation.intersection_patterns.EgenhoferIntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.RCC8IntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.SimpleFeaturesIntersectionPattern;
+import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -100,6 +101,9 @@ public final class JenaFunctionEvaluator {
 			if (GeoConstants.GEOF_GETSRID.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
 				return valueFactory.createLiteral(geometry(args[0]).getSRID(), XSD.ANYURI);
+			}
+			if (GeoConstants.GEOF_AS_GEO_JSON.stringValue().equals(functionUri)) {
+				return asGeoJson(valueFactory, functionUri, args);
 			}
 			if (GeoConstants.GEO_DIMENSION.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
@@ -494,6 +498,18 @@ public final class JenaFunctionEvaluator {
 
 	private static Literal geometryLiteral(ValueFactory valueFactory, GeometryWrapper wrapper, IRI datatype) {
 		return JenaGeometryAdapter.toRdf4jLiteral(valueFactory, wrapper, datatype);
+	}
+
+	private static Literal asGeoJson(ValueFactory valueFactory, String functionUri, Value... args)
+			throws Exception {
+		requireArgs(functionUri, args, 1);
+		SourceGeometryLiteral source = sourceLiteral(args[0]);
+		GeometryWrapper sourceGeometry = source.asGeometryWrapper();
+		GeometryWrapper crs84 = sourceGeometry.transform(SRS_URI.DEFAULT_WKT_CRS84);
+		int coordinateDimension = GeoConstants.GEO_JSON_LITERAL.equals(source.jenaDatatype())
+				? sourceGeometry.getCoordinateDimension()
+				: 2;
+		return JenaGeometryAdapter.toGeoJsonLiteral(valueFactory, crs84, coordinateDimension);
 	}
 
 	private static boolean isValid(Value value) throws ValueExprEvaluationException {

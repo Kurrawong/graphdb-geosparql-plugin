@@ -42,6 +42,7 @@ public final class GeoSparqlFunctionRegistration {
             GeoConstants.GEOF_ENVELOPE.stringValue(),
             GeoConstants.GEOF_BOUNDARY.stringValue(),
             GeoConstants.GEOF_GETSRID.stringValue(),
+            GeoConstants.GEOF_AS_GEO_JSON.stringValue(),
             GeoConstants.GEO_DIMENSION.stringValue(),
             GeoConstants.GEO_COORDINATE_DIMENSION.stringValue(),
             GeoConstants.GEO_SPATIAL_DIMENSION.stringValue(),
