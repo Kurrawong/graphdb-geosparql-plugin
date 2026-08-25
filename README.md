@@ -64,6 +64,13 @@ The update runs synchronously and may take significant time for a large reposito
 finishes. If the rebuild fails, resolve the reported geometry, CRS-data, storage, or configuration problem and run the
 update again.
 
+## Geometry serialization and conversion
+
+The plugin supports reusable WKT, GML, and GeoJSON geometry literals and the `geof:asWKT`, `geof:asGML`, and
+`geof:asGeoJSON` conversion functions. See
+[Geometry serialization and conversion](docs/geosparql-geometry-serialization.md) for the supported formats,
+round-trip guarantees, dimension and metadata loss, indexing behavior, and upgrade steps.
+
 ## GML conversion
 
 `geof:asGML(geometry, profile)` converts a supported WKT, GML, or GeoJSON geometry literal to a reusable
