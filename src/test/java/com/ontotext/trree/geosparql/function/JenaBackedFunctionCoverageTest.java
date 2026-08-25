@@ -1,6 +1,8 @@
 package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
+import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -23,6 +25,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Verifies the registered Jena-backed function contracts, including datatype-aware geometry results from
+ * <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue 11</a>.
+ */
 public class JenaBackedFunctionCoverageTest {
 	private static final ValueFactory VF = SimpleValueFactory.getInstance();
 	private static final ValueFactoryTripleSource TRIPLE_SOURCE = new ValueFactoryTripleSource(VF);
@@ -279,6 +285,48 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
+	public void wktGeometryResultsUseTwoDimensionalLexicalForm() throws Exception {
+		Literal result = (Literal) evaluate(GeoConstants.EXT_SIMPLIFY,
+				wkt("LINESTRING Z (0 0 1, 1 1 2)"), VF.createLiteral("0.0"));
+		SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		assertEquals("LINESTRING (0 0, 1 1)", result.stringValue());
+		assertEquals(2, parsed.asGeometryWrapper().getCoordinateDimension());
+	}
+
+	@Test
+	public void geometryProducingFunctionFamiliesRetainGmlSerialization() throws Exception {
+		List<Value> results = List.of(
+				evaluate(GeoConstants.GEOF_ENVELOPE, gmlLineString("0 0 1 1")),
+				evaluate(GeoConstants.GEOF_UNION,
+						gmlLineString("0 0 1 1"), gmlLineString("1 1 2 2")),
+				evaluate(GeoConstants.GEOF_BUFFER, gmlPoint("0 0"), VF.createLiteral("0.1")),
+				evaluate(GeoConstants.EXT_CLOSEST_POINT,
+						gmlLineString("0 0 1 1"), gmlLineString("1 1 2 2")),
+				evaluate(GeoConstants.EXT_SIMPLIFY,
+						gmlLineString("0 0 1 0.1 2 0"), VF.createLiteral("0.2")));
+
+		for (Value value : results) {
+			assertTrue(value instanceof Literal);
+			Literal literal = (Literal) value;
+			assertEquals(GeoConstants.GEO_GML_LITERAL, literal.getDatatype());
+			assertTrue(literal.stringValue().startsWith("<gml:"));
+			assertEquals("http://www.opengis.net/def/crs/OGC/1.3/CRS84",
+					JenaGeometryAdapter.toSourceGeometryLiteral(literal).effectiveCrsUri());
+		}
+	}
+
+	@Test
+	public void geometryProducingFunctionsRejectUnsupportedSourceDatatype() {
+		Literal unsupported = VF.createLiteral("POINT(1 2)",
+				VF.createIRI("http://example.com/geometryLiteral"));
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_ENVELOPE, unsupported));
+	}
+
+	@Test
 	public void getSridHasDirectCoverage() throws Exception {
 		Value srid = evaluate(GeoConstants.GEOF_GETSRID,
 				wkt("<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(1 2)"));
@@ -375,6 +423,16 @@ public class JenaBackedFunctionCoverageTest {
 
 	private static Literal gml(String lexical) {
 		return VF.createLiteral(lexical, GeoConstants.GEO_GML_LITERAL);
+	}
+
+	private static Literal gmlPoint(String coordinates) {
+		return gml("<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\">"
+				+ "<gml:pos>" + coordinates + "</gml:pos></gml:Point>");
+	}
+
+	private static Literal gmlLineString(String coordinates) {
+		return gml("<gml:LineString xmlns:gml=\"http://www.opengis.net/gml/3.2\">"
+				+ "<gml:posList>" + coordinates + "</gml:posList></gml:LineString>");
 	}
 
 	private static Value evaluate(IRI functionUri, Value... args) throws ValueExprEvaluationException {

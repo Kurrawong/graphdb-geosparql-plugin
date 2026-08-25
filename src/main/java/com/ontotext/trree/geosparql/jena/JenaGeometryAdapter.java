@@ -1,11 +1,14 @@
 package com.ontotext.trree.geosparql.jena;
 
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.datatype.GeometryDatatype;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
+import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.locationtech.jts.io.WKTWriter;
 
 /**
  * Central RDF4J-to-Jena conversion entry point for geometry values.
@@ -44,10 +47,18 @@ public final class JenaGeometryAdapter {
 		return IndexGeometry.fromSourceGeometryLiteral(sourceGeometryLiteral);
 	}
 
-	public static Literal toRdf4jLiteral(ValueFactory valueFactory, org.apache.jena.geosparql.implementation.GeometryWrapper wrapper,
-										 IRI datatype) {
-		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(SourceGeometryLiteral.fromLiteral(
-				valueFactory.createLiteral(wrapper.getLexicalForm(), datatype)).jenaDatatype().stringValue());
+	public static Literal toRdf4jLiteral(ValueFactory valueFactory,
+			org.apache.jena.geosparql.implementation.GeometryWrapper wrapper, IRI datatype) {
+		IRI jenaDatatype = SourceGeometryLiteral.fromLiteral(
+				valueFactory.createLiteral(wrapper.getLexicalForm(), datatype)).jenaDatatype();
+		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
+			String wkt = new WKTWriter().write(wrapper.getParsingGeometry());
+			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(wrapper.getSrsURI())) {
+				wkt = "<" + wrapper.getSrsURI() + "> " + wkt;
+			}
+			return valueFactory.createLiteral(wkt, datatype);
+		}
+		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(jenaDatatype.stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
 	}
 }
