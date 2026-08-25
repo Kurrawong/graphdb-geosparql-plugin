@@ -200,12 +200,40 @@ public class GeoSparqlUpdateListenerTest {
 				List.of(TestIndexGeometries.fromWkt("POINT(2 2)")));
 		listener.transactionCommit(connection);
 		indexer.failRestore = true;
-		listener.transactionAborted(connection);
+		PluginException failure = assertThrows(PluginException.class,
+				() -> listener.transactionAborted(connection));
 
+		assertTrue(failure.getMessage().contains("Unable to rollback the GeoSPARQL Lucene index transaction"));
 		assertPendingTransactionFailure(indexer);
 		LuceneGeoIndexer restarted = new LuceneGeoIndexer(enabledPlugin(dataDir));
 		restarted.initialize();
 		assertPendingTransactionFailure(restarted);
+	}
+
+	@Test
+	public void completionFailurePropagatesAfterCommittedIndexUpdate() throws Exception {
+		Path dataDir = tmpFolder.newFolder("listener-completion-failure").toPath();
+		GeoSparqlPlugin plugin = enabledPlugin(dataDir);
+		FailingCompleteIndexer indexer = new FailingCompleteIndexer(plugin);
+		indexer.initialize();
+		plugin.indexer = indexer;
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
+		PluginConnection connection = emptyPluginConnection();
+
+		listener.transactionStarted(connection);
+		listener.beginIndexTransactionForPersistentMutation();
+		indexer.indexGeometryList(1L, id -> "geometry",
+				List.of(TestIndexGeometries.fromWkt("POINT(1 1)")));
+		listener.transactionCommit(connection);
+		indexer.failComplete = true;
+		try {
+			PluginException failure = assertThrows(PluginException.class,
+					() -> listener.transactionCompleted(connection));
+			assertTrue(failure.getMessage().contains("Unable to finalize the GeoSPARQL Lucene index transaction"));
+		} finally {
+			indexer.failComplete = false;
+			indexer.complete();
+		}
 	}
 
 	@Test
@@ -351,6 +379,22 @@ public class GeoSparqlUpdateListenerTest {
 				throw new IOException("Simulated restoration failure");
 			}
 			super.restorePreTransactionCommit();
+		}
+	}
+
+	private static final class FailingCompleteIndexer extends LuceneGeoIndexer {
+		private boolean failComplete;
+
+		private FailingCompleteIndexer(GeoSparqlPlugin parent) {
+			super(parent);
+		}
+
+		@Override
+		public void complete() throws Exception {
+			if (failComplete) {
+				throw new IOException("Simulated completion failure");
+			}
+			super.complete();
 		}
 	}
 
