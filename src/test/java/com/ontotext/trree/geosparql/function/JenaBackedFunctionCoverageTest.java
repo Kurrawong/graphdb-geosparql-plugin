@@ -345,6 +345,14 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
+	public void geoJsonGeometryResultsOutsideCrs84DomainAreRejected() {
+		Literal boundaryPoint = geoJson("{\"type\":\"Point\",\"coordinates\":[180,0]}");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_BUFFER, boundaryPoint, VF.createLiteral("0.1")));
+	}
+
+	@Test
 	public void geometryProducingFunctionsRejectUnsupportedSourceDatatype() {
 		Literal unsupported = VF.createLiteral("POINT(1 2)",
 				VF.createIRI("http://example.com/geometryLiteral"));

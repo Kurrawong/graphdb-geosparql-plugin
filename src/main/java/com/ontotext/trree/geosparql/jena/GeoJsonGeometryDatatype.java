@@ -69,12 +69,14 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 		GeoJsonWriter writer = new GeoJsonWriter();
 		writer.setEncodeCRS(false);
 		writer.setForceCCW(true);
-		return writer.write(wrapper.getParsingGeometry());
+		String lexicalForm = writer.write(wrapper.getParsingGeometry());
+		read(lexicalForm);
+		return lexicalForm;
 	}
 
 	private static ParsedGeometry parseGeometry(Map<?, ?> object) {
 		if (object.containsKey("crs")) {
-			throw invalid("the legacy crs member is not permitted", null);
+			throw invalid("the crs member is not permitted", null);
 		}
 		Object typeValue = object.get("type");
 		if (!(typeValue instanceof String type)) {
