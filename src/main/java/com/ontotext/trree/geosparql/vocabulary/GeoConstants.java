@@ -104,6 +104,7 @@ public interface GeoConstants {
     IRI GEOF_GETSRID = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "getSRID");
     IRI GEOF_AS_GEO_JSON = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asGeoJSON");
     IRI GEOF_AS_WKT = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asWKT");
+    IRI GEOF_AS_GML = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asGML");
 
     IRI EXT_AREA = SimpleValueFactory.getInstance().createIRI(NS_EXT + "area");
     IRI EXT_CLOSEST_POINT = SimpleValueFactory.getInstance().createIRI(NS_EXT + "closestPoint");

@@ -330,6 +330,23 @@
 		</dependency>
 
 		<dependency>
+			<groupId>org.jvnet.ogc</groupId>
+			<artifactId>gml-v_3_2_1-schema</artifactId>
+			<version>1.1.0</version>
+			<scope>test</scope>
+			<exclusions>
+				<exclusion>
+					<groupId>org.jvnet.jaxb2_commons</groupId>
+					<artifactId>jaxb2-basics-runtime</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>com.sun.xml.bind</groupId>
+					<artifactId>jaxb-impl</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers</artifactId>
 			<version>${testcontainers.version}</version>
