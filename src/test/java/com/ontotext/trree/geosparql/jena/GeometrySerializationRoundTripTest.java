@@ -7,6 +7,7 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.junit.Test;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.operation.relateng.RelateNG;
 import org.locationtech.jts.operation.relateng.RelatePredicate;
@@ -86,34 +87,43 @@ public class GeometrySerializationRoundTripTest {
 			Literal wkt = convert(GeoConstants.GEOF_AS_WKT, gml);
 			Literal gmlAgain = asGml(wkt);
 
-			assertSameSourceSemantics(source.toString() + " GML", source, gml);
-			assertSameSourceSemantics(source.toString() + " WKT", source, wkt);
-			assertSameSourceSemantics(source.toString() + " GML again", source, gmlAgain);
+			assertSameSupportedGmlSemantics(source.toString() + " GML", source, gml);
+			assertSameSupportedGmlSemantics(source.toString() + " WKT", source, wkt);
+			assertSameSupportedGmlSemantics(source.toString() + " GML again", source, gmlAgain);
 		}
 	}
 
 	@Test
 	public void generatedGeoJsonRoundTripsUseCrs84XySemantics() throws Exception {
-		Literal source = literal("<" + EPSG_4979 + "> POINT Z(-27.47 153.03 55)",
+		Literal xyzSource = literal("<" + EPSG_4979 + "> POINT Z(-27.47 153.03 55)",
 				GeoConstants.GEO_WKT_LITERAL);
+		List<GeneratedGeoJsonCase> cases = List.of(
+				new GeneratedGeoJsonCase("XYZ WKT", xyzSource, 153.03, -27.47),
+				new GeneratedGeoJsonCase("XYZ GML", asGml(xyzSource), 153.03, -27.47),
+				new GeneratedGeoJsonCase("XYM WKT",
+						literal("POINT M(1 2 9)", GeoConstants.GEO_WKT_LITERAL), 1, 2),
+				new GeneratedGeoJsonCase("XYZM WKT",
+						literal("POINT ZM(1 2 3 9)", GeoConstants.GEO_WKT_LITERAL), 1, 2));
 
-		for (Literal input : List.of(source, asGml(source))) {
-			Literal geoJson = convert(GeoConstants.GEOF_AS_GEO_JSON, input);
+		for (GeneratedGeoJsonCase geometryCase : cases) {
+			Literal geoJson = convert(GeoConstants.GEOF_AS_GEO_JSON, geometryCase.source());
 			Literal wkt = convert(GeoConstants.GEOF_AS_WKT, geoJson);
 			Literal gml = asGml(geoJson);
-			Literal geoJsonAgain = convert(GeoConstants.GEOF_AS_GEO_JSON, gml);
+			Literal geoJsonFromWkt = convert(GeoConstants.GEOF_AS_GEO_JSON, wkt);
+			Literal geoJsonFromGml = convert(GeoConstants.GEOF_AS_GEO_JSON, gml);
 
-			for (Literal result : List.of(geoJson, wkt, gml, geoJsonAgain)) {
+			for (Literal result : List.of(geoJson, wkt, gml, geoJsonFromWkt, geoJsonFromGml)) {
 				SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
 				Geometry geometry = parsed.asGeometryWrapper().getParsingGeometry();
 				assertEquals(result.toString(), CRS84, parsed.effectiveCrsUri());
 				assertEquals(result.toString(), 2, parsed.asGeometryWrapper().getCoordinateDimension());
 				assertTrue(result.toString(), Double.isNaN(geometry.getCoordinate().getZ()));
-				assertEquals(result.toString(), 153.03, geometry.getCoordinate().x, 1e-8);
-				assertEquals(result.toString(), -27.47, geometry.getCoordinate().y, 1e-8);
+				assertTrue(result.toString(), Double.isNaN(geometry.getCoordinate().getM()));
+				assertEquals(result.toString(), geometryCase.x(), geometry.getCoordinate().x, 1e-8);
+				assertEquals(result.toString(), geometryCase.y(), geometry.getCoordinate().y, 1e-8);
+				assertTopologicallyEqual(geometryCase.label() + " " + result.getDatatype(),
+						geoJson, result);
 			}
-			assertTopologicallyEqual(input.toString() + " generated GeoJSON round trip",
-					geoJson, geoJsonAgain);
 		}
 	}
 
@@ -204,12 +214,34 @@ public class GeometrySerializationRoundTripTest {
 				VALUE_FACTORY, GeoConstants.GEOF_SF_INTERSECTS.stringValue(), expected, actual));
 	}
 
-	private static void assertSameSourceSemantics(String label, Literal expected, Literal actual) {
+	private static void assertSameSupportedGmlSemantics(String label, Literal expected, Literal actual) {
 		SourceGeometryLiteral expectedSource = JenaGeometryAdapter.toSourceGeometryLiteral(expected);
 		SourceGeometryLiteral actualSource = JenaGeometryAdapter.toSourceGeometryLiteral(actual);
+		Geometry expectedGeometry = expectedSource.asGeometryWrapper().getParsingGeometry();
+		Geometry actualGeometry = actualSource.asGeometryWrapper().getParsingGeometry();
 		assertEquals(label, expectedSource.effectiveCrsUri(), actualSource.effectiveCrsUri());
-		assertTrue(label, expectedSource.asGeometryWrapper().getParsingGeometry()
-				.equalsExact(actualSource.asGeometryWrapper().getParsingGeometry()));
+		assertEquals(label, expectedSource.asGeometryWrapper().getCoordinateDimension(),
+				actualSource.asGeometryWrapper().getCoordinateDimension());
+		assertEquals(label, expectedSource.asGeometryWrapper().getSpatialDimension(),
+				actualSource.asGeometryWrapper().getSpatialDimension());
+		assertTrue(label, expectedGeometry.equalsExact(actualGeometry));
+		Coordinate[] expectedCoordinates = expectedGeometry.getCoordinates();
+		Coordinate[] actualCoordinates = actualGeometry.getCoordinates();
+		assertEquals(label, expectedCoordinates.length, actualCoordinates.length);
+		for (int index = 0; index < expectedCoordinates.length; index++) {
+			assertOrdinateEquals(label + " Z at coordinate " + index,
+					expectedCoordinates[index].getZ(), actualCoordinates[index].getZ());
+			assertOrdinateEquals(label + " M at coordinate " + index,
+					expectedCoordinates[index].getM(), actualCoordinates[index].getM());
+		}
+	}
+
+	private static void assertOrdinateEquals(String label, double expected, double actual) {
+		if (Double.isNaN(expected)) {
+			assertTrue(label, Double.isNaN(actual));
+		} else {
+			assertEquals(label, expected, actual, 0.0);
+		}
 	}
 
 	private static void assertEmptyType(String label, String geometryType, Literal literal) throws Exception {
@@ -221,5 +253,8 @@ public class GeometrySerializationRoundTripTest {
 	}
 
 	private record RoundTrip(String label, IRI datatype, Literal result) {
+	}
+
+	private record GeneratedGeoJsonCase(String label, Literal source, double x, double y) {
 	}
 }
