@@ -34,6 +34,7 @@ import static org.junit.Assert.assertTrue;
 public class RepositoryGeometrySourceTest {
 	private static final long AS_WKT = 10L;
 	private static final long AS_GML = 11L;
+	private static final long AS_GEO_JSON = 13L;
 	private static final long HAS_DEFAULT_GEOMETRY = 12L;
 	private static final long GEOMETRY_RESOURCE = 100L;
 	private static final long FEATURE_1 = 200L;
@@ -134,10 +135,65 @@ public class RepositoryGeometrySourceTest {
 		assertEquals(1, plugin.conversionCount);
 	}
 
+	@Test
+	public void geoJsonPredicateAppliesFallbackDatatype() {
+		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
+				.createIRI("http://example.com/geometry"));
+		entities.add(LITERAL, SimpleValueFactory.getInstance()
+				.createLiteral("{\"type\":\"Point\",\"coordinates\":[1,2]}"));
+		FakeStatements statements = new FakeStatements();
+		statements.add(GEOMETRY_RESOURCE, AS_GEO_JSON, LITERAL);
+
+		List<IndexGeometry> geometries = new RepositoryGeometrySource(plugin,
+				new FakePluginConnection(entities, statements))
+				.geometriesForGeometryResource(GEOMETRY_RESOURCE);
+
+		assertEquals(1, geometries.size());
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, geometries.get(0).sourceGeometryLiteral().datatype());
+		assertEquals("Point", geometries.get(0).sourceGeometryLiteral().asGeometryWrapper().getGeometryType());
+	}
+
+	@Test
+	public void geoJsonPredicateUsesStrictConversionContract() {
+		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
+				.createIRI("http://example.com/geometry"));
+		entities.add(LITERAL, SimpleValueFactory.getInstance()
+				.createLiteral("{\"type\":\"Point\",\"coordinates\":[1]}"));
+		FakeStatements statements = new FakeStatements();
+		statements.add(GEOMETRY_RESOURCE, AS_GEO_JSON, LITERAL);
+		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
+				new FakePluginConnection(entities, statements));
+
+		PluginException failure = assertThrows(PluginException.class,
+				() -> source.geometriesForGeometryResource(GEOMETRY_RESOURCE));
+
+		assertTrue(failure.getMessage().contains("Could not index GeoSPARQL geometry"));
+		assertTrue(failure.getMessage().contains("predicate/fallback datatype: "
+				+ GeoConstants.GEO_JSON_LITERAL));
+	}
+
 	private static CountingGeoSparqlPlugin newPlugin(boolean ignoreErrors) {
 		CountingGeoSparqlPlugin plugin = new CountingGeoSparqlPlugin();
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
+		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
+		GeoSparqlConfig config = new GeoSparqlConfig();
+		config.setIgnoreErrors(ignoreErrors);
+		plugin.setConfig(config);
+		plugin.setLogger(LoggerFactory.getLogger(RepositoryGeometrySourceTest.class));
+		return plugin;
+	}
+
+	private static GeoSparqlPlugin newRepositoryPlugin(boolean ignoreErrors) {
+		GeoSparqlPlugin plugin = new GeoSparqlPlugin();
+		plugin.asWKT = AS_WKT;
+		plugin.asGML = AS_GML;
+		plugin.asGeoJSON = AS_GEO_JSON;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		GeoSparqlConfig config = new GeoSparqlConfig();
 		config.setIgnoreErrors(ignoreErrors);

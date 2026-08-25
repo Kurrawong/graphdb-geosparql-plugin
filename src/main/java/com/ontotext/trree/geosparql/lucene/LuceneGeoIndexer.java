@@ -239,26 +239,16 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		if (!transactionActive) {
 			return;
 		}
-		IOException cleanupFailure = null;
 		try {
 			releasePreTransactionCommit();
 			deleteObsoleteCommits();
-		} catch (IOException e) {
-			cleanupFailure = e;
-		}
-		try {
 			pendingTransactionMarker.remove();
-		} catch (IOException e) {
-			if (cleanupFailure == null) {
-				cleanupFailure = e;
-			} else {
-				cleanupFailure.addSuppressed(e);
-			}
-		}
-		recoveryRequired = false;
-		clearTransactionState();
-		if (cleanupFailure != null) {
-			throw cleanupFailure;
+			recoveryRequired = false;
+		} catch (Exception e) {
+			retainRecoveryState(e);
+			throw e;
+		} finally {
+			clearTransactionState();
 		}
 	}
 
@@ -272,28 +262,34 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		if (!transactionActive) {
 			return;
 		}
-		boolean pendingCommit = pendingTransactionMarker.exists();
-		if (indexWriter != null && indexWriter.isOpen()) {
-			indexWriter.rollback();
+		try {
+			boolean pendingCommit = pendingTransactionMarker.exists();
+			if (indexWriter != null && indexWriter.isOpen()) {
+				indexWriter.rollback();
+			}
+			boolean commitWasPublished = provisionalCommitPublished
+					|| pendingCommit && hasCommitAfterPreTransactionCommit();
+			if (commitWasPublished) {
+				restorePreTransactionCommit();
+			}
+			releasePreTransactionCommit();
+			deleteObsoleteCommits();
+			schemaMismatchDetected = detectSchemaMismatch();
+			crsEnvironmentMismatchDetected = detectCrsEnvironmentMismatch();
+			recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
+			if (requireRecovery && !pendingTransactionMarker.exists()) {
+				pendingTransactionMarker.create();
+			}
+			if (!recoveryRequired) {
+				pendingTransactionMarker.remove();
+			}
+			initSettings();
+		} catch (Exception e) {
+			retainRecoveryState(e);
+			throw e;
+		} finally {
+			clearTransactionState();
 		}
-		boolean commitWasPublished = provisionalCommitPublished
-				|| pendingCommit && hasCommitAfterPreTransactionCommit();
-		if (commitWasPublished) {
-			restorePreTransactionCommit();
-		}
-		releasePreTransactionCommit();
-		deleteObsoleteCommits();
-		schemaMismatchDetected = detectSchemaMismatch();
-		crsEnvironmentMismatchDetected = detectCrsEnvironmentMismatch();
-		recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
-		if (requireRecovery && !pendingTransactionMarker.exists()) {
-			pendingTransactionMarker.create();
-		}
-		if (!recoveryRequired) {
-			pendingTransactionMarker.remove();
-		}
-		initSettings();
-		clearTransactionState();
 	}
 
 	@Override
@@ -648,12 +644,24 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 	}
 
-	private void deleteObsoleteCommits() throws IOException {
+	protected void deleteObsoleteCommits() throws IOException {
 		IndexWriter cleanupWriter = new IndexWriter(directory, newIndexWriterConfig());
 		try {
 			cleanupWriter.deleteUnusedFiles();
 		} finally {
 			cleanupWriter.rollback();
+		}
+	}
+
+	private void retainRecoveryState(Exception failure) {
+		recoveryRequired = true;
+		if (pendingTransactionMarker.exists()) {
+			return;
+		}
+		try {
+			pendingTransactionMarker.create();
+		} catch (IOException markerFailure) {
+			failure.addSuppressed(markerFailure);
 		}
 	}
 

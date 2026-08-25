@@ -45,7 +45,7 @@ public class GeoSparqlUpdateListenerTest {
 		GeoSparqlUtils.saveConfig(config, dataDir);
 		Path configPath = GeoSparqlConfig.resolveConfigPath(dataDir);
 		byte[] originalConfigFile = Files.readAllBytes(configPath);
-		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
 		PluginConnection connection = emptyPluginConnection();
 
 		listener.transactionStarted(connection);
@@ -70,7 +70,7 @@ public class GeoSparqlUpdateListenerTest {
 		GeoSparqlUtils.saveConfig(config, dataDir);
 		Path configPath = GeoSparqlConfig.resolveConfigPath(dataDir);
 		byte[] originalConfigFile = Files.readAllBytes(configPath);
-		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
 
 		listener.transactionStarted(emptyPluginConnection());
 		Files.createDirectories(GeoSparqlTransactionMarker.resolvePath(dataDir));
@@ -105,7 +105,7 @@ public class GeoSparqlUpdateListenerTest {
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
 		GeoSparqlUtils.saveConfig(config, dataDir);
 		byte[] originalConfigFile = Files.readAllBytes(GeoSparqlConfig.resolveConfigPath(dataDir));
-		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
 
 		listener.transactionStarted(null);
 		config.setPrefixTree(GeoSparqlConfig.PrefixTree.GEOHASH);
@@ -132,7 +132,7 @@ public class GeoSparqlUpdateListenerTest {
 				List.of(TestIndexGeometries.fromWkt("POINT(1 1)")));
 		indexer.commit();
 		indexer.complete();
-		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
 		PluginConnection connection = emptyPluginConnection();
 
 		listener.transactionStarted(connection);
@@ -158,7 +158,7 @@ public class GeoSparqlUpdateListenerTest {
 		plugin.setConfig(config);
 		plugin.setDataDir(dataDir.toFile());
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlUpdateListenerTest.class));
-		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
 		listener.transactionStarted(emptyPluginConnection());
 
 		config.setEnabled(true);
@@ -191,7 +191,7 @@ public class GeoSparqlUpdateListenerTest {
 				List.of(TestIndexGeometries.fromWkt("POINT(1 1)")));
 		indexer.commit();
 		indexer.complete();
-		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
 		PluginConnection connection = emptyPluginConnection();
 
 		listener.transactionStarted(connection);
@@ -202,6 +202,7 @@ public class GeoSparqlUpdateListenerTest {
 		indexer.failRestore = true;
 		listener.transactionAborted(connection);
 
+		assertFalse(indexer.isTransactionActive());
 		assertPendingTransactionFailure(indexer);
 		LuceneGeoIndexer restarted = new LuceneGeoIndexer(enabledPlugin(dataDir));
 		restarted.initialize();
@@ -271,7 +272,7 @@ public class GeoSparqlUpdateListenerTest {
 			}
 		};
 
-		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 3L);
+		GeoSparqlUpdateListener listener = new GeoSparqlUpdateListener(plugin, 1L, 2L, 4L, 3L);
 		PluginConnection connection = emptyPluginConnection();
 
 		// Transaction 1: spatial statements are added while enabled, then plugin is disabled before commit
@@ -358,7 +359,7 @@ public class GeoSparqlUpdateListenerTest {
 		private boolean failConfigRestore;
 
 		private FailingConfigRestoreListener(GeoSparqlPlugin parent) {
-			super(parent, 1L, 2L, 3L);
+			super(parent, 1L, 2L, 4L, 3L);
 		}
 
 		@Override
@@ -374,7 +375,7 @@ public class GeoSparqlUpdateListenerTest {
 		private int configRestoreCount;
 
 		private CountingConfigRestoreListener(GeoSparqlPlugin parent) {
-			super(parent, 1L, 2L, 3L);
+			super(parent, 1L, 2L, 4L, 3L);
 		}
 
 		@Override
