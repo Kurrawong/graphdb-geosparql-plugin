@@ -26,8 +26,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Verifies the registered Jena-backed function contracts, including datatype-aware geometry results and reusable
- * GeoJSON geometry literals.
+ * Verifies the registered Jena-backed function contracts, including reusable, datatype-aware geometry results.
  */
 public class JenaBackedFunctionCoverageTest {
 	private static final ValueFactory VF = SimpleValueFactory.getInstance();
@@ -101,6 +100,7 @@ public class JenaBackedFunctionCoverageTest {
 			GeoConstants.GEOF_BOUNDARY,
 			GeoConstants.GEOF_GETSRID,
 			GeoConstants.GEOF_AS_GEO_JSON,
+			GeoConstants.GEOF_AS_WKT,
 			GeoConstants.GEO_DIMENSION,
 			GeoConstants.GEO_COORDINATE_DIMENSION,
 			GeoConstants.GEO_SPATIAL_DIMENSION,
@@ -371,6 +371,21 @@ public class JenaBackedFunctionCoverageTest {
 				() -> evaluate(GeoConstants.GEOF_AS_GEO_JSON, VF.createIRI("http://example.com/geometry")));
 		assertThrows(ValueExprEvaluationException.class,
 				() -> evaluate(GeoConstants.GEOF_AS_GEO_JSON, wkt("not geometry")));
+	}
+
+	@Test
+	public void asWktRejectsInvalidArgumentsThroughRegisteredFunction() {
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_WKT));
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_WKT, wkt("POINT(1 2)"), wkt("POINT(3 4)")));
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_WKT, VF.createIRI("http://example.com/geometry")));
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_WKT, wkt("not geometry")));
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_AS_WKT,
+						wkt("<http://example.com/crs/unknown> POINT(1 2)")));
 	}
 
 	@Test

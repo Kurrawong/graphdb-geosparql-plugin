@@ -28,8 +28,7 @@ import org.junit.*;
 import static org.junit.Assert.*;
 
 /**
- * Repository-level SPARQL coverage for GeoSPARQL functions, datatype-aware geometry results, and reusable GeoJSON
- * geometry literals.
+ * Repository-level SPARQL coverage for GeoSPARQL functions and reusable, datatype-aware geometry results.
  */
 public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	@ClassRule
@@ -322,6 +321,33 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(GeoConstants.GEO_JSON_LITERAL, result.getDatatype());
 		assertEquals("{\"type\":\"Point\",\"coordinates\":[1,2]}", result.stringValue());
 		assertEquals(GeoConstants.GEO_JSON_LITERAL, envelope.getDatatype());
+		assertTrue(within);
+	}
+
+	@Test
+	public void asWktConvertsGeoJsonAndComposesThroughSparql() {
+		String asWkt = "http://www.opengis.net/def/function/geosparql/asWKT";
+		String point = "{\"type\":\"Point\",\"coordinates\":[1,2]}";
+		Literal result = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<"
+						+ asWkt
+						+ ">(\"" + point.replace("\"", "\\\"") + "\"^^<"
+						+ GeoConstants.GEO_JSON_LITERAL
+						+ ">) AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<"
+						+ asWkt
+						+ ">(\"" + point.replace("\"", "\\\"") + "\"^^<"
+						+ GeoConstants.GEO_JSON_LITERAL
+						+ ">) AS ?result) FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?result, "
+						+ "\"POLYGON((0 0,0 3,3 3,3 0,0 0))\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL + ">)) }").evaluate();
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		assertTrue(JenaGeometryAdapter.toSourceGeometryLiteral(result).asGeometryWrapper().getParsingGeometry()
+				.equalsExact(JenaGeometryAdapter.toSourceGeometryLiteral(
+						vf().createLiteral("POINT(1 2)", GeoConstants.GEO_WKT_LITERAL))
+						.asGeometryWrapper().getParsingGeometry()));
 		assertTrue(within);
 	}
 
