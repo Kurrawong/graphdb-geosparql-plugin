@@ -54,7 +54,7 @@ public final class SourceGeometryLiteral {
 
 	public static SourceGeometryLiteral fromLiteral(Literal literal, IRI fallbackDatatype) {
 		IRI datatype = GeometryLiteralCompatibility.datatypeOrFallback(literal.getDatatype(), fallbackDatatype);
-		IRI jenaDatatype = toJenaGeometryDatatype(datatype);
+		IRI jenaDatatype = normalizeDatatype(datatype);
 		String lexicalForm = literal.stringValue();
 		return new SourceGeometryLiteral(lexicalForm, datatype, jenaDatatype);
 	}
@@ -68,7 +68,7 @@ public final class SourceGeometryLiteral {
 	 */
 	public static SourceGeometryLiteral fromStoredGeometry(String lexicalForm, IRI datatype,
 			String effectiveCrsUri, Geometry sourceGeometry, DimensionInfo storedDimensionInfo) {
-		IRI jenaDatatype = toJenaGeometryDatatype(datatype);
+		IRI jenaDatatype = normalizeDatatype(datatype);
 		SourceGeometryLiteral source = new SourceGeometryLiteral(lexicalForm, datatype, jenaDatatype);
 		try {
 			Geometry parsingGeometry = toParsingCoordinateOrder(sourceGeometry, effectiveCrsUri,
@@ -171,9 +171,12 @@ public final class SourceGeometryLiteral {
 				+ ". Configure Apache SIS CRS data, for example SIS_DATA, or use a supported CRS.";
 	}
 
-	private static IRI toJenaGeometryDatatype(IRI datatype) {
+	static IRI normalizeDatatype(IRI datatype) {
 		if (GeoConstants.GEO_GML_LITERAL.equals(datatype)) {
 			return GeoConstants.GEO_GML_LITERAL;
+		}
+		if (GeoConstants.GEO_JSON_LITERAL.equals(datatype)) {
+			return GeoConstants.GEO_JSON_LITERAL;
 		}
 		if (GeoConstants.GEO_WKT_LITERAL.equals(datatype)
 				|| GeoConstants.XMLSCHEMA_OGC_WKT.equals(datatype)

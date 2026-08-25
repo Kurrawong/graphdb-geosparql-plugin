@@ -34,6 +34,7 @@ public interface GeoConstants {
     //URI GEO_GEOMETRY = SimpleValueFactory.getInstance().createIRI(NS_GEO + "Geometry");
     IRI GEO_WKT_LITERAL = SimpleValueFactory.getInstance().createIRI(NS_GEO + "wktLiteral");
     IRI GEO_GML_LITERAL = SimpleValueFactory.getInstance().createIRI(NS_GEO + "gmlLiteral");
+    IRI GEO_JSON_LITERAL = SimpleValueFactory.getInstance().createIRI(NS_GEO + "geoJSONLiteral");
 
     IRI GEO_SF_EQUALS = SimpleValueFactory.getInstance().createIRI(NS_GEO + "sfEquals");
     IRI GEO_SF_DISJOINT = SimpleValueFactory.getInstance().createIRI(NS_GEO + "sfDisjoint");
@@ -115,6 +116,7 @@ public interface GeoConstants {
 
     IRI GEO_AS_WKT = SimpleValueFactory.getInstance().createIRI(NS_GEO + "asWKT");
     IRI GEO_AS_GML = SimpleValueFactory.getInstance().createIRI(NS_GEO + "asGML");
+    IRI GEO_AS_GEO_JSON = SimpleValueFactory.getInstance().createIRI(NS_GEO + "asGeoJSON");
 
     IRI GEO_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEO + "dimension");
     IRI GEO_COORDINATE_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEO + "coordinateDimension");
