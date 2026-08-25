@@ -96,7 +96,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 
         initPluginFeatures(pluginConnection.getEntities());
 
-        updateListener = new GeoSparqlUpdateListener(this, asWKT, asGML, hasDefaultGeometry);
+        updateListener = new GeoSparqlUpdateListener(this, asWKT, asGML, asGeoJSON, hasDefaultGeometry);
     }
 
     @Override

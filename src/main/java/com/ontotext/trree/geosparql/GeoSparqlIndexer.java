@@ -23,7 +23,7 @@ public interface GeoSparqlIndexer {
 	 * Replaces all indexed geometry documents for an entity during an incremental update.
 	 *
 	 * @param subject  id of the subject
-	 * @param geometries geometries that corresponds to asWKT/asGML's object
+	 * @param geometries index geometries derived from the entity's supported geometry serializations
 	 */
 	void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<IndexGeometry> geometries);
 
