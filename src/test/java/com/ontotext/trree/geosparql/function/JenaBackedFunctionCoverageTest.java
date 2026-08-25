@@ -26,8 +26,8 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Verifies the registered Jena-backed function contracts, including datatype-aware geometry results from
- * <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue 11</a>.
+ * Verifies the registered Jena-backed function contracts, including datatype-aware geometry results and reusable
+ * GeoJSON geometry literals.
  */
 public class JenaBackedFunctionCoverageTest {
 	private static final ValueFactory VF = SimpleValueFactory.getInstance();
@@ -318,6 +318,40 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
+	public void geoJsonInputsWorkAcrossRelationsAndGeometryProducingFunctionFamilies() throws Exception {
+		Literal point = geoJson("{\"type\":\"Point\",\"coordinates\":[1,1,10]}");
+		Literal line = geoJson("{\"type\":\"LineString\","
+				+ "\"coordinates\":[[0,0,10],[1,0.1,20],[2,0,30]]}");
+		Literal polygon = geoJson("{\"type\":\"Polygon\","
+				+ "\"coordinates\":[[[0,0],[0,2],[2,2],[2,0],[0,0]]]}");
+
+		assertEquals(VF.createLiteral(true), evaluate(GeoConstants.GEOF_SF_WITHIN, point, polygon));
+
+		List<Value> results = List.of(
+				evaluate(GeoConstants.GEOF_ENVELOPE, line),
+				evaluate(GeoConstants.GEOF_UNION, line, line),
+				evaluate(GeoConstants.GEOF_BUFFER, point, VF.createLiteral("0.1")),
+				evaluate(GeoConstants.EXT_CLOSEST_POINT, line, line),
+				evaluate(GeoConstants.EXT_SIMPLIFY, line, VF.createLiteral("0.2")));
+
+		for (Value value : results) {
+			assertTrue(value instanceof Literal);
+			Literal literal = (Literal) value;
+			assertEquals(GeoConstants.GEO_JSON_LITERAL, literal.getDatatype());
+			SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(literal);
+			assertEquals(2, parsed.asGeometryWrapper().getCoordinateDimension());
+		}
+	}
+
+	@Test
+	public void geoJsonGeometryResultsOutsideCrs84DomainAreRejected() {
+		Literal boundaryPoint = geoJson("{\"type\":\"Point\",\"coordinates\":[180,0]}");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GeoConstants.GEOF_BUFFER, boundaryPoint, VF.createLiteral("0.1")));
+	}
+
+	@Test
 	public void geometryProducingFunctionsRejectUnsupportedSourceDatatype() {
 		Literal unsupported = VF.createLiteral("POINT(1 2)",
 				VF.createIRI("http://example.com/geometryLiteral"));
@@ -423,6 +457,10 @@ public class JenaBackedFunctionCoverageTest {
 
 	private static Literal gml(String lexical) {
 		return VF.createLiteral(lexical, GeoConstants.GEO_GML_LITERAL);
+	}
+
+	private static Literal geoJson(String lexical) {
+		return VF.createLiteral(lexical, GeoConstants.GEO_JSON_LITERAL);
 	}
 
 	private static Literal gmlPoint(String coordinates) {

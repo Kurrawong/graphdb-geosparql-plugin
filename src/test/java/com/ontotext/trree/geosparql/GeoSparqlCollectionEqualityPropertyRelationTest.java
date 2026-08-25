@@ -10,9 +10,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Regression coverage for <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/4">#4</a>.
- *
- * <p>Index-backed {@code geo:sfEquals} and {@code geo:ehEquals} must agree with {@code geof:relate}
+ * Index-backed {@code geo:sfEquals} and {@code geo:ehEquals} must agree with {@code geof:relate}
  * using the GeoSPARQL DE-9IM equality pattern {@code TFFFTFFFT} for generic collections.
  */
 public class GeoSparqlCollectionEqualityPropertyRelationTest extends AbstractGeoSparqlPluginTest {

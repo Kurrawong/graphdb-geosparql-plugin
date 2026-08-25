@@ -23,8 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Verifies that a process crash while GeoSPARQL state awaits a GraphDB transaction outcome leaves restart fail closed
- * and requiring force reindex, so an enabled configuration never trusts a stale Lucene index. Regression provenance:
- * https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/2.
+ * and requiring force reindex, so an enabled configuration never trusts a stale Lucene index.
  */
 public class GeoSparqlProcessCrashRecoveryTest {
 	@Rule
