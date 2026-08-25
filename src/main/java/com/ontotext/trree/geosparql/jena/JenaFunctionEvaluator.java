@@ -8,7 +8,6 @@ import org.apache.jena.geosparql.implementation.UnitsOfMeasure;
 import org.apache.jena.geosparql.implementation.intersection_patterns.EgenhoferIntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.RCC8IntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.SimpleFeaturesIntersectionPattern;
-import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -25,7 +24,6 @@ import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 import org.locationtech.jts.operation.distance.DistanceOp;
 import org.locationtech.jts.operation.relateng.RelateNG;
 import org.locationtech.jts.operation.relateng.RelatePredicate;
-import org.locationtech.jts.io.WKTWriter;
 import org.locationtech.jts.simplify.DouglasPeuckerSimplifier;
 import org.locationtech.jts.simplify.TopologyPreservingSimplifier;
 
@@ -495,15 +493,7 @@ public final class JenaFunctionEvaluator {
 	}
 
 	private static Literal geometryLiteral(ValueFactory valueFactory, GeometryWrapper wrapper, IRI datatype) {
-		if (!GeoConstants.GEO_GML_LITERAL.equals(datatype)) {
-			String wkt = new WKTWriter().write(wrapper.getParsingGeometry());
-			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(wrapper.getSrsURI())) {
-				wkt = "<" + wrapper.getSrsURI() + "> " + wkt;
-			}
-			return valueFactory.createLiteral(wkt, datatype);
-		}
-		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(wrapper.getGeometryDatatypeURI());
-		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
+		return JenaGeometryAdapter.toRdf4jLiteral(valueFactory, wrapper, datatype);
 	}
 
 	private static boolean isValid(Value value) throws ValueExprEvaluationException {

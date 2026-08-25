@@ -6,6 +6,7 @@ import com.ontotext.test.functional.base.SingleRepositoryFunctionalTest;
 import com.ontotext.test.utils.StandardUtils;
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
+import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.commons.lang.Validate;
 import org.eclipse.rdf4j.common.exception.RDF4JException;
@@ -17,6 +18,7 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
+import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -26,7 +28,8 @@ import org.junit.*;
 import static org.junit.Assert.*;
 
 /**
- * Created by avataar on 06.04.2015..
+ * Repository-level SPARQL coverage for GeoSPARQL functions. Datatype-aware geometry-result behavior is tracked by
+ * <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue 11</a>.
  */
 public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	@ClassRule
@@ -233,6 +236,32 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
+	@Test
+	public void geometryResultsUseDatatypeAwareSerializationThroughSparql() throws RDF4JException {
+		IRI geometry = vf().createIRI("u:geometry");
+		conn().add(vf().createIRI("u:wkt"), geometry,
+				vf().createLiteral("LINESTRING Z (0 0 1, 1 1 2)", GeoConstants.GEO_WKT_LITERAL));
+		conn().add(vf().createIRI("u:gml"), geometry, vf().createLiteral(
+				"<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName="
+						+ "\"http://www.opengis.net/def/crs/EPSG/0/32634\">"
+						+ "<gml:pos>799997.80 4589779.63</gml:pos></gml:Point>",
+				GeoConstants.GEO_GML_LITERAL));
+
+		Literal wktResult = singleLiteralResult("SELECT ?result WHERE { <u:wkt> <u:geometry> ?source . "
+				+ "BIND(<" + GeoConstants.EXT_SIMPLIFY + ">(?source, 0.0) AS ?result) }");
+		Literal gmlResult = singleLiteralResult("SELECT ?result WHERE { <u:gml> <u:geometry> ?source . "
+				+ "BIND(<" + GeoConstants.GEOF_ENVELOPE + ">(?source) AS ?result) }");
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, wktResult.getDatatype());
+		assertEquals("LINESTRING (0 0, 1 1)", wktResult.stringValue());
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(wktResult)
+				.asGeometryWrapper().getCoordinateDimension());
+		assertEquals(GeoConstants.GEO_GML_LITERAL, gmlResult.getDatatype());
+		assertTrue(gmlResult.stringValue().startsWith("<gml:"));
+		assertEquals("http://www.opengis.net/def/crs/EPSG/0/32634",
+				JenaGeometryAdapter.toSourceGeometryLiteral(gmlResult).effectiveCrsUri());
+	}
+
 	@Test public void invalidGeometriesReportValidityAndRejectDifference() throws RDF4JException {
 		Literal invalidGeo = asLiteral("POLYGON((2 2, 3 3, 3 2, 2 3, 2 2))");
 		Literal validGeo = asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))");
@@ -277,6 +306,16 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 
 	private Value evaluate(IRI functionUri, Value... args) throws ValueExprEvaluationException {
 		return JenaFunctionEvaluator.evaluate(vf(), functionUri.stringValue(), args);
+	}
+
+	private Literal singleLiteralResult(String query) {
+		try (TupleQueryResult results = conn().prepareTupleQuery(QueryLanguage.SPARQL, query).evaluate()) {
+			assertTrue(results.hasNext());
+			Value result = results.next().getValue("result");
+			assertFalse(results.hasNext());
+			assertTrue(result instanceof Literal);
+			return (Literal) result;
+		}
 	}
 
 	private Literal asLiteral(String geom) {
