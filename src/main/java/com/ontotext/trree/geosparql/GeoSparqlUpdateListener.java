@@ -19,6 +19,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	private final GeoSparqlPlugin parent;
 	private final long asWKT;
 	private final long asGML;
+	private final long asGeoJSON;
 	private final long hasDefaultGeometry;
 	private final GeoSparqlTransactionMarker transactionMarker;
 
@@ -34,10 +35,12 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	private boolean markerExistedBeforeTransaction;
 	private boolean persistentMutationMarked;
 
-	GeoSparqlUpdateListener(GeoSparqlPlugin parent, long asWKT, long asGML, long hasDefaultGeometry) {
+	GeoSparqlUpdateListener(GeoSparqlPlugin parent, long asWKT, long asGML, long asGeoJSON,
+			long hasDefaultGeometry) {
 		this.parent = parent;
 		this.asWKT = asWKT;
 		this.asGML = asGML;
+		this.asGeoJSON = asGeoJSON;
 		this.hasDefaultGeometry = hasDefaultGeometry;
 		this.transactionMarker = new GeoSparqlTransactionMarker(parent.getDataDir().toPath());
 	}
@@ -49,7 +52,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			return false;
 		}
 
-		if (predicate == asWKT || predicate == asGML) {
+		if (predicate == asWKT || predicate == asGML || predicate == asGeoJSON) {
 			geometriesToUpdate.add(subject);
 		} else if (predicate == hasDefaultGeometry) {
 			featuresToUpdate.add(subject);
@@ -64,7 +67,7 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 			return false;
 		}
 
-		if (predicate == asWKT || predicate == asGML) {
+		if (predicate == asWKT || predicate == asGML || predicate == asGeoJSON) {
 			geometriesToUpdate.add(subject);
 		} else if (predicate == hasDefaultGeometry) {
 			featuresToUpdate.add(subject);

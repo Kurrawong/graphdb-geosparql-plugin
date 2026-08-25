@@ -35,9 +35,10 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		plugin.indexer = indexer;
 
 		IRI geometry = VF.createIRI("http://example.com/geometry");
-		Literal sourceGeometryLiteral = VF.createLiteral("POINT(1 2)", GeoConstants.GEO_WKT_LITERAL);
+		Literal sourceGeometryLiteral = VF.createLiteral("{\"type\":\"Point\",\"coordinates\":[1,2]}",
+				GeoConstants.GEO_JSON_LITERAL);
 		connection.begin();
-		connection.add(geometry, GeoConstants.GEO_AS_WKT, sourceGeometryLiteral);
+		connection.add(geometry, GeoConstants.GEO_AS_GEO_JSON, sourceGeometryLiteral);
 
 		RepositoryException repositoryException = assertThrows(RepositoryException.class, connection::commit);
 		PluginException pluginException = findCause(repositoryException, PluginException.class);
@@ -47,7 +48,8 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		assertEquals(1, indexer.rollbackCount);
 
 		try (RepositoryConnection readConnection = repository.getConnection()) {
-			assertFalse(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_WKT, sourceGeometryLiteral, false));
+			assertFalse(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_GEO_JSON,
+					sourceGeometryLiteral, false));
 		}
 	}
 
@@ -57,10 +59,12 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		executePluginControl(GeoSparqlPlugin.IGNORE_ERRORS_PREDICATE_IRI, VF.createLiteral(true));
 
 		IRI geometry = VF.createIRI("http://example.com/geometry");
-		Literal original = VF.createLiteral("POINT(1 2)", GeoConstants.GEO_WKT_LITERAL);
-		Literal replacement = VF.createLiteral("POINT(3 4)", GeoConstants.GEO_WKT_LITERAL);
+		Literal original = VF.createLiteral("{\"type\":\"Point\",\"coordinates\":[1,2]}",
+				GeoConstants.GEO_JSON_LITERAL);
+		Literal replacement = VF.createLiteral("{\"type\":\"Point\",\"coordinates\":[3,4]}",
+				GeoConstants.GEO_JSON_LITERAL);
 		connection.begin();
-		connection.add(geometry, GeoConstants.GEO_AS_WKT, original);
+		connection.add(geometry, GeoConstants.GEO_AS_GEO_JSON, original);
 		connection.commit();
 
 		GeoSparqlPlugin plugin = (GeoSparqlPlugin) ((OwlimSchemaRepository) ((SailRepository) repository).getSail())
@@ -70,8 +74,8 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		plugin.indexer = indexer;
 
 		connection.begin();
-		connection.remove(geometry, GeoConstants.GEO_AS_WKT, original);
-		connection.add(geometry, GeoConstants.GEO_AS_WKT, replacement);
+		connection.remove(geometry, GeoConstants.GEO_AS_GEO_JSON, original);
+		connection.add(geometry, GeoConstants.GEO_AS_GEO_JSON, replacement);
 
 		RepositoryException repositoryException = assertThrows(RepositoryException.class, connection::commit);
 		PluginException pluginException = findCause(repositoryException, PluginException.class);
@@ -80,8 +84,8 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		assertEquals(1, indexer.rollbackCount);
 
 		try (RepositoryConnection readConnection = repository.getConnection()) {
-			assertTrue(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_WKT, original, false));
-			assertFalse(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_WKT, replacement, false));
+			assertTrue(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_GEO_JSON, original, false));
+			assertFalse(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_GEO_JSON, replacement, false));
 		}
 	}
 
