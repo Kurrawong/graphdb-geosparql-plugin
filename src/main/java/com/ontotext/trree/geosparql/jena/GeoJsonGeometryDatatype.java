@@ -35,6 +35,8 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 	static final GeoJsonGeometryDatatype INSTANCE = new GeoJsonGeometryDatatype();
 
 	private static final GeometryFactory GEOMETRY_FACTORY = CustomGeometryFactory.theInstance();
+	private static final List<String> DISALLOWED_GEOMETRY_MEMBERS =
+			List.of("geometry", "properties", "features", "crs");
 
 	private GeoJsonGeometryDatatype() {
 		super(GeoConstants.GEO_JSON_LITERAL.stringValue());
@@ -75,8 +77,10 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 	}
 
 	private static ParsedGeometry parseGeometry(Map<?, ?> object) {
-		if (object.containsKey("crs")) {
-			throw invalid("the crs member is not permitted", null);
+		for (String member : DISALLOWED_GEOMETRY_MEMBERS) {
+			if (object.containsKey(member)) {
+				throw invalid("the " + member + " member is not permitted", null);
+			}
 		}
 		Object typeValue = object.get("type");
 		if (!(typeValue instanceof String type)) {
@@ -116,7 +120,7 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 			default:
 				throw invalid("unsupported type: " + type, null);
 		}
-		validateBbox(object, parsed.coordinateDimension() == 0 ? 2 : parsed.coordinateDimension());
+		validateBbox(object, parsed.coordinateDimension());
 		return parsed;
 	}
 
@@ -280,6 +284,9 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 	private static void validateBbox(Map<?, ?> object, int coordinateDimension) {
 		if (!object.containsKey("bbox")) {
 			return;
+		}
+		if (coordinateDimension == 0) {
+			throw invalid("bbox is not permitted on an empty geometry", null);
 		}
 		List<?> bbox = array(object.get("bbox"), "bbox");
 		if (bbox.size() != coordinateDimension * 2) {
