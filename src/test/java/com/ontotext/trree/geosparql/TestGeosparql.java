@@ -351,6 +351,33 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertTrue(within);
 	}
 
+	@Test
+	public void asGmlUsesTheSupportedProfileAndComposesThroughSparql() {
+		String asGml = "http://www.opengis.net/def/function/geosparql/asGML";
+		String profile = "http://www.opengis.net/def/profile/ogc/2.0/gml-sf0";
+		Literal result = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<" + asGml + ">(" +
+						"\"POINT(1 2)\"^^<" + GeoConstants.GEO_WKT_LITERAL + ">, " +
+						"\"" + profile + "\") AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<" + asGml + ">(" +
+						"\"POINT(1 2)\"^^<" + GeoConstants.GEO_WKT_LITERAL + ">, " +
+						"\"" + profile + "\") AS ?result) " +
+						"FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?result, " +
+						"\"POLYGON((0 0,0 3,3 3,3 0,0 0))\"^^<" +
+						GeoConstants.GEO_WKT_LITERAL + ">)) }").evaluate();
+		boolean unsupportedProfileBinds = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<" + asGml + ">(" +
+						"\"POINT(1 2)\"^^<" + GeoConstants.GEO_WKT_LITERAL + ">, " +
+						"\"http://example.com/profile\") AS ?result) FILTER(BOUND(?result)) }").evaluate();
+
+		assertEquals(GeoConstants.GEO_GML_LITERAL, result.getDatatype());
+		assertTrue(result.stringValue().startsWith(
+				"<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\""));
+		assertTrue(within);
+		assertFalse(unsupportedProfileBinds);
+	}
+
 	@Test public void invalidGeometriesReportValidityAndRejectDifference() throws RDF4JException {
 		Literal invalidGeo = asLiteral("POLYGON((2 2, 3 3, 3 2, 2 3, 2 2))");
 		Literal validGeo = asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))");

@@ -38,6 +38,7 @@ public final class JenaFunctionEvaluator {
 	private static final Map<String, String> EXTENSION_UNIT_TO_JENA = new HashMap<>();
 	private static final double LIGHT_YEAR_IN_METRES = 9.460528405E15D;
 	private static final HausdorffSimilarityMeasure HAUSDORFF_SIMILARITY = new HausdorffSimilarityMeasure();
+	private static final String GML_SF0_PROFILE = "http://www.opengis.net/def/profile/ogc/2.0/gml-sf0";
 
 	static {
 		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_CENTIMETRE.stringValue(), Unit_URI.CENTIMETRE_URL);
@@ -107,6 +108,9 @@ public final class JenaFunctionEvaluator {
 			}
 			if (GeoConstants.GEOF_AS_WKT.stringValue().equals(functionUri)) {
 				return asWkt(valueFactory, functionUri, args);
+			}
+			if (GeoConstants.GEOF_AS_GML.stringValue().equals(functionUri)) {
+				return asGml(valueFactory, functionUri, args);
 			}
 			if (GeoConstants.GEO_DIMENSION.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
@@ -519,6 +523,23 @@ public final class JenaFunctionEvaluator {
 			throws Exception {
 		requireArgs(functionUri, args, 1);
 		return JenaGeometryAdapter.toWktLiteral(valueFactory, sourceLiteral(args[0]).asGeometryWrapper());
+	}
+
+	private static Literal asGml(ValueFactory valueFactory, String functionUri, Value... args)
+			throws Exception {
+		requireArgs(functionUri, args, 2);
+		requireGmlProfile(args[1]);
+		return JenaGeometryAdapter.toGmlLiteral(valueFactory, sourceLiteral(args[0]).asGeometryWrapper());
+	}
+
+	private static void requireGmlProfile(Value value) throws ValueExprEvaluationException {
+		if (!(value instanceof Literal)
+				|| ((Literal) value).getLanguage().isPresent()
+				|| !XSD.STRING.equals(((Literal) value).getDatatype())
+				|| !GML_SF0_PROFILE.equals(value.stringValue())) {
+			throw new ValueExprEvaluationException(
+					"Expected GML profile string literal " + GML_SF0_PROFILE + ", found: " + value);
+		}
 	}
 
 	private static boolean isValid(Value value) throws ValueExprEvaluationException {
