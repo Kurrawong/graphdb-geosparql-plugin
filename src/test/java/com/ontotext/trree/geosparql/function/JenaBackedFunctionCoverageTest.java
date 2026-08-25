@@ -27,8 +27,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Verifies the registered Jena-backed function contracts, including datatype-aware geometry results and reusable
- * GeoJSON geometry literals from <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue
- * 11</a> and <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/12">issue 12</a>.
+ * GeoJSON geometry literals.
  */
 public class JenaBackedFunctionCoverageTest {
 	private static final ValueFactory VF = SimpleValueFactory.getInstance();
