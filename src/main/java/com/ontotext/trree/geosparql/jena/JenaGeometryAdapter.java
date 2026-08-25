@@ -87,4 +87,21 @@ public final class JenaGeometryAdapter {
 		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(GeoConstants.GEO_WKT_LITERAL.stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_WKT_LITERAL);
 	}
+
+	static Literal toGmlLiteral(ValueFactory valueFactory, GeometryWrapper wrapper) {
+		if (wrapper.isEmpty()) {
+			return valueFactory.createLiteral("", GeoConstants.GEO_GML_LITERAL);
+		}
+		DimensionInfo dimensions = wrapper.getDimensionInfo();
+		if (dimensions.getCoordinate() != dimensions.getSpatial()) {
+			throw new JenaGeoSparqlException("GML output does not support measured coordinate layouts");
+		}
+		if (dimensions.getSpatial() == 3
+				&& wrapper.getSrsInfo().getCrs().getCoordinateSystem().getDimension() != 3) {
+			throw new JenaGeoSparqlException(
+					"GML XYZ output requires a three-dimensional source CRS: " + wrapper.getSrsURI());
+		}
+		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(GeoConstants.GEO_GML_LITERAL.stringValue());
+		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_GML_LITERAL);
+	}
 }
