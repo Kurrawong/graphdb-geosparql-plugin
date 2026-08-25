@@ -19,8 +19,7 @@ import org.locationtech.jts.geom.Envelope;
 import static org.junit.Assert.*;
 
 /**
- * Verifies CRS-preserving geometry adaptation and datatype-aware result serialization. Result serialization
- * regressions are tracked by <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue 11</a>.
+ * Verifies CRS-preserving geometry adaptation and datatype-aware result serialization.
  */
 public class JenaGeometryAdapterTest {
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();

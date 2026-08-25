@@ -25,8 +25,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Verifies strict, reusable GeoJSON source geometry literals from
- * <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/12">issue 12</a>.
+ * Verifies strict, reusable GeoJSON source geometry literals.
  */
 public class GeoJsonLiteralTest {
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();

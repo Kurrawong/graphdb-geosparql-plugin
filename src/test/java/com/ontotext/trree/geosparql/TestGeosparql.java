@@ -28,9 +28,8 @@ import org.junit.*;
 import static org.junit.Assert.*;
 
 /**
- * Repository-level SPARQL coverage for GeoSPARQL functions. Datatype-aware geometry results and reusable GeoJSON
- * geometry literals are tracked by <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/11">issue
- * 11</a> and <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/12">issue 12</a>.
+ * Repository-level SPARQL coverage for GeoSPARQL functions, datatype-aware geometry results, and reusable GeoJSON
+ * geometry literals.
  */
 public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	@ClassRule

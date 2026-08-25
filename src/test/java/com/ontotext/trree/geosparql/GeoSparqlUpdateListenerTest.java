@@ -29,7 +29,6 @@ import static org.junit.Assert.assertThrows;
 
 /**
  * Verifies transaction rollback and durable publication ordering for GeoSPARQL configuration and index state.
- * Regression provenance: https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/2.
  */
 public class GeoSparqlUpdateListenerTest {
 	@Rule
