@@ -67,8 +67,10 @@ public class TestGeoJsonIncrementalIndexing extends AbstractGeoSparqlPluginTest 
 				""");
 
 		assertThingWithinContainer(false);
+		assertThingDisjointFromContainer(true);
 		forceReindex();
 		assertThingWithinContainer(false);
+		assertThingDisjointFromContainer(true);
 
 		executeSparqlUpdateQuery(PREFIXES + """
 				DELETE DATA {
@@ -77,8 +79,10 @@ public class TestGeoJsonIncrementalIndexing extends AbstractGeoSparqlPluginTest 
 				""");
 
 		assertThingWithinContainer(false);
+		assertThingDisjointFromContainer(false);
 		forceReindex();
 		assertThingWithinContainer(false);
+		assertThingDisjointFromContainer(false);
 	}
 
 	@Test
@@ -273,6 +277,11 @@ public class TestGeoJsonIncrementalIndexing extends AbstractGeoSparqlPluginTest 
 	private void assertThingWithinContainer(boolean expected) {
 		assertEquals(expected, ask("ex:thing geo:sfWithin ex:container"));
 		assertEquals(expected, ask("ex:thingGeom geo:sfWithin ex:containerGeom"));
+	}
+
+	private void assertThingDisjointFromContainer(boolean expected) {
+		assertEquals(expected, ask("ex:thing geo:sfDisjoint ex:container"));
+		assertEquals(expected, ask("ex:thingGeom geo:sfDisjoint ex:containerGeom"));
 	}
 
 	private boolean ask(String pattern) {

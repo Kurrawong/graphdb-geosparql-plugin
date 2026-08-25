@@ -5,6 +5,7 @@ import com.ontotext.trree.geosparql.jena.IndexGeometry;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.sdk.PluginException;
+import org.apache.lucene.store.AlreadyClosedException;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -86,6 +87,34 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 		try (RepositoryConnection readConnection = repository.getConnection()) {
 			assertTrue(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_GEO_JSON, original, false));
 			assertFalse(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_GEO_JSON, replacement, false));
+		}
+	}
+
+	@Test
+	public void ignoreErrorsDoesNotHideClosedIndexFailure() {
+		enablePlugin();
+		executePluginControl(GeoSparqlPlugin.IGNORE_ERRORS_PREDICATE_IRI, VF.createLiteral(true));
+
+		GeoSparqlPlugin plugin = (GeoSparqlPlugin) ((OwlimSchemaRepository) ((SailRepository) repository).getSail())
+				.getPlugin("GeoSPARQL");
+		AlreadyClosedException closedIndex = new AlreadyClosedException("Simulated closed Lucene index");
+		FailingIndexGeometryListIndexer indexer = new FailingIndexGeometryListIndexer(closedIndex);
+		plugin.indexer = indexer;
+		IRI geometry = VF.createIRI("http://example.com/closed-index-geometry");
+		Literal sourceGeometryLiteral = VF.createLiteral("{\"type\":\"Point\",\"coordinates\":[1,2]}",
+				GeoConstants.GEO_JSON_LITERAL);
+
+		connection.begin();
+		connection.add(geometry, GeoConstants.GEO_AS_GEO_JSON, sourceGeometryLiteral);
+		RepositoryException repositoryException = assertThrows(RepositoryException.class, connection::commit);
+
+		PluginException pluginException = findCause(repositoryException, PluginException.class);
+		assertSame(closedIndex, pluginException.getCause());
+		assertEquals(1, indexer.indexedGeometryLists);
+		assertEquals(1, indexer.rollbackCount);
+		try (RepositoryConnection readConnection = repository.getConnection()) {
+			assertFalse(readConnection.hasStatement(geometry, GeoConstants.GEO_AS_GEO_JSON,
+					sourceGeometryLiteral, false));
 		}
 	}
 
@@ -175,11 +204,11 @@ public class TestIndexCommitFailure extends AbstractGeoSparqlPluginTest {
 	}
 
 	private static final class FailingIndexGeometryListIndexer implements GeoSparqlIndexer {
-		private final IOException writeFailure;
+		private final Throwable writeFailure;
 		private int indexedGeometryLists;
 		private int rollbackCount;
 
-		private FailingIndexGeometryListIndexer(IOException writeFailure) {
+		private FailingIndexGeometryListIndexer(Throwable writeFailure) {
 			this.writeFailure = writeFailure;
 		}
 

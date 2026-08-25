@@ -163,32 +163,34 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
     @Override
     public void transactionCompleted(PluginConnection pluginConnection) {
 		cleanupAfterTransaction();
-		if (hasIndexTransaction()) {
-			try {
+		try {
+			if (hasIndexTransaction()) {
 				parent.indexer.complete();
-			} catch (Exception e) {
-				parent.getLogger().warn("Unable to finalize the GeoSPARQL Lucene index transaction.", e);
+			} else {
+				removeTransactionMarkerIfOwned();
 			}
-		} else {
-			removeTransactionMarkerIfOwned();
+		} catch (Exception e) {
+			throw new PluginException("Unable to finalize the GeoSPARQL Lucene index transaction.", e);
+		} finally {
+			clearOutcomeState();
 		}
-		clearOutcomeState();
     }
 
     @Override
 	public void transactionAborted(PluginConnection pluginConnection) {
 		cleanupAfterTransaction();
 		boolean configRestored = restoreConfigState();
-		if (hasIndexTransaction()) {
-			try {
+		try {
+			if (hasIndexTransaction()) {
 				parent.indexer.rollback(!configRestored);
-			} catch (Exception e) {
-				parent.getLogger().warn("Unable to rollback indexer transaction.", e);
+			} else if (configRestored) {
+				removeTransactionMarkerIfOwned();
 			}
-		} else if (configRestored) {
-			removeTransactionMarkerIfOwned();
+		} catch (Exception e) {
+			throw new PluginException("Unable to rollback the GeoSPARQL Lucene index transaction.", e);
+		} finally {
+			clearOutcomeState();
 		}
-		clearOutcomeState();
 	}
 
 	void preparePersistentMutation() {
