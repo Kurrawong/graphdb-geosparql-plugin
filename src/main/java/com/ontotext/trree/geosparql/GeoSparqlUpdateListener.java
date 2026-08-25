@@ -170,7 +170,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 				removeTransactionMarkerIfOwned();
 			}
 		} catch (Exception e) {
-			throw new PluginException("Unable to finalize the GeoSPARQL Lucene index transaction.", e);
+			parent.getLogger().warn("Unable to finalize the GeoSPARQL Lucene index transaction. "
+					+ "The index remains unavailable until a full force-reindex completes.", e);
 		} finally {
 			clearOutcomeState();
 		}
@@ -187,7 +188,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 				removeTransactionMarkerIfOwned();
 			}
 		} catch (Exception e) {
-			throw new PluginException("Unable to rollback the GeoSPARQL Lucene index transaction.", e);
+			parent.getLogger().warn("Unable to restore the GeoSPARQL Lucene index after transaction abort. "
+					+ "The index remains unavailable until a full force-reindex completes.", e);
 		} finally {
 			clearOutcomeState();
 		}

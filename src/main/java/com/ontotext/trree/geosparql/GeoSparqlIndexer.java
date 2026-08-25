@@ -108,11 +108,20 @@ public interface GeoSparqlIndexer {
 	}
 
 	/**
-	 * Makes the most recently committed index transaction final after GraphDB completes the RDF transaction.
+	 * Finalizes index state after GraphDB commits the RDF transaction.
+	 *
+	 * <p>The GraphDB transaction can no longer be aborted at this point. Implementations must retain durable
+	 * fail-closed recovery state before reporting a finalization failure.
 	 */
 	default void complete() throws Exception {
 	}
 
+	/**
+	 * Restores the pre-transaction index after GraphDB aborts the RDF transaction.
+	 *
+	 * <p>The RDF outcome is already fixed when this method runs. Implementations must retain durable fail-closed
+	 * recovery state before reporting a restoration failure.
+	 */
 	void rollback() throws Exception;
 
 	/**
