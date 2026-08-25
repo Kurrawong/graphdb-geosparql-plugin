@@ -63,17 +63,23 @@ public final class JenaGeometryAdapter {
 			return valueFactory.createLiteral(wkt, datatype);
 		}
 		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
-			Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(
-					wrapper.getParsingGeometry(), 2);
-			GeometryWrapper output = new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84,
-					jenaDatatype.stringValue(), new DimensionInfo(2, 2, geometry.getDimension()));
-			org.apache.jena.rdf.model.Literal literal = output.asLiteral(jenaDatatype.stringValue());
-			return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
+			return toGeoJsonLiteral(valueFactory, wrapper, 2);
 		}
 		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype) && wrapper.isEmpty()) {
 			return valueFactory.createLiteral("", datatype);
 		}
 		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(jenaDatatype.stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
+	}
+
+	static Literal toGeoJsonLiteral(ValueFactory valueFactory, GeometryWrapper wrapper,
+			int coordinateDimension) {
+		Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(
+				wrapper.getParsingGeometry(), coordinateDimension);
+		GeometryWrapper output = new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84,
+				GeoConstants.GEO_JSON_LITERAL.stringValue(),
+				new DimensionInfo(coordinateDimension, coordinateDimension, geometry.getDimension()));
+		org.apache.jena.rdf.model.Literal literal = output.asLiteral(GeoConstants.GEO_JSON_LITERAL.stringValue());
+		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_JSON_LITERAL);
 	}
 }
