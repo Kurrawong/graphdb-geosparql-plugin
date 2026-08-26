@@ -7,6 +7,7 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 
@@ -59,7 +60,21 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				|| !XMLDatatypeUtil.isValidValue(literal.getLabel(), literal.getDatatype())) {
 			throw new IllegalArgumentException("Expected a numeric geometry member index, found: " + value);
 		}
+		if (XSD.FLOAT.equals(literal.getDatatype())) {
+			return floatingPointMemberIndex(literal.floatValue());
+		}
+		if (XSD.DOUBLE.equals(literal.getDatatype())) {
+			return floatingPointMemberIndex(literal.doubleValue());
+		}
 		return literal.decimalValue().toBigIntegerExact().intValueExact();
+	}
+
+	private int floatingPointMemberIndex(double index) {
+		if (!Double.isFinite(index) || index != Math.rint(index)
+				|| index < Integer.MIN_VALUE || index > Integer.MAX_VALUE) {
+			throw new IllegalArgumentException("Expected a losslessly integral geometry member index, found: " + index);
+		}
+		return (int) index;
 	}
 
 	private void requireMandatoryArity(Value[] args) throws ValueExprEvaluationException {

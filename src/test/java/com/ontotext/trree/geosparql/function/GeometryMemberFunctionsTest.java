@@ -181,6 +181,24 @@ public class GeometryMemberFunctionsTest {
 	}
 
 	@Test
+	public void geometryNUsesFloatNumericValueForIntegralIndex() throws Exception {
+		Literal source = wkt("MULTIPOINT((1 2),(3 4))");
+		Literal result = (Literal) evaluate(GEOMETRY_N_URI, source,
+				VALUE_FACTORY.createLiteral("1.00000001", XSD.FLOAT));
+
+		assertEquals("POINT(1 2)", result.stringValue());
+	}
+
+	@Test
+	public void geometryNUsesDoubleNumericValueForIntegralIndex() throws Exception {
+		Literal source = wkt("MULTIPOINT((1 2),(3 4))");
+		Literal result = (Literal) evaluate(GEOMETRY_N_URI, source,
+				VALUE_FACTORY.createLiteral("1.00000000000000001", XSD.DOUBLE));
+
+		assertEquals("POINT(1 2)", result.stringValue());
+	}
+
+	@Test
 	public void geometryMemberFunctionsEnforceRdfArgumentsAndMandatoryArity() {
 		Literal source = wkt("POINT(1 2)");
 		Value geometryIri = VALUE_FACTORY.createIRI("http://example.com/geometry");
