@@ -71,15 +71,15 @@ public final class GeoSparqlFunctionRegistration {
         for (String uri : URI_DISPATCHER_FUNCTION_URIS) {
             registry.add(new GeoSparqlRdf4jFunction(uri));
         }
-        for (Clause109QueryFunctionManifest.Entry entry : Clause109QueryFunctionManifest.entries()) {
-            registry.add(new Clause109Rdf4jFunction(entry));
+        for (QueryFunctionManifest.Entry entry : QueryFunctionManifest.entries()) {
+            registry.add(new QueryFunctionRdf4jAdapter(entry));
         }
     }
 
     static List<String> supportedFunctionUris() {
         List<String> uris = new ArrayList<>(URI_DISPATCHER_FUNCTION_URIS);
-        Clause109QueryFunctionManifest.entries().stream()
-                .map(Clause109QueryFunctionManifest.Entry::uri)
+        QueryFunctionManifest.entries().stream()
+                .map(QueryFunctionManifest.Entry::uri)
                 .forEach(uris::add);
         return List.copyOf(uris);
     }

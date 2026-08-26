@@ -7,12 +7,12 @@ import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import java.util.List;
 import java.util.function.ToIntFunction;
 
-final class Clause109QueryFunctionManifest {
+final class QueryFunctionManifest {
 	private static final List<Entry> ENTRIES = List.of(
 			new Entry(GeoConstants.GEOF_DIMENSION.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(TopologicalDimension::calculate)));
 
-	private Clause109QueryFunctionManifest() {
+	private QueryFunctionManifest() {
 	}
 
 	static List<Entry> entries() {

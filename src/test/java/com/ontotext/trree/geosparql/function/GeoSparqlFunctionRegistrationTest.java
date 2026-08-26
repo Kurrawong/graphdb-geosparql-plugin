@@ -70,19 +70,19 @@ public class GeoSparqlFunctionRegistrationTest {
 
     @Test
     public void geofDimensionManifestEntryDefinesMandatoryArityAndTypedProvider() {
-        List<Clause109QueryFunctionManifest.Entry> entries = Clause109QueryFunctionManifest.entries().stream()
+        List<QueryFunctionManifest.Entry> entries = QueryFunctionManifest.entries().stream()
                 .filter(entry -> GEOF_DIMENSION_URI.equals(entry.uri()))
                 .toList();
 
         assertEquals(1, entries.size());
         assertEquals(1, entries.getFirst().mandatoryArity());
         assertTrue(entries.getFirst().provider()
-                instanceof Clause109QueryFunctionManifest.UnaryGeometryIntegerProvider);
+                instanceof QueryFunctionManifest.UnaryGeometryIntegerProvider);
     }
 
     @Test
     public void registeredGeofDimensionEnforcesMandatoryArity() {
-        Function function = registeredDimensionFunction();
+        Function function = registeredGeofDimensionFunction();
         Literal point = wkt("POINT(1 2)");
 
         assertThrows(ValueExprEvaluationException.class,
@@ -93,7 +93,7 @@ public class GeoSparqlFunctionRegistrationTest {
 
     @Test
     public void registeredGeofDimensionRejectsNonLiteralRdfTerm() {
-        Function function = registeredDimensionFunction();
+        Function function = registeredGeofDimensionFunction();
 
         assertThrows(ValueExprEvaluationException.class,
                 () -> function.evaluate(TRIPLE_SOURCE,
@@ -102,7 +102,7 @@ public class GeoSparqlFunctionRegistrationTest {
 
     @Test
     public void registeredGeofDimensionRejectsMalformedGeometryLiteral() {
-        Function function = registeredDimensionFunction();
+        Function function = registeredGeofDimensionFunction();
 
         assertThrows(ValueExprEvaluationException.class,
                 () -> function.evaluate(TRIPLE_SOURCE, wkt("not geometry")));
@@ -156,7 +156,7 @@ public class GeoSparqlFunctionRegistrationTest {
         assertEquals(supportedUris.size(), registeredSupportedUris);
     }
 
-    private Function registeredDimensionFunction() {
+    private Function registeredGeofDimensionFunction() {
         GeoSparqlFunctionRegistration.registerAll();
         return FunctionRegistry.getInstance().get(GEOF_DIMENSION_URI).get();
     }
@@ -170,7 +170,7 @@ public class GeoSparqlFunctionRegistrationTest {
     }
 
     private void assertDimension(int expected, Literal geometry) throws Exception {
-        Value result = registeredDimensionFunction().evaluate(TRIPLE_SOURCE, geometry);
+        Value result = registeredGeofDimensionFunction().evaluate(TRIPLE_SOURCE, geometry);
 
         assertTrue(result instanceof Literal);
         assertEquals(BigInteger.valueOf(expected), ((Literal) result).integerValue());
