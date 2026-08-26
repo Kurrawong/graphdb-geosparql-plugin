@@ -3,10 +3,11 @@ package com.ontotext.trree.geosparql.function;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class GeoSparqlFunctionRegistration {
-    private static final List<String> SUPPORTED_FUNCTION_URIS = List.of(
+    private static final List<String> URI_DISPATCHER_FUNCTION_URIS = List.of(
             GeoConstants.GEOF_SF_EQUALS.stringValue(),
             GeoConstants.GEOF_SF_DISJOINT.stringValue(),
             GeoConstants.GEOF_SF_INTERSECTS.stringValue(),
@@ -67,12 +68,19 @@ public final class GeoSparqlFunctionRegistration {
 
     public static void registerAll() {
         FunctionRegistry registry = FunctionRegistry.getInstance();
-        for (String uri : SUPPORTED_FUNCTION_URIS) {
+        for (String uri : URI_DISPATCHER_FUNCTION_URIS) {
             registry.add(new GeoSparqlRdf4jFunction(uri));
+        }
+        for (Clause109QueryFunctionManifest.Entry entry : Clause109QueryFunctionManifest.entries()) {
+            registry.add(new Clause109Rdf4jFunction(entry));
         }
     }
 
     static List<String> supportedFunctionUris() {
-        return SUPPORTED_FUNCTION_URIS;
+        List<String> uris = new ArrayList<>(URI_DISPATCHER_FUNCTION_URIS);
+        Clause109QueryFunctionManifest.entries().stream()
+                .map(Clause109QueryFunctionManifest.Entry::uri)
+                .forEach(uris::add);
+        return List.copyOf(uris);
     }
 }
