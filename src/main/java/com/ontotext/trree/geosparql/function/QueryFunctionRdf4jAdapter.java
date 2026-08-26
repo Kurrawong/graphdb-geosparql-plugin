@@ -9,10 +9,10 @@ import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 
 import java.math.BigInteger;
 
-final class Clause109Rdf4jFunction implements Function {
-	private final Clause109QueryFunctionManifest.Entry entry;
+final class QueryFunctionRdf4jAdapter implements Function {
+	private final QueryFunctionManifest.Entry entry;
 
-	Clause109Rdf4jFunction(Clause109QueryFunctionManifest.Entry entry) {
+	QueryFunctionRdf4jAdapter(QueryFunctionManifest.Entry entry) {
 		this.entry = entry;
 	}
 
@@ -35,7 +35,7 @@ final class Clause109Rdf4jFunction implements Function {
 
 	private Value evaluateProvider(ValueFactory valueFactory, Value[] args) {
 		return switch (entry.provider()) {
-			case Clause109QueryFunctionManifest.UnaryGeometryIntegerProvider provider -> {
+			case QueryFunctionManifest.UnaryGeometryIntegerProvider provider -> {
 				GeometryWrapper geometry = JenaGeometryAdapter.toSourceGeometryLiteral(args[0], true)
 						.asGeometryWrapper();
 				int result = provider.calculation().applyAsInt(geometry);
