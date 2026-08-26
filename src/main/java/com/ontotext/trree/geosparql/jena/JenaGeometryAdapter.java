@@ -72,6 +72,46 @@ public final class JenaGeometryAdapter {
 		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
 	}
 
+	/**
+	 * Serializes a query-function geometry result without changing its datatype, CRS, or coordinate layout.
+	 */
+	public static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper wrapper, IRI datatype) {
+		SourceGeometryLiteral.validateGeometryWrapper(wrapper);
+		requireRepresentableGeometryType(wrapper);
+		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
+		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
+			Literal literal = toWktLiteral(valueFactory, wrapper);
+			return valueFactory.createLiteral(literal.stringValue(), datatype);
+		}
+		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
+			Literal literal = toGmlLiteral(valueFactory, wrapper);
+			return valueFactory.createLiteral(literal.stringValue(), datatype);
+		}
+		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
+			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(wrapper.getSrsURI())) {
+				throw new JenaGeoSparqlException("GeoJSON output requires CRS84: " + wrapper.getSrsURI());
+			}
+			DimensionInfo dimensions = wrapper.getDimensionInfo();
+			if (dimensions.getCoordinate() != dimensions.getSpatial()
+					|| dimensions.getCoordinate() > 3) {
+				throw new JenaGeoSparqlException(
+						"GeoJSON output does not support measured coordinate layouts");
+			}
+			return toGeoJsonLiteral(valueFactory, wrapper, dimensions.getCoordinate());
+		}
+		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
+	}
+
+	private static void requireRepresentableGeometryType(GeometryWrapper wrapper) {
+		switch (wrapper.getParsingGeometry().getGeometryType()) {
+			case "Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon",
+					"GeometryCollection" -> {
+			}
+			default -> throw new JenaGeoSparqlException("Unsupported geometry result type: "
+					+ wrapper.getParsingGeometry().getGeometryType());
+		}
+	}
+
 	static Literal toGeoJsonLiteral(ValueFactory valueFactory, GeometryWrapper wrapper,
 			int coordinateDimension) {
 		Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(

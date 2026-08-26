@@ -1,9 +1,12 @@
 package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
+import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 
@@ -35,6 +38,12 @@ final class QueryFunctionRdf4jAdapter implements Function {
 
 	private Value evaluateProvider(ValueFactory valueFactory, Value[] args) {
 		return switch (entry.provider()) {
+			case QueryFunctionManifest.GeometryMemberProvider provider -> {
+				SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(args[0], true);
+				GeometryWrapper result = provider.calculation().apply(
+						source.asGeometryWrapper(), memberIndex(args[1]));
+				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, result, source.datatype());
+			}
 			case QueryFunctionManifest.UnaryGeometryIntegerProvider provider -> {
 				GeometryWrapper geometry = JenaGeometryAdapter.toSourceGeometryLiteral(args[0], true)
 						.asGeometryWrapper();
@@ -42,6 +51,15 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				yield valueFactory.createLiteral(BigInteger.valueOf(result));
 			}
 		};
+	}
+
+	private int memberIndex(Value value) {
+		if (!(value instanceof Literal literal)
+				|| !XMLDatatypeUtil.isNumericDatatype(literal.getDatatype())
+				|| !XMLDatatypeUtil.isValidValue(literal.getLabel(), literal.getDatatype())) {
+			throw new IllegalArgumentException("Expected a numeric geometry member index, found: " + value);
+		}
+		return literal.decimalValue().toBigIntegerExact().intValueExact();
 	}
 
 	private void requireMandatoryArity(Value[] args) throws ValueExprEvaluationException {

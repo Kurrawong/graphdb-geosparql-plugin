@@ -4,6 +4,9 @@ import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.configuration.GeoSPARQLConfig;
+import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
+import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -13,6 +16,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.junit.Before;
 import org.junit.Test;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Dimension;
 import org.locationtech.jts.geom.Envelope;
 
@@ -126,6 +130,57 @@ public class JenaGeometryAdapterTest {
 						source.asGeometryWrapper(), unsupported));
 
 		assertTrue(exception.getMessage().contains("Unsupported GeoSPARQL geometry datatype"));
+	}
+
+	@Test
+	public void queryGeometryResultRejectsCoordinatesOutsideTheCrsDomain() {
+		GeometryWrapper outsideCrs84 = GeometryWrapperFactory.createPoint(
+				new Coordinate(181, 0), CRS84, GeoConstants.GEO_WKT_LITERAL.stringValue());
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
+						VALUE_FACTORY, outsideCrs84, GeoConstants.GEO_WKT_LITERAL));
+
+		assertTrue(exception.getMessage().contains("outside the CRS domain"));
+	}
+
+	@Test
+	public void queryGeometryResultRejectsAnUnrepresentableGeometryType() {
+		GeometryWrapper linearRing = GeometryWrapperFactory.createGeometry(
+				CustomGeometryFactory.theInstance().createLinearRing(new Coordinate[]{
+						new Coordinate(0, 0),
+						new Coordinate(1, 0),
+						new Coordinate(0, 0)
+				}), CRS84, GeoConstants.GEO_WKT_LITERAL.stringValue());
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
+						VALUE_FACTORY, linearRing, GeoConstants.GEO_WKT_LITERAL));
+
+		assertTrue(exception.getMessage().contains("Unsupported geometry result type"));
+	}
+
+	@Test
+	public void queryGeometryResultRequiresCrs84ForGeoJson() {
+		GeometryWrapper projected = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT)
+				.asGeometryWrapper();
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
+						VALUE_FACTORY, projected, GeoConstants.GEO_JSON_LITERAL));
+
+		assertTrue(exception.getMessage().contains("GeoJSON output requires CRS84"));
+	}
+
+	@Test
+	public void queryGeometryResultRejectsLayoutsThatGmlCannotRepresent() {
+		for (String wkt : new String[]{"POINT Z(1 2 3)", "POINT M(1 2 3)"}) {
+			GeometryWrapper result = SourceGeometryLiteral.fromWkt(wkt).asGeometryWrapper();
+
+			assertThrows(wkt, JenaGeoSparqlException.class,
+					() -> JenaGeometryAdapter.toQueryGeometryLiteral(
+							VALUE_FACTORY, result, GeoConstants.GEO_GML_LITERAL));
+		}
 	}
 
 	@Test

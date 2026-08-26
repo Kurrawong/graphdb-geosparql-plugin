@@ -102,6 +102,8 @@ public interface GeoConstants {
     IRI GEOF_ENVELOPE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "envelope");
     IRI GEOF_BOUNDARY = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "boundary");
     IRI GEOF_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "dimension");
+    IRI GEOF_GEOMETRY_N = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "geometryN");
+    IRI GEOF_NUM_GEOMETRIES = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "numGeometries");
     IRI GEOF_GETSRID = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "getSRID");
     IRI GEOF_AS_GEO_JSON = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asGeoJSON");
     IRI GEOF_AS_WKT = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asWKT");
