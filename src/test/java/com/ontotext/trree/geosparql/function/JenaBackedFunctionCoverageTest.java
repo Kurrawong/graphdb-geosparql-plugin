@@ -98,7 +98,6 @@ public class JenaBackedFunctionCoverageTest {
 			GeoConstants.GEOF_SYM_DIFFERENCE,
 			GeoConstants.GEOF_ENVELOPE,
 			GeoConstants.GEOF_BOUNDARY,
-			GeoConstants.GEOF_DIMENSION,
 			GeoConstants.GEOF_GETSRID,
 			GeoConstants.GEOF_AS_GEO_JSON,
 			GeoConstants.GEOF_AS_WKT,
@@ -125,8 +124,11 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
-	public void registeredFunctionUrisHaveCoverageCases() {
+	public void uriDispatcherFunctionUrisHaveCoverageCases() {
 		Set<String> expected = new HashSet<>(GeoSparqlFunctionRegistration.supportedFunctionUris());
+		QueryFunctionManifest.entries().stream()
+				.map(QueryFunctionManifest.Entry::uri)
+				.forEach(expected::remove);
 		Set<String> actual = coveredFunctionUris();
 
 		assertEquals(expected, actual);
