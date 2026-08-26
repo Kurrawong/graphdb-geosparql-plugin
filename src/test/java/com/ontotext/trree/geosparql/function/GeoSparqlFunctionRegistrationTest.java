@@ -13,6 +13,7 @@ import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
 
 import java.math.BigInteger;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -154,6 +155,14 @@ public class GeoSparqlFunctionRegistrationTest {
                 .count();
 
         assertEquals(supportedUris.size(), registeredSupportedUris);
+    }
+
+    @Test
+    public void supportedFunctionUrisAreUnique() {
+        List<String> supportedUris = GeoSparqlFunctionRegistration.supportedFunctionUris();
+
+        assertEquals("Expected each supported function URI to have one registration path",
+                supportedUris.size(), new HashSet<>(supportedUris).size());
     }
 
     private Function registeredGeofDimensionFunction() {
