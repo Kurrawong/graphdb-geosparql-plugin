@@ -154,15 +154,19 @@ public final class SourceGeometryLiteral {
 	}
 
 	private void validateGeometryWrapper() {
-		if (!geometryWrapper.isSRSRecognised()) {
-			throw new JenaGeoSparqlException(unsupportedCrsMessage(geometryWrapper.getSrsURI()), null, true);
+		validateGeometryWrapper(geometryWrapper);
+	}
+
+	static void validateGeometryWrapper(GeometryWrapper wrapper) {
+		if (!wrapper.isSRSRecognised()) {
+			throw new JenaGeoSparqlException(unsupportedCrsMessage(wrapper.getSrsURI()), null, true);
 		}
-		if (geometryWrapper.getSrsInfo().isGeographic()
-				&& !geometryWrapper.isEmpty()
-				&& !geometryWrapper.getSrsInfo().getDomainEnvelope()
-						.contains(geometryWrapper.getXYGeometry().getEnvelopeInternal())) {
+		if (wrapper.getSrsInfo().isGeographic()
+				&& !wrapper.isEmpty()
+				&& !wrapper.getSrsInfo().getDomainEnvelope()
+						.contains(wrapper.getXYGeometry().getEnvelopeInternal())) {
 			throw new JenaGeoSparqlException("Geometry coordinates are outside the CRS domain for "
-					+ geometryWrapper.getSrsURI());
+					+ wrapper.getSrsURI());
 		}
 	}
 
