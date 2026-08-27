@@ -244,6 +244,18 @@ public class DistanceAndBufferFunctionsTest {
 	}
 
 	@Test
+	public void distanceAndBufferDelegateLegacyUnitAliasesToJenaRecognition() {
+		Literal left = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		Literal right = wkt("<" + EPSG_32634 + "> POINT(500003 4600004)");
+
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(
+				GEOF_DISTANCE_URI, left, right, GeoSparqlUnits.URI_KILOMETRE));
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(
+				GEOF_BUFFER_URI, left, VALUE_FACTORY.createLiteral(1),
+				GeoSparqlUnits.URI_KILOMETRE));
+	}
+
+	@Test
 	public void distanceAndBufferRejectMalformedGeometryAndWrongTerms() {
 		Literal malformed = wkt("not geometry");
 		IRI geometryIri = VALUE_FACTORY.createIRI("http://example.com/geometry");
@@ -313,13 +325,13 @@ public class DistanceAndBufferFunctionsTest {
 	@Test
 	public void distanceAndBufferManifestEntriesDefineMandatoryAritiesAndProviders() {
 		assertManifestEntry(GEOF_DISTANCE_URI, 3,
-				QueryFunctionManifest.BinaryGeometryUnitDoubleProvider.class);
+				QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider.class);
 		assertManifestEntry(GEOF_METRIC_DISTANCE_URI, 2,
-				QueryFunctionManifest.BinaryGeometryDoubleProvider.class);
+				QueryFunctionManifest.BinaryGeometryToDoubleProvider.class);
 		assertManifestEntry(GEOF_BUFFER_URI, 3,
-				QueryFunctionManifest.UnaryGeometryDoubleUnitProvider.class);
+				QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider.class);
 		assertManifestEntry(GEOF_METRIC_BUFFER_URI, 2,
-				QueryFunctionManifest.UnaryGeometryDoubleProvider.class);
+				QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider.class);
 	}
 
 	private Value evaluate(String functionUri, Value... args) throws ValueExprEvaluationException {

@@ -18,13 +18,13 @@ import java.util.function.ToIntFunction;
 final class QueryFunctionManifest {
 	private static final List<Entry> ENTRIES = List.of(
 			new Entry(GeoConstants.GEOF_BUFFER.stringValue(), 3,
-					new UnaryGeometryDoubleUnitProvider(GeometryWrapper::buffer)),
+					new UnaryGeometryDoubleUnitToGeometryProvider(GeometryWrapper::buffer)),
 			new Entry(GeoConstants.GEOF_DISTANCE.stringValue(), 3,
-					new BinaryGeometryUnitDoubleProvider(GeometryWrapper::distance)),
+					new BinaryGeometryUnitToDoubleProvider(GeometryWrapper::distance)),
 			new Entry(GeoConstants.GEOF_METRIC_BUFFER.stringValue(), 2,
-					new UnaryGeometryDoubleProvider(MetricBuffer::calculate)),
+					new UnaryGeometryDoubleToGeometryProvider(MetricBuffer::calculate)),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
-					new BinaryGeometryDoubleProvider(MetricDistance::calculate)),
+					new BinaryGeometryToDoubleProvider(MetricDistance::calculate)),
 			new Entry(GeoConstants.GEOF_COORDINATE_DIMENSION.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(GeometryWrapper::getCoordinateDimension)),
 			new Entry(GeoConstants.GEOF_DIMENSION.stringValue(), 1,
@@ -56,41 +56,44 @@ final class QueryFunctionManifest {
 	record Entry(String uri, int mandatoryArity, Provider provider) {
 	}
 
-	sealed interface Provider permits BinaryGeometryDoubleProvider, BinaryGeometryUnitDoubleProvider,
+	sealed interface Provider permits BinaryGeometryToDoubleProvider, BinaryGeometryUnitToDoubleProvider,
 			GeometryMemberProvider, UnaryGeometryAnyUriProvider, UnaryGeometryBooleanProvider,
-			UnaryGeometryDoubleProvider, UnaryGeometryDoubleUnitProvider, UnaryGeometryIntegerProvider {
+			UnaryGeometryDoubleToGeometryProvider, UnaryGeometryDoubleUnitToGeometryProvider,
+			UnaryGeometryIntegerProvider {
 	}
 
 	@FunctionalInterface
-	interface BinaryGeometryDoubleCalculation {
+	interface BinaryGeometryToDoubleCalculation {
 		double apply(GeometryWrapper left, GeometryWrapper right) throws Exception;
 	}
 
-	record BinaryGeometryDoubleProvider(BinaryGeometryDoubleCalculation calculation) implements Provider {
+	record BinaryGeometryToDoubleProvider(BinaryGeometryToDoubleCalculation calculation) implements Provider {
 	}
 
 	@FunctionalInterface
-	interface BinaryGeometryUnitDoubleCalculation {
+	interface BinaryGeometryUnitToDoubleCalculation {
 		double apply(GeometryWrapper left, GeometryWrapper right, String unitUri) throws Exception;
 	}
 
-	record BinaryGeometryUnitDoubleProvider(BinaryGeometryUnitDoubleCalculation calculation) implements Provider {
+	record BinaryGeometryUnitToDoubleProvider(BinaryGeometryUnitToDoubleCalculation calculation) implements Provider {
 	}
 
 	@FunctionalInterface
-	interface UnaryGeometryDoubleCalculation {
+	interface UnaryGeometryDoubleToGeometryCalculation {
 		GeometryWrapper apply(GeometryWrapper geometry, double value) throws Exception;
 	}
 
-	record UnaryGeometryDoubleProvider(UnaryGeometryDoubleCalculation calculation) implements Provider {
+	record UnaryGeometryDoubleToGeometryProvider(UnaryGeometryDoubleToGeometryCalculation calculation)
+			implements Provider {
 	}
 
 	@FunctionalInterface
-	interface UnaryGeometryDoubleUnitCalculation {
+	interface UnaryGeometryDoubleUnitToGeometryCalculation {
 		GeometryWrapper apply(GeometryWrapper geometry, double value, String unitUri) throws Exception;
 	}
 
-	record UnaryGeometryDoubleUnitProvider(UnaryGeometryDoubleUnitCalculation calculation) implements Provider {
+	record UnaryGeometryDoubleUnitToGeometryProvider(UnaryGeometryDoubleUnitToGeometryCalculation calculation)
+			implements Provider {
 	}
 
 	record GeometryMemberProvider(BiFunction<GeometryWrapper, Integer, GeometryWrapper> calculation)

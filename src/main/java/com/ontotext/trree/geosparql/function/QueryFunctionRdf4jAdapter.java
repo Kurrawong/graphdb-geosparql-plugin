@@ -1,10 +1,8 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
-import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -15,20 +13,8 @@ import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 
 import java.math.BigInteger;
-import java.util.Map;
 
 final class QueryFunctionRdf4jAdapter implements Function {
-	private static final Map<String, String> COMPATIBILITY_UNIT_TO_JENA = Map.ofEntries(
-			Map.entry(GeoSparqlUnits.URI_CENTIMETRE.stringValue(), Unit_URI.CENTIMETRE_URL),
-			Map.entry(GeoSparqlUnits.URI_KILOMETRE.stringValue(), Unit_URI.KILOMETRE_URL),
-			Map.entry(GeoSparqlUnits.URI_MILLIMETRE.stringValue(), Unit_URI.MILLIMETRE_URL),
-			Map.entry(GeoSparqlUnits.URI_METRE.stringValue(), Unit_URI.METRE_URL),
-			Map.entry(GeoSparqlUnits.URI_FOOT.stringValue(), Unit_URI.FOOT_URL),
-			Map.entry(GeoSparqlUnits.URI_US_SURVEY_FOOT.stringValue(), Unit_URI.US_SURVEY_FOOT_URL),
-			Map.entry(GeoSparqlUnits.URI_INCH.stringValue(), Unit_URI.INCH_URL),
-			Map.entry(GeoSparqlUnits.URI_MILE.stringValue(), Unit_URI.MILE_URL),
-			Map.entry(GeoSparqlUnits.URI_NAUTICAL_MILE.stringValue(), Unit_URI.NAUTICAL_MILE_URL),
-			Map.entry(GeoSparqlUnits.URI_YARD.stringValue(), Unit_URI.YARD_URL));
 	private final QueryFunctionManifest.Entry entry;
 	private final Function compatibilityOverload;
 
@@ -63,12 +49,12 @@ final class QueryFunctionRdf4jAdapter implements Function {
 
 	private Value evaluateProvider(ValueFactory valueFactory, Value[] args) throws Exception {
 		return switch (entry.provider()) {
-			case QueryFunctionManifest.BinaryGeometryDoubleProvider provider -> {
+			case QueryFunctionManifest.BinaryGeometryToDoubleProvider provider -> {
 				double result = provider.calculation().apply(
 						geometryArgument(args[0]), geometryArgument(args[1]));
 				yield valueFactory.createLiteral(result);
 			}
-			case QueryFunctionManifest.BinaryGeometryUnitDoubleProvider provider -> {
+			case QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider provider -> {
 				double result = provider.calculation().apply(
 						geometryArgument(args[0]), geometryArgument(args[1]), unitUri(args[2]));
 				yield valueFactory.createLiteral(result);
@@ -87,13 +73,13 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				boolean result = provider.calculation().test(geometryArgument(args[0]));
 				yield valueFactory.createLiteral(result);
 			}
-			case QueryFunctionManifest.UnaryGeometryDoubleProvider provider -> {
+			case QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
 				GeometryWrapper result = provider.calculation().apply(
 						source.asGeometryWrapper(), finiteNumeric(args[1]));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, result, source.datatype());
 			}
-			case QueryFunctionManifest.UnaryGeometryDoubleUnitProvider provider -> {
+			case QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
 				GeometryWrapper result = provider.calculation().apply(
 						source.asGeometryWrapper(), finiteNumeric(args[1]), unitUri(args[2]));
@@ -138,7 +124,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 		} else {
 			throw new IllegalArgumentException("Expected a unit IRI or xsd:anyURI literal, found: " + value);
 		}
-		return COMPATIBILITY_UNIT_TO_JENA.getOrDefault(uri, uri);
+		return uri;
 	}
 
 	private int memberIndex(Value value) {
