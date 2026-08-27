@@ -28,6 +28,7 @@ public class UnaryGeometryFunctionsTest {
 	private static final String ENVELOPE_URI = GeoConstants.NS_GEOF + "envelope";
 	private static final String CRS84 = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 	private static final String EPSG_4326 = "http://www.opengis.net/def/crs/EPSG/0/4326";
+	private static final String EPSG_4979 = "http://www.opengis.net/def/crs/EPSG/0/4979";
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final List<String> FUNCTION_URIS = List.of(
 			BOUNDARY_URI, CENTROID_URI, CONVEX_HULL_URI, ENVELOPE_URI);
@@ -161,6 +162,54 @@ public class UnaryGeometryFunctionsTest {
 			assertEquals(source.toString(), 2,
 					parsed.asGeometryWrapper().getSpatialDimension());
 		}
+	}
+
+	@Test
+	public void unaryGeometryFunctionsRejectWktResultsMissingRequiredOrdinates() {
+		for (Literal source : List.of(
+				wkt("POINT Z(0 0 5)"),
+				wkt("POINT M(0 0 5)"),
+				wkt("POINT ZM(0 0 5 7)"),
+				wkt("GEOMETRYCOLLECTION Z(POINT Z(0 0 5),POINT M(2 2 7))"))) {
+			assertThrows(source.toString(), ValueExprEvaluationException.class,
+					() -> evaluate(ENVELOPE_URI, source));
+		}
+
+		for (Literal source : List.of(
+				wkt("MULTIPOINT M((0 0 5),(0 2 6),(2 0 7))"),
+				wkt("MULTIPOINT ZM((0 0 5 8),(0 2 6 9),(2 0 7 10))"))) {
+			assertThrows(source.toString(), ValueExprEvaluationException.class,
+					() -> evaluate(CONVEX_HULL_URI, source));
+		}
+
+		for (Literal source : List.of(
+				wkt("LINESTRING M(0 0 5,2 2 6)"),
+				wkt("LINESTRING ZM(0 0 5 8,2 2 6 9)"))) {
+			assertThrows(source.toString(), ValueExprEvaluationException.class,
+					() -> evaluate(BOUNDARY_URI, source));
+		}
+	}
+
+	@Test
+	public void boundaryAndConvexHullRetainRepresentableXyzWktResults() throws Exception {
+		for (Literal result : List.of(
+				(Literal) evaluate(BOUNDARY_URI, wkt("LINESTRING Z(0 0 5,2 2 6)")),
+				(Literal) evaluate(CONVEX_HULL_URI,
+						wkt("MULTIPOINT Z((0 0 5),(0 2 6),(2 0 7))")))) {
+			SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+			Geometry geometry = parsed.asGeometryWrapper().getParsingGeometry();
+
+			assertEquals(result.toString(), 3, parsed.asGeometryWrapper().getCoordinateDimension());
+			assertTrue(result.toString(), Double.isFinite(geometry.getCoordinate().getZ()));
+		}
+	}
+
+	@Test
+	public void envelopeRejectsGmlResultMissingRequiredOrdinates() {
+		Literal source = gmlFromWkt("<" + EPSG_4979 + "> POINT Z(20 10 5)");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(ENVELOPE_URI, source));
 	}
 
 	@Test
