@@ -4,11 +4,12 @@ import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
 import org.locationtech.jts.geom.CoordinateSequence;
 import org.locationtech.jts.geom.CoordinateSequenceFilter;
+import org.locationtech.jts.geom.Geometry;
 
 import java.util.function.DoubleBinaryOperator;
 
 /**
- * Finds extrema across a geometry's normalized coordinate sequences.
+ * Finds X and Y extrema from normalized coordinate sequences and Z extrema from source coordinate sequences.
  */
 public final class GeometryCoordinateExtrema {
 	private GeometryCoordinateExtrema() {
@@ -40,7 +41,7 @@ public final class GeometryCoordinateExtrema {
 
 	private static double extreme(GeometryWrapper geometry, int ordinate,
 			DoubleBinaryOperator accumulator) {
-		return extreme(geometry, ordinate, accumulator, false);
+		return extreme(geometry.getXYGeometry(), ordinate, accumulator, false);
 	}
 
 	private static double zExtreme(GeometryWrapper geometry, DoubleBinaryOperator accumulator) {
@@ -49,13 +50,13 @@ public final class GeometryCoordinateExtrema {
 				&& dimensions != CoordinateSequenceDimensions.XYZM) {
 			throw new IllegalArgumentException("Geometry coordinate layout has no Z ordinate");
 		}
-		return extreme(geometry, 2, accumulator, true);
+		return extreme(geometry.getParsingGeometry(), 2, accumulator, true);
 	}
 
-	private static double extreme(GeometryWrapper geometry, int ordinate,
+	private static double extreme(Geometry geometry, int ordinate,
 			DoubleBinaryOperator accumulator, boolean finiteOnly) {
 		ExtremaFilter filter = new ExtremaFilter(ordinate, accumulator, finiteOnly);
-		geometry.getXYGeometry().apply(filter);
+		geometry.apply(filter);
 		return filter.result();
 	}
 
