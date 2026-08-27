@@ -13,6 +13,7 @@ import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
+import org.locationtech.jts.geom.Geometry;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -100,6 +101,19 @@ public class GeometryMemberFunctionsTest {
 		assertEquals("LineString", parsed(atomic).asGeometryWrapper().getGeometryType());
 		assertEquals("GeometryCollection", parsed(nested).asGeometryWrapper().getGeometryType());
 		assertEquals(1, parsed(nested).asGeometryWrapper().getXYGeometry().getNumGeometries());
+	}
+
+	@Test
+	public void geometryNPreservesNestedCollectionContainingOnlyEmptyMembers() throws Exception {
+		Literal result = (Literal) evaluate(GEOMETRY_N_URI,
+				wkt("GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT EMPTY),POINT(3 4))"),
+				VALUE_FACTORY.createLiteral(1));
+		Geometry geometry = parsed(result).asGeometryWrapper().getParsingGeometry();
+
+		assertEquals("GeometryCollection", geometry.getGeometryType());
+		assertEquals(1, geometry.getNumGeometries());
+		assertEquals("Point", geometry.getGeometryN(0).getGeometryType());
+		assertTrue(geometry.getGeometryN(0).isEmpty());
 	}
 
 	@Test
