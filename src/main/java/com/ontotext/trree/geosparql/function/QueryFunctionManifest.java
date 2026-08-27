@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
+import com.ontotext.trree.geosparql.jena.query.GeometryArea;
 import com.ontotext.trree.geosparql.jena.query.GeometryCount;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
@@ -19,12 +20,16 @@ import java.util.function.ToIntFunction;
 
 final class QueryFunctionManifest {
 	private static final List<Entry> ENTRIES = List.of(
+			new Entry(GeoConstants.GEOF_AREA.stringValue(), 2,
+					new UnaryGeometryUnitToDoubleProvider(GeometryArea::calculate)),
 			new Entry(GeoConstants.GEOF_BUFFER.stringValue(), 3,
 					new UnaryGeometryDoubleUnitToGeometryProvider(GeometryWrapper::buffer)),
 			new Entry(GeoConstants.GEOF_DISTANCE.stringValue(), 3,
 					new BinaryGeometryUnitToDoubleProvider(GeometryWrapper::distance)),
 			new Entry(GeoConstants.GEOF_LENGTH.stringValue(), 2,
 					new UnaryGeometryUnitToDoubleProvider(GeometryLength::calculate)),
+			new Entry(GeoConstants.GEOF_METRIC_AREA.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(GeometryArea::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_BUFFER.stringValue(), 2,
 					new UnaryGeometryDoubleToGeometryProvider(MetricBuffer::calculate)),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
