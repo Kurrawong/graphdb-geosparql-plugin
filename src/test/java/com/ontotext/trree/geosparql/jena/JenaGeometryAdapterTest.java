@@ -1,7 +1,8 @@
 package com.ontotext.trree.geosparql.jena;
 
-import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
+import com.ontotext.trree.geosparql.TestIndexGeometries;
+import com.ontotext.trree.geosparql.jena.query.MetricDistance;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.configuration.GeoSPARQLConfig;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
@@ -590,11 +591,11 @@ public class JenaGeometryAdapterTest {
 				GeoConstants.GEO_WKT_LITERAL);
 		Literal projectedPoint = VALUE_FACTORY.createLiteral(PROJECTED_POINT_WKT, GeoConstants.GEO_WKT_LITERAL);
 
-		Value result = JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_DISTANCE.stringValue(),
-				crs84Point, projectedPoint, GeoSparqlUnits.URI_METRE);
+		double result = MetricDistance.calculate(
+				JenaGeometryAdapter.toSourceGeometryLiteral(crs84Point).asGeometryWrapper(),
+				JenaGeometryAdapter.toSourceGeometryLiteral(projectedPoint).asGeometryWrapper());
 
-		assertTrue(result instanceof Literal);
-		assertEquals(0d, ((Literal) result).doubleValue(), 0.2d);
+		assertEquals(0d, result, 0.2d);
 	}
 
 	@Test

@@ -3,6 +3,7 @@ package com.ontotext.trree.geosparql.function;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -15,9 +16,15 @@ import java.math.BigInteger;
 
 final class QueryFunctionRdf4jAdapter implements Function {
 	private final QueryFunctionManifest.Entry entry;
+	private final Function compatibilityOverload;
 
 	QueryFunctionRdf4jAdapter(QueryFunctionManifest.Entry entry) {
+		this(entry, null);
+	}
+
+	QueryFunctionRdf4jAdapter(QueryFunctionManifest.Entry entry, Function compatibilityOverload) {
 		this.entry = entry;
+		this.compatibilityOverload = compatibilityOverload;
 	}
 
 	@Override
@@ -28,6 +35,9 @@ final class QueryFunctionRdf4jAdapter implements Function {
 	@Override
 	public Value evaluate(ValueFactory valueFactory, Value... args) throws ValueExprEvaluationException {
 		try {
+			if (args.length != entry.mandatoryArity() && compatibilityOverload != null) {
+				return compatibilityOverload.evaluate(valueFactory, args);
+			}
 			requireMandatoryArity(args);
 			return evaluateProvider(valueFactory, args);
 		} catch (ValueExprEvaluationException e) {
@@ -37,8 +47,18 @@ final class QueryFunctionRdf4jAdapter implements Function {
 		}
 	}
 
-	private Value evaluateProvider(ValueFactory valueFactory, Value[] args) {
+	private Value evaluateProvider(ValueFactory valueFactory, Value[] args) throws Exception {
 		return switch (entry.provider()) {
+			case QueryFunctionManifest.BinaryGeometryToDoubleProvider provider -> {
+				double result = provider.calculation().apply(
+						geometryArgument(args[0]), geometryArgument(args[1]));
+				yield valueFactory.createLiteral(result);
+			}
+			case QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider provider -> {
+				double result = provider.calculation().apply(
+						geometryArgument(args[0]), geometryArgument(args[1]), unitUri(args[2]));
+				yield valueFactory.createLiteral(result);
+			}
 			case QueryFunctionManifest.GeometryMemberProvider provider -> {
 				SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(args[0], true);
 				GeometryWrapper result = provider.calculation().apply(
@@ -53,6 +73,18 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				boolean result = provider.calculation().test(geometryArgument(args[0]));
 				yield valueFactory.createLiteral(result);
 			}
+			case QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider provider -> {
+				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
+				GeometryWrapper result = provider.calculation().apply(
+						source.asGeometryWrapper(), finiteNumeric(args[1]));
+				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, result, source.datatype());
+			}
+			case QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider provider -> {
+				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
+				GeometryWrapper result = provider.calculation().apply(
+						source.asGeometryWrapper(), finiteNumeric(args[1]), unitUri(args[2]));
+				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, result, source.datatype());
+			}
 			case QueryFunctionManifest.UnaryGeometryIntegerProvider provider -> {
 				int result = provider.calculation().applyAsInt(geometryArgument(args[0]));
 				yield valueFactory.createLiteral(BigInteger.valueOf(result));
@@ -61,7 +93,38 @@ final class QueryFunctionRdf4jAdapter implements Function {
 	}
 
 	private GeometryWrapper geometryArgument(Value value) {
-		return JenaGeometryAdapter.toSourceGeometryLiteral(value, true).asGeometryWrapper();
+		return sourceGeometryArgument(value).asGeometryWrapper();
+	}
+
+	private SourceGeometryLiteral sourceGeometryArgument(Value value) {
+		return JenaGeometryAdapter.toSourceGeometryLiteral(value, true);
+	}
+
+	private double finiteNumeric(Value value) {
+		if (!(value instanceof Literal literal)
+				|| !XMLDatatypeUtil.isNumericDatatype(literal.getDatatype())
+				|| !XMLDatatypeUtil.isValidValue(literal.getLabel(), literal.getDatatype())) {
+			throw new IllegalArgumentException("Expected a numeric radius, found: " + value);
+		}
+		double numericValue = literal.doubleValue();
+		if (!Double.isFinite(numericValue)) {
+			throw new IllegalArgumentException("Expected a finite radius, found: " + value);
+		}
+		return numericValue;
+	}
+
+	private String unitUri(Value value) {
+		String uri;
+		if (value instanceof IRI) {
+			uri = value.stringValue();
+		} else if (value instanceof Literal literal
+				&& literal.getLanguage().isEmpty()
+				&& XSD.ANYURI.equals(literal.getDatatype())) {
+			uri = literal.stringValue();
+		} else {
+			throw new IllegalArgumentException("Expected a unit IRI or xsd:anyURI literal, found: " + value);
+		}
+		return uri;
 	}
 
 	private int memberIndex(Value value) {
