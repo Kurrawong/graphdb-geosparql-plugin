@@ -83,10 +83,12 @@ public final class JenaGeometryAdapter {
 		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
 		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
 			Literal literal = toWktLiteral(valueFactory, wrapper);
+			requireRoundTrippableGeometryResult(literal);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
 			Literal literal = toGmlLiteral(valueFactory, wrapper);
+			requireRoundTrippableGeometryResult(literal);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
@@ -102,6 +104,15 @@ public final class JenaGeometryAdapter {
 			return toGeoJsonLiteral(valueFactory, wrapper, dimensions.getCoordinate());
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
+	}
+
+	private static void requireRoundTrippableGeometryResult(Literal literal) {
+		try {
+			SourceGeometryLiteral.fromLiteral(literal).asGeometryWrapper();
+		} catch (JenaGeoSparqlException e) {
+			throw new JenaGeoSparqlException(
+					"Geometry result cannot represent its required coordinate layout", e);
+		}
 	}
 
 	private static GeometryWrapper normalizeQueryGeometryType(GeometryWrapper wrapper) {
