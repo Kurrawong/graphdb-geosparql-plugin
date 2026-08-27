@@ -3,6 +3,8 @@ package com.ontotext.trree.geosparql.function;
 import com.ontotext.trree.geosparql.jena.query.GeometryCount;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
+import com.ontotext.trree.geosparql.jena.query.MetricBuffer;
+import com.ontotext.trree.geosparql.jena.query.MetricDistance;
 import com.ontotext.trree.geosparql.jena.query.TopologicalDimension;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
@@ -15,6 +17,14 @@ import java.util.function.ToIntFunction;
 
 final class QueryFunctionManifest {
 	private static final List<Entry> ENTRIES = List.of(
+			new Entry(GeoConstants.GEOF_BUFFER.stringValue(), 3,
+					new UnaryGeometryDoubleUnitProvider(GeometryWrapper::buffer)),
+			new Entry(GeoConstants.GEOF_DISTANCE.stringValue(), 3,
+					new BinaryGeometryUnitDoubleProvider(GeometryWrapper::distance)),
+			new Entry(GeoConstants.GEOF_METRIC_BUFFER.stringValue(), 2,
+					new UnaryGeometryDoubleProvider(MetricBuffer::calculate)),
+			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
+					new BinaryGeometryDoubleProvider(MetricDistance::calculate)),
 			new Entry(GeoConstants.GEOF_COORDINATE_DIMENSION.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(GeometryWrapper::getCoordinateDimension)),
 			new Entry(GeoConstants.GEOF_DIMENSION.stringValue(), 1,
@@ -46,8 +56,41 @@ final class QueryFunctionManifest {
 	record Entry(String uri, int mandatoryArity, Provider provider) {
 	}
 
-	sealed interface Provider permits GeometryMemberProvider, UnaryGeometryAnyUriProvider,
-			UnaryGeometryBooleanProvider, UnaryGeometryIntegerProvider {
+	sealed interface Provider permits BinaryGeometryDoubleProvider, BinaryGeometryUnitDoubleProvider,
+			GeometryMemberProvider, UnaryGeometryAnyUriProvider, UnaryGeometryBooleanProvider,
+			UnaryGeometryDoubleProvider, UnaryGeometryDoubleUnitProvider, UnaryGeometryIntegerProvider {
+	}
+
+	@FunctionalInterface
+	interface BinaryGeometryDoubleCalculation {
+		double apply(GeometryWrapper left, GeometryWrapper right) throws Exception;
+	}
+
+	record BinaryGeometryDoubleProvider(BinaryGeometryDoubleCalculation calculation) implements Provider {
+	}
+
+	@FunctionalInterface
+	interface BinaryGeometryUnitDoubleCalculation {
+		double apply(GeometryWrapper left, GeometryWrapper right, String unitUri) throws Exception;
+	}
+
+	record BinaryGeometryUnitDoubleProvider(BinaryGeometryUnitDoubleCalculation calculation) implements Provider {
+	}
+
+	@FunctionalInterface
+	interface UnaryGeometryDoubleCalculation {
+		GeometryWrapper apply(GeometryWrapper geometry, double value) throws Exception;
+	}
+
+	record UnaryGeometryDoubleProvider(UnaryGeometryDoubleCalculation calculation) implements Provider {
+	}
+
+	@FunctionalInterface
+	interface UnaryGeometryDoubleUnitCalculation {
+		GeometryWrapper apply(GeometryWrapper geometry, double value, String unitUri) throws Exception;
+	}
+
+	record UnaryGeometryDoubleUnitProvider(UnaryGeometryDoubleUnitCalculation calculation) implements Provider {
 	}
 
 	record GeometryMemberProvider(BiFunction<GeometryWrapper, Integer, GeometryWrapper> calculation)

@@ -4,8 +4,8 @@ import com.ontotext.graphdb.Config;
 import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.test.functional.base.SingleRepositoryFunctionalTest;
 import com.ontotext.test.utils.StandardUtils;
+import com.ontotext.trree.geosparql.function.GeoSparqlFunctionRegistration;
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
-import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.commons.lang.Validate;
@@ -20,6 +20,8 @@ import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
+import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
+import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.config.RepositoryConfig;
@@ -421,7 +423,10 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	}
 
 	private Value evaluate(IRI functionUri, Value... args) throws ValueExprEvaluationException {
-		return JenaFunctionEvaluator.evaluate(vf(), functionUri.stringValue(), args);
+		GeoSparqlFunctionRegistration.registerAll();
+		Function function = FunctionRegistry.getInstance().get(functionUri.stringValue())
+				.orElseThrow(() -> new AssertionError("Function not registered: " + functionUri));
+		return function.evaluate(vf(), args);
 	}
 
 	private Literal singleLiteralResult(String query) {
