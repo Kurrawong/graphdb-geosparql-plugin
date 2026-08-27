@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -229,7 +230,8 @@ public class JenaBackedFunctionCoverageTest {
 		Literal left = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 20.0)");
 		Literal right = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 21.0)");
 
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_KILOMETRE),
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right,
+				VF.createIRI(Unit_URI.KILOMETRE_URL)),
 				109.5057, 0.0001);
 	}
 
