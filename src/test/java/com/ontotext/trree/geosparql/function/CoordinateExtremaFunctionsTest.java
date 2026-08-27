@@ -62,13 +62,13 @@ public class CoordinateExtremaFunctionsTest {
 	}
 
 	@Test
-	public void xyExtremaUseJenaNormalizedAuthorityAxisOrder() throws Exception {
+	public void xyExtremaFollowSourceCrsAxisOrder() throws Exception {
 		Literal point = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10 100)");
 
-		assertDouble(100.0, evaluate(MIN_X_URI, point));
-		assertDouble(100.0, evaluate(MAX_X_URI, point));
-		assertDouble(10.0, evaluate(MIN_Y_URI, point));
-		assertDouble(10.0, evaluate(MAX_Y_URI, point));
+		assertDouble(10.0, evaluate(MIN_X_URI, point));
+		assertDouble(10.0, evaluate(MAX_X_URI, point));
+		assertDouble(100.0, evaluate(MIN_Y_URI, point));
+		assertDouble(100.0, evaluate(MAX_Y_URI, point));
 	}
 
 	@Test
