@@ -72,6 +72,18 @@ public class CoordinateExtremaFunctionsTest {
 	}
 
 	@Test
+	public void zExtremaPreserveZInAuthorityAxisOrder() throws Exception {
+		String crs = "<http://www.opengis.net/def/crs/EPSG/0/4326> ";
+		Literal point = wkt(crs + "POINT Z(10 100 7)");
+		Literal measuredPoint = wkt(crs + "POINT ZM(10 100 7 42)");
+
+		assertDouble(7.0, evaluate(MIN_Z_URI, point));
+		assertDouble(7.0, evaluate(MAX_Z_URI, point));
+		assertDouble(7.0, evaluate(MIN_Z_URI, measuredPoint));
+		assertDouble(7.0, evaluate(MAX_Z_URI, measuredPoint));
+	}
+
+	@Test
 	public void extremaRejectEmptyAndIneligibleCoordinateLayouts() {
 		for (String empty : List.of(
 				"POINT EMPTY", "MULTIPOINT EMPTY", "GEOMETRYCOLLECTION EMPTY")) {
