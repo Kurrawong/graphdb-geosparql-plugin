@@ -26,8 +26,12 @@ import static org.junit.Assert.assertTrue;
 public class UnaryGeometryFunctionsTest {
 	private static final String BOUNDARY_URI = GeoConstants.NS_GEOF + "boundary";
 	private static final String CENTROID_URI = GeoConstants.NS_GEOF + "centroid";
+	private static final String COORDINATE_DIMENSION_URI = GeoConstants.NS_GEOF + "coordinateDimension";
 	private static final String CONVEX_HULL_URI = GeoConstants.NS_GEOF + "convexHull";
 	private static final String ENVELOPE_URI = GeoConstants.NS_GEOF + "envelope";
+	private static final String IS_3D_URI = GeoConstants.NS_GEOF + "is3D";
+	private static final String IS_MEASURED_URI = GeoConstants.NS_GEOF + "isMeasured";
+	private static final String SPATIAL_DIMENSION_URI = GeoConstants.NS_GEOF + "spatialDimension";
 	private static final String CRS84 = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 	private static final String EPSG_4326 = "http://www.opengis.net/def/crs/EPSG/0/4326";
 	private static final String EPSG_4979 = "http://www.opengis.net/def/crs/EPSG/0/4979";
@@ -129,6 +133,18 @@ public class UnaryGeometryFunctionsTest {
 		assertEmptyGeometry("Point", evaluate(CENTROID_URI, wkt("POINT EMPTY")));
 		assertEmptyGeometry("GeometryCollection", evaluate(CONVEX_HULL_URI, wkt("POINT EMPTY")));
 		assertEmptyGeometry("Point", evaluate(ENVELOPE_URI, wkt("POINT EMPTY")));
+	}
+
+	@Test
+	public void unaryGeometryFunctionsPreserveEmptyWktCoordinateLayouts() throws Exception {
+		assertEmptyWktLayout(ENVELOPE_URI, "POINT EMPTY",
+				"POINT EMPTY", "Point", 2, 2, false, false);
+		assertEmptyWktLayout(ENVELOPE_URI, "POINT Z EMPTY",
+				"POINT Z EMPTY", "Point", 3, 3, true, false);
+		assertEmptyWktLayout(BOUNDARY_URI, "LINESTRING M EMPTY",
+				"MULTIPOINT M EMPTY", "MultiPoint", 3, 2, false, true);
+		assertEmptyWktLayout(CONVEX_HULL_URI, "POINT ZM EMPTY",
+				"GEOMETRYCOLLECTION ZM EMPTY", "GeometryCollection", 4, 3, true, true);
 	}
 
 	@Test
@@ -430,6 +446,22 @@ public class UnaryGeometryFunctionsTest {
 				.asGeometryWrapper().getParsingGeometry();
 
 		assertTrue("Expected " + actual + " to equal " + expected, expected.equalsTopo(actual));
+	}
+
+	private void assertEmptyWktLayout(String functionUri, String sourceWkt, String expectedWkt,
+			String geometryType, int coordinateDimension, int spatialDimension,
+			boolean is3D, boolean isMeasured) throws Exception {
+		Literal result = (Literal) evaluate(functionUri, wkt(sourceWkt));
+
+		assertEquals(expectedWkt, result.stringValue());
+		assertEquals(geometryType, JenaGeometryAdapter.toSourceGeometryLiteral(result)
+				.asGeometryWrapper().getGeometryType());
+		assertEquals(coordinateDimension,
+				((Literal) evaluate(COORDINATE_DIMENSION_URI, result)).intValue());
+		assertEquals(spatialDimension,
+				((Literal) evaluate(SPATIAL_DIMENSION_URI, result)).intValue());
+		assertEquals(is3D, ((Literal) evaluate(IS_3D_URI, result)).booleanValue());
+		assertEquals(isMeasured, ((Literal) evaluate(IS_MEASURED_URI, result)).booleanValue());
 	}
 
 	private void assertGeoJsonCoordinateDimension(int expected, Value result) {
