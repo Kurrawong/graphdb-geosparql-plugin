@@ -21,6 +21,8 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Dimension;
 import org.locationtech.jts.geom.Envelope;
 
+import java.util.List;
+
 import static org.junit.Assert.*;
 
 /**
@@ -146,7 +148,7 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
-	public void queryGeometryResultRejectsAnUnrepresentableGeometryType() {
+	public void queryGeometryResultRepresentsLinearRingAsLineString() {
 		GeometryWrapper linearRing = GeometryWrapperFactory.createGeometry(
 				CustomGeometryFactory.theInstance().createLinearRing(new Coordinate[]{
 						new Coordinate(0, 0),
@@ -154,11 +156,17 @@ public class JenaGeometryAdapterTest {
 						new Coordinate(0, 0)
 				}), CRS84, GeoConstants.GEO_WKT_LITERAL.stringValue());
 
-		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
-				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
-						VALUE_FACTORY, linearRing, GeoConstants.GEO_WKT_LITERAL));
+		for (IRI datatype : List.of(
+				GeoConstants.GEO_WKT_LITERAL,
+				GeoConstants.GEO_GML_LITERAL,
+				GeoConstants.GEO_JSON_LITERAL)) {
+			Literal result = JenaGeometryAdapter.toQueryGeometryLiteral(
+					VALUE_FACTORY, linearRing, datatype);
 
-		assertTrue(exception.getMessage().contains("Unsupported geometry result type"));
+			assertEquals(datatype, result.getDatatype());
+			assertEquals("LineString", SourceGeometryLiteral.fromLiteral(result)
+					.asGeometryWrapper().getGeometryType());
+		}
 	}
 
 	@Test

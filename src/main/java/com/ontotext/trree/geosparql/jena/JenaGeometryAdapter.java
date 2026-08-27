@@ -12,6 +12,7 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.LinearRing;
 import org.locationtech.jts.io.WKTWriter;
 
 /**
@@ -76,6 +77,7 @@ public final class JenaGeometryAdapter {
 	 * Serializes a query-function geometry result without changing its datatype, CRS, or coordinate layout.
 	 */
 	public static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper wrapper, IRI datatype) {
+		wrapper = normalizeQueryGeometryType(wrapper);
 		SourceGeometryLiteral.validateGeometryWrapper(wrapper);
 		requireRepresentableGeometryType(wrapper);
 		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
@@ -100,6 +102,15 @@ public final class JenaGeometryAdapter {
 			return toGeoJsonLiteral(valueFactory, wrapper, dimensions.getCoordinate());
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
+	}
+
+	private static GeometryWrapper normalizeQueryGeometryType(GeometryWrapper wrapper) {
+		if (!(wrapper.getParsingGeometry() instanceof LinearRing ring)) {
+			return wrapper;
+		}
+		Geometry lineString = ring.getFactory().createLineString(ring.getCoordinateSequence().copy());
+		return new GeometryWrapper(lineString, wrapper.getSrsURI(), wrapper.getGeometryDatatypeURI(),
+				wrapper.getDimensionInfo());
 	}
 
 	private static void requireRepresentableGeometryType(GeometryWrapper wrapper) {

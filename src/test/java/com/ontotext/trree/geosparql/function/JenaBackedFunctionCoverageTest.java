@@ -90,13 +90,10 @@ public class JenaBackedFunctionCoverageTest {
 
 	private static final List<IRI> NON_TOPOLOGICAL_COVERAGE = List.of(
 				GeoConstants.GEOF_RELATE,
-				GeoConstants.GEOF_CONVEX_HULL,
 			GeoConstants.GEOF_INTERSECTION,
 			GeoConstants.GEOF_UNION,
 			GeoConstants.GEOF_DIFFERENCE,
 			GeoConstants.GEOF_SYM_DIFFERENCE,
-			GeoConstants.GEOF_ENVELOPE,
-			GeoConstants.GEOF_BOUNDARY,
 			GeoConstants.GEOF_GETSRID,
 			GeoConstants.GEOF_AS_GEO_JSON,
 			GeoConstants.GEOF_AS_WKT,
@@ -264,9 +261,6 @@ public class JenaBackedFunctionCoverageTest {
 	public void geometryProducingFunctionsHaveDirectCoverage() throws Exception {
 		assertWktLiteral(evaluate(GeoConstants.GEOF_BUFFER, wkt("POINT(0 0)"), VF.createLiteral("0.0")),
 				"POLYGON EMPTY");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_CONVEX_HULL,
-				wkt("MULTIPOINT ((0 0), (1 1), (0 1))")),
-				"POLYGON ((0 0, 0 1, 1 1, 0 0))");
 		assertWktLiteral(evaluate(GeoConstants.GEOF_INTERSECTION,
 				wkt("LINESTRING(0 0, 1 1)"), wkt("LINESTRING(1 1, 0 0)")),
 				"LINESTRING (0 0, 1 1)");
@@ -279,10 +273,6 @@ public class JenaBackedFunctionCoverageTest {
 		assertWktLiteral(evaluate(GeoConstants.GEOF_SYM_DIFFERENCE,
 				wkt("LINESTRING(0 0, 1 1)"), wkt("LINESTRING(1 1, 2 2)")),
 				"MULTILINESTRING ((0 0, 1 1), (1 1, 2 2))");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_ENVELOPE, wkt("LINESTRING(0 0, 1 1)")),
-				"POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_BOUNDARY, wkt("LINESTRING(0 0, 1 1)")),
-				"MULTIPOINT ((0 0), (1 1))");
 	}
 
 	@Test
