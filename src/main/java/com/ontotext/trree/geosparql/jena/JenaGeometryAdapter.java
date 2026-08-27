@@ -6,6 +6,7 @@ import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.datatype.GeometryDatatype;
 import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
+import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.IRI;
@@ -17,6 +18,9 @@ import org.locationtech.jts.geom.CoordinateSequenceFilter;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.LinearRing;
+import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.io.WKTWriter;
 
 /**
@@ -108,8 +112,8 @@ public final class JenaGeometryAdapter {
 	}
 
 	private static Literal toQueryWktLiteral(ValueFactory valueFactory, GeometryWrapper result) {
-		if (isStructuredEmptyGeometryCollection(result.getParsingGeometry())) {
-			return toStructuredEmptyWktLiteral(valueFactory, result);
+		if ("GeometryCollection".equals(result.getParsingGeometry().getGeometryType())) {
+			return toGeometryCollectionWktLiteral(valueFactory, result);
 		}
 		Literal literal = toWktLiteral(valueFactory, result);
 		if (!result.isEmpty()) {
@@ -131,30 +135,77 @@ public final class JenaGeometryAdapter {
 				GeoConstants.GEO_WKT_LITERAL);
 	}
 
-	private static Literal toStructuredEmptyWktLiteral(ValueFactory valueFactory,
+	private static Literal toGeometryCollectionWktLiteral(ValueFactory valueFactory,
 			GeometryWrapper result) {
-		String lexicalForm = new WKTWriter().write(result.getParsingGeometry());
-		String dimensionMarker = CoordinateSequenceDimensions.convertDimensions(
+		String lexicalForm = toGeometryCollectionWkt(
+				(GeometryCollection) result.getParsingGeometry(),
 				result.getDimensionInfo().getDimensions());
-		if (!dimensionMarker.isEmpty()) {
-			int geometryTypeEnd = lexicalForm.indexOf(' ');
-			if (geometryTypeEnd < 0) {
-				throw new JenaGeoSparqlException(
-						"Geometry result cannot represent its required coordinate layout");
-			}
-			lexicalForm = lexicalForm.substring(0, geometryTypeEnd) + dimensionMarker
-					+ lexicalForm.substring(geometryTypeEnd);
-		}
 		if (!SRS_URI.DEFAULT_WKT_CRS84.equals(result.getSrsURI())) {
 			lexicalForm = "<" + result.getSrsURI() + "> " + lexicalForm;
 		}
 		return valueFactory.createLiteral(lexicalForm, GeoConstants.GEO_WKT_LITERAL);
 	}
 
-	private static boolean isStructuredEmptyGeometryCollection(Geometry geometry) {
-		return geometry.isEmpty()
-				&& "GeometryCollection".equals(geometry.getGeometryType())
-				&& geometry.getNumGeometries() > 0;
+	private static String toGeometryCollectionWkt(GeometryCollection collection,
+			CoordinateSequenceDimensions dimensions) {
+		StringBuilder wkt = new StringBuilder("GEOMETRYCOLLECTION")
+				.append(CoordinateSequenceDimensions.convertDimensions(dimensions));
+		if (collection.getNumGeometries() == 0) {
+			return wkt.append(" EMPTY").toString();
+		}
+		wkt.append('(');
+		for (int i = 0; i < collection.getNumGeometries(); i++) {
+			if (i > 0) {
+				wkt.append(", ");
+			}
+			Geometry member = collection.getGeometryN(i);
+			CoordinateSequenceDimensions memberDimensions = geometryDimensions(
+					member, CoordinateSequenceDimensions.XY);
+			if ("GeometryCollection".equals(member.getGeometryType())) {
+				wkt.append(toGeometryCollectionWkt((GeometryCollection) member, memberDimensions));
+			} else {
+				wkt.append(toWkt(member, memberDimensions));
+			}
+		}
+		return wkt.append(')').toString();
+	}
+
+	private static String toWkt(Geometry geometry, CoordinateSequenceDimensions dimensions) {
+		GeometryWrapper wrapper = new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84,
+				GeoConstants.GEO_WKT_LITERAL.stringValue(),
+				new DimensionInfo(dimensions, geometry.getDimension()));
+		String wkt = org.apache.jena.geosparql.implementation.parsers.wkt.WKTWriter.write(wrapper);
+		String dimensionMarker = CoordinateSequenceDimensions.convertDimensions(dimensions);
+		int geometryTypeEnd = wkt.indexOf(' ');
+		if (!dimensionMarker.isEmpty()
+				&& !wkt.startsWith(dimensionMarker, geometryTypeEnd)) {
+			wkt = wkt.substring(0, geometryTypeEnd) + dimensionMarker
+					+ wkt.substring(geometryTypeEnd);
+		}
+		return wkt;
+	}
+
+	private static CoordinateSequenceDimensions geometryDimensions(Geometry geometry,
+			CoordinateSequenceDimensions fallback) {
+		if (geometry instanceof Point point) {
+			return coordinateDimensions(point.getCoordinateSequence());
+		}
+		if (geometry instanceof LineString lineString) {
+			return coordinateDimensions(lineString.getCoordinateSequence());
+		}
+		if (geometry instanceof Polygon polygon) {
+			return coordinateDimensions(polygon.getExteriorRing().getCoordinateSequence());
+		}
+		if (geometry instanceof GeometryCollection collection
+				&& collection.getNumGeometries() > 0) {
+			return geometryDimensions(collection.getGeometryN(0), fallback);
+		}
+		return fallback;
+	}
+
+	private static CoordinateSequenceDimensions coordinateDimensions(CoordinateSequence coordinates) {
+		return CustomCoordinateSequence.findCoordinateSequenceDimensions(
+				coordinates.getDimension(), coordinates.getDimension() - coordinates.getMeasures());
 	}
 
 	private static void requireRoundTrippableWktResult(GeometryWrapper expected, Literal literal) {
@@ -172,16 +223,28 @@ public final class JenaGeometryAdapter {
 			throw new JenaGeoSparqlException(
 					"Geometry result cannot represent its required coordinate layout");
 		}
-		if (!hasSameGeometryStructure(expected.getParsingGeometry(), actual.getParsingGeometry())) {
+		if (!hasSameGeometryTree(expected.getParsingGeometry(), actual.getParsingGeometry(), true)) {
 			throw new JenaGeoSparqlException(
-					"Geometry result cannot represent its required structure");
+					"Geometry result cannot represent its required structure or coordinate layout");
 		}
 	}
 
-	private static boolean hasSameGeometryStructure(Geometry expected, Geometry actual) {
+	private static boolean hasSameGeometryTree(Geometry expected, Geometry actual, boolean root) {
 		if (!expected.getGeometryType().equals(actual.getGeometryType())
 				|| expected.isEmpty() != actual.isEmpty()) {
 			return false;
+		}
+		if (!root) {
+			DimensionInfo expectedDimensions = new DimensionInfo(
+					geometryDimensions(expected, CoordinateSequenceDimensions.XY),
+					expected.getDimension());
+			DimensionInfo actualDimensions = new DimensionInfo(
+					geometryDimensions(actual, CoordinateSequenceDimensions.XY),
+					actual.getDimension());
+			if (expectedDimensions.getCoordinate() != actualDimensions.getCoordinate()
+					|| expectedDimensions.getSpatial() != actualDimensions.getSpatial()) {
+				return false;
+			}
 		}
 		if (!"GeometryCollection".equals(expected.getGeometryType())) {
 			return true;
@@ -192,8 +255,8 @@ public final class JenaGeometryAdapter {
 			return false;
 		}
 		for (int i = 0; i < expectedCollection.getNumGeometries(); i++) {
-			if (!hasSameGeometryStructure(expectedCollection.getGeometryN(i),
-					actualCollection.getGeometryN(i))) {
+			if (!hasSameGeometryTree(expectedCollection.getGeometryN(i),
+					actualCollection.getGeometryN(i), false)) {
 				return false;
 			}
 		}
