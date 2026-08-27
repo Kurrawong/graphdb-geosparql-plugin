@@ -2,7 +2,9 @@ package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.query.GeometryArea;
+import com.ontotext.trree.geosparql.jena.query.GeometryBoundingCircle;
 import com.ontotext.trree.geosparql.jena.query.GeometryCentroid;
+import com.ontotext.trree.geosparql.jena.query.GeometryConcaveHull;
 import com.ontotext.trree.geosparql.jena.query.GeometryCount;
 import com.ontotext.trree.geosparql.jena.query.GeometryCoordinateExtrema;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
@@ -28,11 +30,17 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_BOUNDARY.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::boundary,
 							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
+			new Entry(GeoConstants.GEOF_BOUNDING_CIRCLE.stringValue(), 1,
+					new UnaryGeometryProvider(GeometryBoundingCircle::calculate,
+							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_BUFFER.stringValue(), 3,
 					new UnaryGeometryDoubleUnitToGeometryProvider(GeometryWrapper::buffer,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_CENTROID.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryCentroid::calculate,
+							GeoJsonResultDimensionPolicy.XY_ONLY)),
+			new Entry(GeoConstants.GEOF_CONCAVE_HULL.stringValue(), 1,
+					new UnaryGeometryProvider(GeometryConcaveHull::calculate,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_CONVEX_HULL.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::convexHull,
