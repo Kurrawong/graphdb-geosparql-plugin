@@ -119,6 +119,7 @@ public final class JenaGeometryAdapter {
 		if (!result.isEmpty()) {
 			return literal;
 		}
+		// Jena 6.2 omits a required Z/M/ZM marker when the result has no positions.
 		String dimensionMarker = CoordinateSequenceDimensions.convertDimensions(
 				result.getDimensionInfo().getDimensions());
 		if (dimensionMarker.isEmpty() || literal.stringValue().endsWith(dimensionMarker + " EMPTY")) {
@@ -135,6 +136,20 @@ public final class JenaGeometryAdapter {
 				GeoConstants.GEO_WKT_LITERAL);
 	}
 
+	/**
+	 * Compatibility path for Apache Jena 6.2's WKT writer. That writer uses
+	 * {@link Geometry#isEmpty()} for a generic collection, so a collection that still has an
+	 * ordered member tree can be collapsed to {@code GEOMETRYCOLLECTION EMPTY} when every
+	 * descendant is empty. It also applies one wrapper layout to every descendant instead of
+	 * serializing each member's recoverable coordinate layout independently.
+	 *
+	 * <p>This path operates only on the typed geometry returned by a query-function provider; it
+	 * cannot and must not reconstruct structure or layout already lost while parsing the source
+	 * literal. It can be replaced by the normal {@link #toWktLiteral(ValueFactory, GeometryWrapper)}
+	 * path when the supported Jena writer preserves member-bearing empty collections and per-member
+	 * XY/XYZ/XYM/XYZM layouts. The recursive result-boundary tests characterize that removal
+	 * condition.</p>
+	 */
 	private static Literal toGeometryCollectionWktLiteral(ValueFactory valueFactory,
 			GeometryWrapper result) {
 		String lexicalForm = toGeometryCollectionWkt(
@@ -177,6 +192,7 @@ public final class JenaGeometryAdapter {
 		String wkt = org.apache.jena.geosparql.implementation.parsers.wkt.WKTWriter.write(wrapper);
 		String dimensionMarker = CoordinateSequenceDimensions.convertDimensions(dimensions);
 		int geometryTypeEnd = wkt.indexOf(' ');
+		// Jena 6.2 omits a required Z/M/ZM marker when this member has no positions.
 		if (!dimensionMarker.isEmpty()
 				&& !wkt.startsWith(dimensionMarker, geometryTypeEnd)) {
 			wkt = wkt.substring(0, geometryTypeEnd) + dimensionMarker
