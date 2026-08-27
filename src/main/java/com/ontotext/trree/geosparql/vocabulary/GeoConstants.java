@@ -101,9 +101,16 @@ public interface GeoConstants {
     IRI GEOF_SYM_DIFFERENCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "symDifference");
     IRI GEOF_ENVELOPE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "envelope");
     IRI GEOF_BOUNDARY = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "boundary");
+    IRI GEOF_COORDINATE_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "coordinateDimension");
     IRI GEOF_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "dimension");
     IRI GEOF_GEOMETRY_N = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "geometryN");
+    IRI GEOF_GEOMETRY_TYPE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "geometryType");
+    IRI GEOF_IS_3D = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "is3D");
+    IRI GEOF_IS_EMPTY = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "isEmpty");
+    IRI GEOF_IS_MEASURED = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "isMeasured");
+    IRI GEOF_IS_SIMPLE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "isSimple");
     IRI GEOF_NUM_GEOMETRIES = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "numGeometries");
+    IRI GEOF_SPATIAL_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "spatialDimension");
     IRI GEOF_GETSRID = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "getSRID");
     IRI GEOF_AS_GEO_JSON = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asGeoJSON");
     IRI GEOF_AS_WKT = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asWKT");

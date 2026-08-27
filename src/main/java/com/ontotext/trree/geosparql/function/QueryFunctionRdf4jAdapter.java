@@ -45,13 +45,23 @@ final class QueryFunctionRdf4jAdapter implements Function {
 						source.asGeometryWrapper(), memberIndex(args[1]));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, result, source.datatype());
 			}
+			case QueryFunctionManifest.UnaryGeometryAnyUriProvider provider -> {
+				String result = provider.calculation().apply(geometryArgument(args[0]));
+				yield valueFactory.createLiteral(result, XSD.ANYURI);
+			}
+			case QueryFunctionManifest.UnaryGeometryBooleanProvider provider -> {
+				boolean result = provider.calculation().test(geometryArgument(args[0]));
+				yield valueFactory.createLiteral(result);
+			}
 			case QueryFunctionManifest.UnaryGeometryIntegerProvider provider -> {
-				GeometryWrapper geometry = JenaGeometryAdapter.toSourceGeometryLiteral(args[0], true)
-						.asGeometryWrapper();
-				int result = provider.calculation().applyAsInt(geometry);
+				int result = provider.calculation().applyAsInt(geometryArgument(args[0]));
 				yield valueFactory.createLiteral(BigInteger.valueOf(result));
 			}
 		};
+	}
+
+	private GeometryWrapper geometryArgument(Value value) {
+		return JenaGeometryAdapter.toSourceGeometryLiteral(value, true).asGeometryWrapper();
 	}
 
 	private int memberIndex(Value value) {
