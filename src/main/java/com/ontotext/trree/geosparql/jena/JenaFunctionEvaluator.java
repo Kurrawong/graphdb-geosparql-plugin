@@ -62,15 +62,6 @@ public final class JenaFunctionEvaluator {
 				GeometryWrapper buffered = wrapper.buffer(radius, wrapper.getUnitsOfMeasure().getUnitURI());
 				return geometryLiteral(valueFactory, buffered, source.datatype());
 			}
-			if (GeoConstants.GEOF_CONVEX_HULL.stringValue().equals(functionUri)) {
-				return unaryGeometry(valueFactory, functionUri, args, GeometryWrapper::convexHull);
-			}
-			if (GeoConstants.GEOF_ENVELOPE.stringValue().equals(functionUri)) {
-				return unaryGeometry(valueFactory, functionUri, args, GeometryWrapper::envelope);
-			}
-			if (GeoConstants.GEOF_BOUNDARY.stringValue().equals(functionUri)) {
-				return unaryGeometry(valueFactory, functionUri, args, GeometryWrapper::boundary);
-			}
 			if (GeoConstants.GEOF_INTERSECTION.stringValue().equals(functionUri)
 					|| GeoConstants.GEOF_UNION.stringValue().equals(functionUri)
 					|| GeoConstants.GEOF_DIFFERENCE.stringValue().equals(functionUri)
@@ -378,17 +369,6 @@ public final class JenaFunctionEvaluator {
 		}
 		return valueFactory.createLiteral(
 				left.getXYGeometry().distance(left.checkTransformSRS(right).getXYGeometry()));
-	}
-
-	private interface UnaryGeometryOperation {
-		GeometryWrapper apply(GeometryWrapper geometry) throws Exception;
-	}
-
-	private static Literal unaryGeometry(ValueFactory valueFactory, String functionUri, Value[] args,
-										 UnaryGeometryOperation operation) throws Exception {
-		requireArgs(functionUri, args, 1);
-		SourceGeometryLiteral source = sourceLiteral(args[0]);
-		return geometryLiteral(valueFactory, operation.apply(source.asGeometryWrapper()), source.datatype());
 	}
 
 	private static Literal binaryGeometry(ValueFactory valueFactory, String functionUri, Value... args)

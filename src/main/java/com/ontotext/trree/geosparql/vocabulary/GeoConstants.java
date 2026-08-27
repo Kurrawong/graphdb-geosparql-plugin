@@ -108,6 +108,7 @@ public interface GeoConstants {
     IRI GEOF_MIN_Z = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minZ");
     IRI GEOF_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "buffer");
     IRI GEOF_METRIC_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricBuffer");
+    IRI GEOF_CENTROID = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "centroid");
     IRI GEOF_CONVEX_HULL = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "convexHull");
     IRI GEOF_INTERSECTION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "intersection");
     IRI GEOF_UNION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "union");
