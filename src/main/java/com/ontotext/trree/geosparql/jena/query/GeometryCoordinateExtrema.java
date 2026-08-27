@@ -9,7 +9,7 @@ import org.locationtech.jts.geom.Geometry;
 import java.util.function.DoubleBinaryOperator;
 
 /**
- * Finds coordinate extrema from source coordinate sequences.
+ * Finds X and Y extrema from normalized coordinate sequences and Z extrema from source coordinate sequences.
  */
 public final class GeometryCoordinateExtrema {
 	private GeometryCoordinateExtrema() {
@@ -41,7 +41,7 @@ public final class GeometryCoordinateExtrema {
 
 	private static double extreme(GeometryWrapper geometry, int ordinate,
 			DoubleBinaryOperator accumulator) {
-		return extreme(geometry.getParsingGeometry(), ordinate, accumulator, false);
+		return extreme(geometry.getXYGeometry(), ordinate, accumulator, false);
 	}
 
 	private static double zExtreme(GeometryWrapper geometry, DoubleBinaryOperator accumulator) {
