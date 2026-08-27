@@ -15,6 +15,7 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.locationtech.jts.geom.CoordinateSequence;
 import org.locationtech.jts.geom.CoordinateSequenceFilter;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.LinearRing;
 import org.locationtech.jts.io.WKTWriter;
 
@@ -107,6 +108,9 @@ public final class JenaGeometryAdapter {
 	}
 
 	private static Literal toQueryWktLiteral(ValueFactory valueFactory, GeometryWrapper result) {
+		if (isStructuredEmptyGeometryCollection(result.getParsingGeometry())) {
+			return toStructuredEmptyWktLiteral(valueFactory, result);
+		}
 		Literal literal = toWktLiteral(valueFactory, result);
 		if (!result.isEmpty()) {
 			return literal;
@@ -127,6 +131,32 @@ public final class JenaGeometryAdapter {
 				GeoConstants.GEO_WKT_LITERAL);
 	}
 
+	private static Literal toStructuredEmptyWktLiteral(ValueFactory valueFactory,
+			GeometryWrapper result) {
+		String lexicalForm = new WKTWriter().write(result.getParsingGeometry());
+		String dimensionMarker = CoordinateSequenceDimensions.convertDimensions(
+				result.getDimensionInfo().getDimensions());
+		if (!dimensionMarker.isEmpty()) {
+			int geometryTypeEnd = lexicalForm.indexOf(' ');
+			if (geometryTypeEnd < 0) {
+				throw new JenaGeoSparqlException(
+						"Geometry result cannot represent its required coordinate layout");
+			}
+			lexicalForm = lexicalForm.substring(0, geometryTypeEnd) + dimensionMarker
+					+ lexicalForm.substring(geometryTypeEnd);
+		}
+		if (!SRS_URI.DEFAULT_WKT_CRS84.equals(result.getSrsURI())) {
+			lexicalForm = "<" + result.getSrsURI() + "> " + lexicalForm;
+		}
+		return valueFactory.createLiteral(lexicalForm, GeoConstants.GEO_WKT_LITERAL);
+	}
+
+	private static boolean isStructuredEmptyGeometryCollection(Geometry geometry) {
+		return geometry.isEmpty()
+				&& "GeometryCollection".equals(geometry.getGeometryType())
+				&& geometry.getNumGeometries() > 0;
+	}
+
 	private static void requireRoundTrippableWktResult(GeometryWrapper expected, Literal literal) {
 		GeometryWrapper actual;
 		try {
@@ -142,6 +172,32 @@ public final class JenaGeometryAdapter {
 			throw new JenaGeoSparqlException(
 					"Geometry result cannot represent its required coordinate layout");
 		}
+		if (!hasSameGeometryStructure(expected.getParsingGeometry(), actual.getParsingGeometry())) {
+			throw new JenaGeoSparqlException(
+					"Geometry result cannot represent its required structure");
+		}
+	}
+
+	private static boolean hasSameGeometryStructure(Geometry expected, Geometry actual) {
+		if (!expected.getGeometryType().equals(actual.getGeometryType())
+				|| expected.isEmpty() != actual.isEmpty()) {
+			return false;
+		}
+		if (!"GeometryCollection".equals(expected.getGeometryType())) {
+			return true;
+		}
+		GeometryCollection expectedCollection = (GeometryCollection) expected;
+		GeometryCollection actualCollection = (GeometryCollection) actual;
+		if (expectedCollection.getNumGeometries() != actualCollection.getNumGeometries()) {
+			return false;
+		}
+		for (int i = 0; i < expectedCollection.getNumGeometries(); i++) {
+			if (!hasSameGeometryStructure(expectedCollection.getGeometryN(i),
+					actualCollection.getGeometryN(i))) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static int geoJsonCoordinateDimension(GeometryWrapper source, GeometryWrapper result,
