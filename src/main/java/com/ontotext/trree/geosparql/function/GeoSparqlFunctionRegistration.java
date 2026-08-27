@@ -33,8 +33,6 @@ public final class GeoSparqlFunctionRegistration {
             GeoConstants.GEOF_RCC8_NTPP.stringValue(),
             GeoConstants.GEOF_RCC8_NTPPI.stringValue(),
             GeoConstants.GEOF_RELATE.stringValue(),
-            GeoConstants.GEOF_DISTANCE.stringValue(),
-            GeoConstants.GEOF_BUFFER.stringValue(),
             GeoConstants.GEOF_CONVEX_HULL.stringValue(),
             GeoConstants.GEOF_INTERSECTION.stringValue(),
             GeoConstants.GEOF_UNION.stringValue(),
@@ -72,7 +70,12 @@ public final class GeoSparqlFunctionRegistration {
             registry.add(new GeoSparqlRdf4jFunction(uri));
         }
         for (QueryFunctionManifest.Entry entry : QueryFunctionManifest.entries()) {
-            registry.add(new QueryFunctionRdf4jAdapter(entry));
+            if (GeoConstants.GEOF_DISTANCE.stringValue().equals(entry.uri())
+                    || GeoConstants.GEOF_BUFFER.stringValue().equals(entry.uri())) {
+                registry.add(new QueryFunctionRdf4jAdapter(entry, new GeoSparqlRdf4jFunction(entry.uri())));
+            } else {
+                registry.add(new QueryFunctionRdf4jAdapter(entry));
+            }
         }
     }
 

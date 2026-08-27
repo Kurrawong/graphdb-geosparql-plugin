@@ -39,7 +39,7 @@ public class GeoSparqlFunctionRegistrationTest {
     }
 
     @Test
-    public void registeredDistanceFunctionDelegatesToJenaEvaluator() throws Exception {
+    public void registeredDistanceFunctionUsesTypedQueryAdapter() throws Exception {
         GeoSparqlFunctionRegistration.registerAll();
         Function function = FunctionRegistry.getInstance().get(GeoConstants.GEOF_DISTANCE.stringValue()).get();
         Literal left = VALUE_FACTORY.createLiteral("POINT(24.5887755 41.4035958)",
@@ -52,7 +52,7 @@ public class GeoSparqlFunctionRegistrationTest {
 
         assertTrue(result instanceof Literal);
         assertEquals(0d, ((Literal) result).doubleValue(), 0.2d);
-        assertTrue(function instanceof GeoSparqlRdf4jFunction);
+        assertTrue(function instanceof QueryFunctionRdf4jAdapter);
     }
 
     @Test
