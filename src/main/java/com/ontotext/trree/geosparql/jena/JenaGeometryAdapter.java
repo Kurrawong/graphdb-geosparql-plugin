@@ -5,6 +5,7 @@ import org.apache.jena.datatypes.TypeMapper;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.datatype.GeometryDatatype;
+import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.IRI;
@@ -86,8 +87,8 @@ public final class JenaGeometryAdapter {
 		requireRepresentableGeometryType(result);
 		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
 		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
-			Literal literal = toWktLiteral(valueFactory, result);
-			requireRoundTrippableGeometryResult(literal);
+			Literal literal = toQueryWktLiteral(valueFactory, result);
+			requireRoundTrippableWktResult(result, literal);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
@@ -103,6 +104,44 @@ public final class JenaGeometryAdapter {
 					geoJsonCoordinateDimension(source, result, geoJsonResultDimensionPolicy));
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
+	}
+
+	private static Literal toQueryWktLiteral(ValueFactory valueFactory, GeometryWrapper result) {
+		Literal literal = toWktLiteral(valueFactory, result);
+		if (!result.isEmpty()) {
+			return literal;
+		}
+		String dimensionMarker = CoordinateSequenceDimensions.convertDimensions(
+				result.getDimensionInfo().getDimensions());
+		if (dimensionMarker.isEmpty() || literal.stringValue().endsWith(dimensionMarker + " EMPTY")) {
+			return literal;
+		}
+		if (!literal.stringValue().endsWith(" EMPTY")) {
+			throw new JenaGeoSparqlException(
+					"Geometry result cannot represent its required coordinate layout");
+		}
+		String lexicalForm = literal.stringValue();
+		return valueFactory.createLiteral(
+				lexicalForm.substring(0, lexicalForm.length() - " EMPTY".length())
+						+ dimensionMarker + " EMPTY",
+				GeoConstants.GEO_WKT_LITERAL);
+	}
+
+	private static void requireRoundTrippableWktResult(GeometryWrapper expected, Literal literal) {
+		GeometryWrapper actual;
+		try {
+			actual = SourceGeometryLiteral.fromLiteral(literal).asGeometryWrapper();
+		} catch (JenaGeoSparqlException e) {
+			throw new JenaGeoSparqlException(
+					"Geometry result cannot represent its required coordinate layout", e);
+		}
+		DimensionInfo expectedDimensions = expected.getDimensionInfo();
+		DimensionInfo actualDimensions = actual.getDimensionInfo();
+		if (expectedDimensions.getCoordinate() != actualDimensions.getCoordinate()
+				|| expectedDimensions.getSpatial() != actualDimensions.getSpatial()) {
+			throw new JenaGeoSparqlException(
+					"Geometry result cannot represent its required coordinate layout");
+		}
 	}
 
 	private static int geoJsonCoordinateDimension(GeometryWrapper source, GeometryWrapper result,
