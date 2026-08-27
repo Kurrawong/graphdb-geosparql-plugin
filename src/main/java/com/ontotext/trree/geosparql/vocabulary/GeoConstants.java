@@ -93,7 +93,11 @@ public interface GeoConstants {
     IRI GEOF_RCC8_NTPPI = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "rcc8ntppi");
 
     IRI GEOF_DISTANCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "distance");
+    IRI GEOF_LENGTH = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "length");
     IRI GEOF_METRIC_DISTANCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricDistance");
+    IRI GEOF_METRIC_LENGTH = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricLength");
+    IRI GEOF_METRIC_PERIMETER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricPerimeter");
+    IRI GEOF_PERIMETER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "perimeter");
     IRI GEOF_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "buffer");
     IRI GEOF_METRIC_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricBuffer");
     IRI GEOF_CONVEX_HULL = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "convexHull");

@@ -89,6 +89,15 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				int result = provider.calculation().applyAsInt(geometryArgument(args[0]));
 				yield valueFactory.createLiteral(BigInteger.valueOf(result));
 			}
+			case QueryFunctionManifest.UnaryGeometryToDoubleProvider provider -> {
+				double result = provider.calculation().applyAsDouble(geometryArgument(args[0]));
+				yield valueFactory.createLiteral(result);
+			}
+			case QueryFunctionManifest.UnaryGeometryUnitToDoubleProvider provider -> {
+				double result = provider.calculation().apply(
+						geometryArgument(args[0]), unitUri(args[1]));
+				yield valueFactory.createLiteral(result);
+			}
 		};
 	}
 
