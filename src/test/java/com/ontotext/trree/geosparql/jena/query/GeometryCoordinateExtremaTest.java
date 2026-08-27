@@ -18,6 +18,25 @@ import static org.junit.Assert.assertThrows;
 
 public class GeometryCoordinateExtremaTest {
 	@Test
+	public void xyExtremaUseSrsDefinedAxesAfterSerializationAxisOrderInterpretation() {
+		GeometryWrapper crs84Point = GeometryWrapper.extract(
+				"<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(10 100)",
+				WKTDatatype.URI);
+		GeometryWrapper epsg4326Point = GeometryWrapper.extract(
+				"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10 100)",
+				WKTDatatype.URI);
+
+		assertEquals(10.0, GeometryCoordinateExtrema.minX(crs84Point), 0.0);
+		assertEquals(10.0, GeometryCoordinateExtrema.maxX(crs84Point), 0.0);
+		assertEquals(100.0, GeometryCoordinateExtrema.minY(crs84Point), 0.0);
+		assertEquals(100.0, GeometryCoordinateExtrema.maxY(crs84Point), 0.0);
+		assertEquals(100.0, GeometryCoordinateExtrema.minX(epsg4326Point), 0.0);
+		assertEquals(100.0, GeometryCoordinateExtrema.maxX(epsg4326Point), 0.0);
+		assertEquals(10.0, GeometryCoordinateExtrema.minY(epsg4326Point), 0.0);
+		assertEquals(10.0, GeometryCoordinateExtrema.maxY(epsg4326Point), 0.0);
+	}
+
+	@Test
 	public void zExtremaIgnoreNonFiniteSentinels() {
 		CustomCoordinateSequence coordinates = new CustomCoordinateSequence(
 				CoordinateSequenceDimensions.XYZ,
