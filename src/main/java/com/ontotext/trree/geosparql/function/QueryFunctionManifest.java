@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.jena.query.GeometryArea;
 import com.ontotext.trree.geosparql.jena.query.GeometryCount;
+import com.ontotext.trree.geosparql.jena.query.GeometryCoordinateExtrema;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
@@ -40,6 +41,18 @@ final class QueryFunctionManifest {
 					new UnaryGeometryToDoubleProvider(GeometryLength::calculateMetric)),
 			new Entry(GeoConstants.GEOF_PERIMETER.stringValue(), 2,
 					new UnaryGeometryUnitToDoubleProvider(GeometryLength::calculate)),
+			new Entry(GeoConstants.GEOF_MAX_X.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::maxX)),
+			new Entry(GeoConstants.GEOF_MAX_Y.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::maxY)),
+			new Entry(GeoConstants.GEOF_MAX_Z.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::maxZ)),
+			new Entry(GeoConstants.GEOF_MIN_X.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::minX)),
+			new Entry(GeoConstants.GEOF_MIN_Y.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::minY)),
+			new Entry(GeoConstants.GEOF_MIN_Z.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::minZ)),
 			new Entry(GeoConstants.GEOF_COORDINATE_DIMENSION.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(GeometryWrapper::getCoordinateDimension)),
 			new Entry(GeoConstants.GEOF_DIMENSION.stringValue(), 1,

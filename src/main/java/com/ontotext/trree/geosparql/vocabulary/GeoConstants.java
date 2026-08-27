@@ -100,6 +100,12 @@ public interface GeoConstants {
     IRI GEOF_METRIC_LENGTH = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricLength");
     IRI GEOF_METRIC_PERIMETER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricPerimeter");
     IRI GEOF_PERIMETER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "perimeter");
+    IRI GEOF_MAX_X = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "maxX");
+    IRI GEOF_MAX_Y = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "maxY");
+    IRI GEOF_MAX_Z = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "maxZ");
+    IRI GEOF_MIN_X = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minX");
+    IRI GEOF_MIN_Y = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minY");
+    IRI GEOF_MIN_Z = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minZ");
     IRI GEOF_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "buffer");
     IRI GEOF_METRIC_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricBuffer");
     IRI GEOF_CONVEX_HULL = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "convexHull");
