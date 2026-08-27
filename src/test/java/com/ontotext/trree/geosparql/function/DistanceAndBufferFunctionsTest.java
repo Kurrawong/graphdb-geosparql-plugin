@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
+import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
@@ -323,6 +324,24 @@ public class DistanceAndBufferFunctionsTest {
 	}
 
 	@Test
+	public void bufferGeoJsonResultsAreXyForXyzSourcesAndEmptyResults() throws Exception {
+		Literal source = VALUE_FACTORY.createLiteral(
+				"{\"type\":\"Point\",\"coordinates\":[0,0,5]}", GeoConstants.GEO_JSON_LITERAL);
+
+		Literal nonEmpty = (Literal) evaluate(GEOF_BUFFER_URI, source,
+				VALUE_FACTORY.createLiteral(0.1), VALUE_FACTORY.createIRI(DEGREE));
+		Literal empty = (Literal) evaluate(GEOF_BUFFER_URI, source,
+				VALUE_FACTORY.createLiteral(-0.1), VALUE_FACTORY.createIRI(DEGREE));
+
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(nonEmpty)
+				.asGeometryWrapper().getCoordinateDimension());
+		assertTrue(JenaGeometryAdapter.toSourceGeometryLiteral(empty)
+				.asGeometryWrapper().isEmpty());
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(empty)
+				.asGeometryWrapper().getCoordinateDimension());
+	}
+
+	@Test
 	public void distanceAndBufferManifestEntriesDefineMandatoryAritiesAndProviders() {
 		assertManifestEntry(GEOF_DISTANCE_URI, 3,
 				QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider.class);
@@ -332,6 +351,17 @@ public class DistanceAndBufferFunctionsTest {
 				QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider.class);
 		assertManifestEntry(GEOF_METRIC_BUFFER_URI, 2,
 				QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider.class);
+
+		QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider buffer =
+				(QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider)
+						manifestEntry(GEOF_BUFFER_URI).provider();
+		QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider metricBuffer =
+				(QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider)
+						manifestEntry(GEOF_METRIC_BUFFER_URI).provider();
+		assertEquals(GeoJsonResultDimensionPolicy.XY_ONLY,
+				buffer.geoJsonResultDimensionPolicy());
+		assertEquals(GeoJsonResultDimensionPolicy.XY_ONLY,
+				metricBuffer.geoJsonResultDimensionPolicy());
 	}
 
 	private Value evaluate(String functionUri, Value... args) throws ValueExprEvaluationException {
@@ -360,5 +390,12 @@ public class DistanceAndBufferFunctionsTest {
 
 		assertEquals(mandatoryArity, entry.mandatoryArity());
 		assertTrue(providerType.isInstance(entry.provider()));
+	}
+
+	private QueryFunctionManifest.Entry manifestEntry(String uri) {
+		return QueryFunctionManifest.entries().stream()
+				.filter(candidate -> uri.equals(candidate.uri()))
+				.findFirst()
+				.orElseThrow(() -> new AssertionError("Missing manifest entry: " + uri));
 	}
 }

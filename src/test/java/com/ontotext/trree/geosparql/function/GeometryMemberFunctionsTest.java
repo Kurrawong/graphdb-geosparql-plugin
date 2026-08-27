@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
+import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -106,11 +107,12 @@ public class GeometryMemberFunctionsTest {
 		Literal result = (Literal) evaluate(GEOMETRY_N_URI,
 				geoJson("{\"type\":\"GeometryCollection\",\"geometries\":["
 						+ "{\"type\":\"Point\",\"coordinates\":[]},"
-						+ "{\"type\":\"LineString\",\"coordinates\":[[1,2],[3,4]]}]}"),
+						+ "{\"type\":\"LineString\",\"coordinates\":[[1,2,3],[3,4,5]]}]}"),
 				VALUE_FACTORY.createLiteral(1));
 
 		assertEquals("Point", parsed(result).asGeometryWrapper().getGeometryType());
 		assertTrue(parsed(result).asGeometryWrapper().isEmpty());
+		assertEquals(2, parsed(result).asGeometryWrapper().getCoordinateDimension());
 	}
 
 	@Test
@@ -129,7 +131,7 @@ public class GeometryMemberFunctionsTest {
 	}
 
 	@Test
-	public void geometryNRetainsNativeGeoJsonAltitude() throws Exception {
+	public void geometryNPreservesNativeGeoJsonCoordinateLayout() throws Exception {
 		Literal source = geoJson("{\"type\":\"GeometryCollection\",\"geometries\":["
 				+ "{\"type\":\"Point\",\"coordinates\":[1,2,3]},"
 				+ "{\"type\":\"Point\",\"coordinates\":[4,5,6]}]}");
@@ -140,6 +142,25 @@ public class GeometryMemberFunctionsTest {
 		assertEquals("{\"type\":\"Point\",\"coordinates\":[4,5,6]}", result.stringValue());
 		assertEquals(CRS84, parsed(result).effectiveCrsUri());
 		assertEquals(3, parsed(result).asGeometryWrapper().getCoordinateDimension());
+
+		Literal xyResult = (Literal) evaluate(GEOMETRY_N_URI,
+				geoJson("{\"type\":\"MultiPoint\",\"coordinates\":[[1,2],[4,5]]}"),
+				VALUE_FACTORY.createLiteral(1));
+		assertEquals("{\"type\":\"Point\",\"coordinates\":[1,2]}", xyResult.stringValue());
+		assertEquals(2, parsed(xyResult).asGeometryWrapper().getCoordinateDimension());
+	}
+
+	@Test
+	public void geometryNResultBoundaryRejectsRequiredAltitudeLoss() {
+		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(GEOMETRY_N_URI, 2,
+				new QueryFunctionManifest.GeometryMemberProvider(
+						(geometry, index) -> geometry.envelope(),
+						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+		Function function = new QueryFunctionRdf4jAdapter(entry);
+		Literal source = geoJson("{\"type\":\"Point\",\"coordinates\":[1,2,3]}");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> function.evaluate(TRIPLE_SOURCE, source, VALUE_FACTORY.createLiteral(1)));
 	}
 
 	@Test
@@ -231,6 +252,9 @@ public class GeometryMemberFunctionsTest {
 
 		assertEquals(2, geometryN.mandatoryArity());
 		assertTrue(geometryN.provider() instanceof QueryFunctionManifest.GeometryMemberProvider);
+		assertEquals(GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z,
+				((QueryFunctionManifest.GeometryMemberProvider) geometryN.provider())
+						.geoJsonResultDimensionPolicy());
 		assertEquals(1, numGeometries.mandatoryArity());
 		assertTrue(numGeometries.provider() instanceof QueryFunctionManifest.UnaryGeometryIntegerProvider);
 	}

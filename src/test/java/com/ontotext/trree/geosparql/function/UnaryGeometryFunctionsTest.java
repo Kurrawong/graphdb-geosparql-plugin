@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
+import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -11,6 +12,7 @@ import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
@@ -67,6 +69,12 @@ public class UnaryGeometryFunctionsTest {
 			assertEquals(functionUri, 1, entry.mandatoryArity());
 			assertTrue(functionUri,
 					entry.provider() instanceof QueryFunctionManifest.UnaryGeometryProvider);
+			QueryFunctionManifest.UnaryGeometryProvider provider =
+					(QueryFunctionManifest.UnaryGeometryProvider) entry.provider();
+			GeoJsonResultDimensionPolicy expected = BOUNDARY_URI.equals(functionUri)
+					? GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z
+					: GeoJsonResultDimensionPolicy.XY_ONLY;
+			assertEquals(functionUri, expected, provider.geoJsonResultDimensionPolicy());
 		}
 	}
 
@@ -146,6 +154,97 @@ public class UnaryGeometryFunctionsTest {
 		assertGeometryType("Point", evaluate(ENVELOPE_URI, wkt("POINT(1 1)")));
 		assertGeometryType("LineString", evaluate(ENVELOPE_URI, wkt("LINESTRING(0 1,2 1)")));
 		assertGeometryType("Polygon", evaluate(ENVELOPE_URI, wkt("LINESTRING(0 0,2 2)")));
+	}
+
+	@Test
+	public void calculatedUnaryGeoJsonResultsUseXyCoordinatesForXyzSources() throws Exception {
+		assertGeoJsonCoordinateDimension(2, evaluate(CENTROID_URI,
+				geoJson("{\"type\":\"LineString\",\"coordinates\":[[0,0,5],[2,0,7]]}")));
+		assertGeoJsonCoordinateDimension(2, evaluate(CONVEX_HULL_URI,
+				geoJson("{\"type\":\"MultiPoint\",\"coordinates\":["
+						+ "[0,0,5],[0,0,9],[0,2,6],[2,0,7]]}")));
+		assertGeoJsonCoordinateDimension(2, evaluate(ENVELOPE_URI,
+				geoJson("{\"type\":\"LineString\",\"coordinates\":[[0,0,5],[2,2,6]]}")));
+	}
+
+	@Test
+	public void boundaryGeoJsonPreservesFiniteAltitudeAcrossEligibleNonEmptyResults() throws Exception {
+		for (Literal source : List.of(
+				geoJson("{\"type\":\"LineString\",\"coordinates\":[[0,0,5],[2,2,6]]}"),
+				geoJson("{\"type\":\"Polygon\",\"coordinates\":["
+						+ "[[0,0,5],[0,2,6],[2,2,7],[2,0,8],[0,0,5]]]}"),
+				geoJson("{\"type\":\"MultiPolygon\",\"coordinates\":["
+						+ "[[[0,0,5],[0,1,6],[1,1,7],[0,0,5]]],"
+						+ "[[[2,0,8],[2,1,9],[3,1,10],[2,0,8]]]]}"),
+				geoJson("{\"type\":\"MultiLineString\",\"coordinates\":["
+						+ "[[0,0,5],[1,1,6]],[[2,0,7],[3,1,8]]]}"))) {
+			Literal result = (Literal) evaluate(BOUNDARY_URI, source);
+			Geometry geometry = JenaGeometryAdapter.toSourceGeometryLiteral(result)
+					.asGeometryWrapper().getParsingGeometry();
+			Geometry sourceGeometry = JenaGeometryAdapter.toSourceGeometryLiteral(source)
+					.asGeometryWrapper().getParsingGeometry();
+
+			assertGeoJsonCoordinateDimension(3, result);
+			for (Coordinate coordinate : geometry.getCoordinates()) {
+				assertTrue(result.toString(), Double.isFinite(coordinate.getZ()));
+				assertTrue(result.toString(), containsCoordinate(sourceGeometry, coordinate));
+			}
+		}
+	}
+
+	@Test
+	public void boundaryGeoJsonUsesJtsSelectedAltitudeForCoincidentEndpoints() throws Exception {
+		Literal source = geoJson("{\"type\":\"MultiLineString\",\"coordinates\":["
+				+ "[[0,0,5],[2,2,6]],[[2,2,9],[4,0,10]],[[2,2,12],[6,0,13]]]}");
+
+		Literal result = (Literal) evaluate(BOUNDARY_URI, source);
+		Geometry boundary = JenaGeometryAdapter.toSourceGeometryLiteral(result)
+				.asGeometryWrapper().getParsingGeometry();
+
+		assertGeoJsonCoordinateDimension(3, result);
+		assertEquals(6.0, coordinateAt(boundary, 2, 2).getZ(), 0.0);
+	}
+
+	@Test
+	public void boundaryGeoJsonEmptyResultsAreCanonicalXy() throws Exception {
+		for (Literal source : List.of(
+				geoJson("{\"type\":\"Point\",\"coordinates\":[1,2,3]}"),
+				geoJson("{\"type\":\"MultiPoint\",\"coordinates\":[[1,2,3],[4,5,6]]}"),
+				geoJson("{\"type\":\"LineString\",\"coordinates\":["
+						+ "[0,0,5],[2,2,6],[0,0,5]]}"))) {
+			Literal result = (Literal) evaluate(BOUNDARY_URI, source);
+
+			assertTrue(result.toString(), JenaGeometryAdapter.toSourceGeometryLiteral(result)
+					.asGeometryWrapper().isEmpty());
+			assertGeoJsonCoordinateDimension(2, result);
+		}
+	}
+
+	@Test
+	public void boundaryGeoJsonPolicyRejectsRequiredAltitudeLoss() {
+		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(BOUNDARY_URI, 1,
+				new QueryFunctionManifest.UnaryGeometryProvider(
+						geometry -> geometry.envelope(),
+						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+		Function function = new QueryFunctionRdf4jAdapter(entry);
+		Literal source = geoJson(
+				"{\"type\":\"LineString\",\"coordinates\":[[0,0,5],[2,2,6]]}");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> function.evaluate(TRIPLE_SOURCE, source));
+	}
+
+	@Test
+	public void emptyUnaryGeoJsonResultsAreCanonicalXy() throws Exception {
+		Literal emptyPoint = geoJson("{\"type\":\"Point\",\"coordinates\":[]}");
+
+		for (String functionUri : FUNCTION_URIS) {
+			Literal result = (Literal) evaluate(functionUri, emptyPoint);
+
+			assertTrue(functionUri, JenaGeometryAdapter.toSourceGeometryLiteral(result)
+					.asGeometryWrapper().isEmpty());
+			assertGeoJsonCoordinateDimension(2, result);
+		}
 	}
 
 	@Test
@@ -331,5 +430,32 @@ public class UnaryGeometryFunctionsTest {
 				.asGeometryWrapper().getParsingGeometry();
 
 		assertTrue("Expected " + actual + " to equal " + expected, expected.equalsTopo(actual));
+	}
+
+	private void assertGeoJsonCoordinateDimension(int expected, Value result) {
+		assertTrue(result instanceof Literal);
+		Literal literal = (Literal) result;
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, literal.getDatatype());
+		assertEquals(expected, JenaGeometryAdapter.toSourceGeometryLiteral(literal)
+				.asGeometryWrapper().getCoordinateDimension());
+	}
+
+	private Coordinate coordinateAt(Geometry geometry, double x, double y) {
+		for (Coordinate coordinate : geometry.getCoordinates()) {
+			if (coordinate.x == x && coordinate.y == y) {
+				return coordinate;
+			}
+		}
+		throw new AssertionError("Coordinate not found: " + x + " " + y);
+	}
+
+	private boolean containsCoordinate(Geometry geometry, Coordinate expected) {
+		for (Coordinate coordinate : geometry.getCoordinates()) {
+			if (coordinate.x == expected.x && coordinate.y == expected.y
+					&& coordinate.getZ() == expected.getZ()) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

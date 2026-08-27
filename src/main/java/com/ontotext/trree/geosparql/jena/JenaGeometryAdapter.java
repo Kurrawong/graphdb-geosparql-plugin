@@ -11,6 +11,8 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.locationtech.jts.geom.CoordinateSequence;
+import org.locationtech.jts.geom.CoordinateSequenceFilter;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.LinearRing;
 import org.locationtech.jts.io.WKTWriter;
@@ -74,36 +76,115 @@ public final class JenaGeometryAdapter {
 	}
 
 	/**
-	 * Serializes a query-function geometry result without changing its datatype, CRS, or coordinate layout.
+	 * Serializes a query-function geometry result under the provider's GeoJSON dimensionality contract.
 	 */
-	public static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper wrapper, IRI datatype) {
-		wrapper = normalizeQueryGeometryType(wrapper);
-		SourceGeometryLiteral.validateGeometryWrapper(wrapper);
-		requireRepresentableGeometryType(wrapper);
+	public static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper source,
+			GeometryWrapper result, IRI datatype,
+			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) {
+		result = normalizeQueryGeometryType(result);
+		SourceGeometryLiteral.validateGeometryWrapper(result);
+		requireRepresentableGeometryType(result);
 		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
 		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
-			Literal literal = toWktLiteral(valueFactory, wrapper);
+			Literal literal = toWktLiteral(valueFactory, result);
 			requireRoundTrippableGeometryResult(literal);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
-			Literal literal = toGmlLiteral(valueFactory, wrapper);
+			Literal literal = toGmlLiteral(valueFactory, result);
 			requireRoundTrippableGeometryResult(literal);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
-			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(wrapper.getSrsURI())) {
-				throw new JenaGeoSparqlException("GeoJSON output requires CRS84: " + wrapper.getSrsURI());
+			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(result.getSrsURI())) {
+				throw new JenaGeoSparqlException("GeoJSON output requires CRS84: " + result.getSrsURI());
 			}
-			DimensionInfo dimensions = wrapper.getDimensionInfo();
-			if (dimensions.getCoordinate() != dimensions.getSpatial()
-					|| dimensions.getCoordinate() > 3) {
-				throw new JenaGeoSparqlException(
-						"GeoJSON output does not support measured coordinate layouts");
-			}
-			return toGeoJsonLiteral(valueFactory, wrapper, dimensions.getCoordinate());
+			return toGeoJsonLiteral(valueFactory, result,
+					geoJsonCoordinateDimension(source, result, geoJsonResultDimensionPolicy));
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
+	}
+
+	private static int geoJsonCoordinateDimension(GeometryWrapper source, GeometryWrapper result,
+			GeoJsonResultDimensionPolicy policy) {
+		if (result.isEmpty()) {
+			return 2;
+		}
+		DimensionInfo resultDimensions = result.getDimensionInfo();
+		requireUnmeasuredGeoJsonLayout(resultDimensions);
+		if (policy == GeoJsonResultDimensionPolicy.XY_ONLY) {
+			return 2;
+		}
+		DimensionInfo sourceDimensions = source.getDimensionInfo();
+		requireUnmeasuredGeoJsonLayout(sourceDimensions);
+		ActualCoordinateLayout sourceLayout = actualCoordinateLayout(source.getParsingGeometry());
+		if (sourceLayout == ActualCoordinateLayout.MIXED) {
+			throw new JenaGeoSparqlException("GeoJSON source has inconsistent Z ordinates");
+		}
+		if (sourceLayout != ActualCoordinateLayout.XYZ) {
+			return 2;
+		}
+		if (sourceDimensions.getCoordinate() != 3
+				|| resultDimensions.getCoordinate() != 3
+				|| actualCoordinateLayout(result.getParsingGeometry()) != ActualCoordinateLayout.XYZ) {
+			throw new JenaGeoSparqlException(
+					"GeoJSON result does not preserve required source altitude");
+		}
+		return 3;
+	}
+
+	private static void requireUnmeasuredGeoJsonLayout(DimensionInfo dimensions) {
+		if (dimensions.getCoordinate() != dimensions.getSpatial()
+				|| dimensions.getCoordinate() > 3) {
+			throw new JenaGeoSparqlException(
+					"GeoJSON output does not support measured coordinate layouts");
+		}
+	}
+
+	private static ActualCoordinateLayout actualCoordinateLayout(Geometry geometry) {
+		CoordinateLayoutFilter filter = new CoordinateLayoutFilter();
+		geometry.apply(filter);
+		return filter.layout();
+	}
+
+	private enum ActualCoordinateLayout {
+		EMPTY,
+		XY,
+		XYZ,
+		MIXED
+	}
+
+	private static final class CoordinateLayoutFilter implements CoordinateSequenceFilter {
+		private boolean hasXy;
+		private boolean hasXyz;
+
+		@Override
+		public void filter(CoordinateSequence sequence, int index) {
+			boolean finiteZ = sequence.getDimension() - sequence.getMeasures() >= 3
+					&& Double.isFinite(sequence.getZ(index));
+			hasXy |= !finiteZ;
+			hasXyz |= finiteZ;
+		}
+
+		@Override
+		public boolean isDone() {
+			return hasXy && hasXyz;
+		}
+
+		@Override
+		public boolean isGeometryChanged() {
+			return false;
+		}
+
+		private ActualCoordinateLayout layout() {
+			if (hasXy && hasXyz) {
+				return ActualCoordinateLayout.MIXED;
+			}
+			if (hasXyz) {
+				return ActualCoordinateLayout.XYZ;
+			}
+			return hasXy ? ActualCoordinateLayout.XY : ActualCoordinateLayout.EMPTY;
+		}
 	}
 
 	private static void requireRoundTrippableGeometryResult(Literal literal) {

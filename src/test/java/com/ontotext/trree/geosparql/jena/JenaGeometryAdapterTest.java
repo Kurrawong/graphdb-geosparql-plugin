@@ -142,7 +142,8 @@ public class JenaGeometryAdapterTest {
 
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
 				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
-						VALUE_FACTORY, outsideCrs84, GeoConstants.GEO_WKT_LITERAL));
+						VALUE_FACTORY, outsideCrs84, outsideCrs84, GeoConstants.GEO_WKT_LITERAL,
+						GeoJsonResultDimensionPolicy.XY_ONLY));
 
 		assertTrue(exception.getMessage().contains("outside the CRS domain"));
 	}
@@ -161,7 +162,8 @@ public class JenaGeometryAdapterTest {
 				GeoConstants.GEO_GML_LITERAL,
 				GeoConstants.GEO_JSON_LITERAL)) {
 			Literal result = JenaGeometryAdapter.toQueryGeometryLiteral(
-					VALUE_FACTORY, linearRing, datatype);
+					VALUE_FACTORY, linearRing, linearRing, datatype,
+					GeoJsonResultDimensionPolicy.XY_ONLY);
 
 			assertEquals(datatype, result.getDatatype());
 			assertEquals("LineString", SourceGeometryLiteral.fromLiteral(result)
@@ -176,9 +178,29 @@ public class JenaGeometryAdapterTest {
 
 		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
 				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
-						VALUE_FACTORY, projected, GeoConstants.GEO_JSON_LITERAL));
+						VALUE_FACTORY, projected, projected, GeoConstants.GEO_JSON_LITERAL,
+						GeoJsonResultDimensionPolicy.XY_ONLY));
 
 		assertTrue(exception.getMessage().contains("GeoJSON output requires CRS84"));
+	}
+
+	@Test
+	public void xyOnlyGeoJsonPolicyDoesNotSerializeStaleXyzMetadata() {
+		Literal literal = VALUE_FACTORY.createLiteral(
+				"{\"type\":\"LineString\",\"coordinates\":[[0,0,5],[2,2,6]]}",
+				GeoConstants.GEO_JSON_LITERAL);
+		GeometryWrapper source = JenaGeometryAdapter.toSourceGeometryLiteral(literal)
+				.asGeometryWrapper();
+		GeometryWrapper envelope = source.envelope();
+
+		assertEquals(3, envelope.getCoordinateDimension());
+		assertTrue(Double.isNaN(envelope.getParsingGeometry().getCoordinate().getZ()));
+
+		Literal result = JenaGeometryAdapter.toQueryGeometryLiteral(VALUE_FACTORY, source,
+				envelope, GeoConstants.GEO_JSON_LITERAL, GeoJsonResultDimensionPolicy.XY_ONLY);
+
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(result)
+				.asGeometryWrapper().getCoordinateDimension());
 	}
 
 	@Test
@@ -188,7 +210,8 @@ public class JenaGeometryAdapterTest {
 
 			assertThrows(wkt, JenaGeoSparqlException.class,
 					() -> JenaGeometryAdapter.toQueryGeometryLiteral(
-							VALUE_FACTORY, result, GeoConstants.GEO_GML_LITERAL));
+							VALUE_FACTORY, result, result, GeoConstants.GEO_GML_LITERAL,
+							GeoJsonResultDimensionPolicy.XY_ONLY));
 		}
 	}
 
