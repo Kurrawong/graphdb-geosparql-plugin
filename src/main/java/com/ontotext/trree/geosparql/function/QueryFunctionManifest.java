@@ -45,10 +45,16 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_CONVEX_HULL.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::convexHull,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
+			new Entry(GeoConstants.GEOF_DIFFERENCE.stringValue(), 2,
+					new BinaryGeometryProvider(GeometryWrapper::difference,
+							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_DISTANCE.stringValue(), 3,
 					new BinaryGeometryUnitToDoubleProvider(GeometryWrapper::distance)),
 			new Entry(GeoConstants.GEOF_ENVELOPE.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::envelope,
+							GeoJsonResultDimensionPolicy.XY_ONLY)),
+			new Entry(GeoConstants.GEOF_INTERSECTION.stringValue(), 2,
+					new BinaryGeometryProvider(GeometryWrapper::intersection,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_LENGTH.stringValue(), 2,
 					new UnaryGeometryUnitToDoubleProvider(GeometryLength::calculate)),
@@ -97,7 +103,13 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_NUM_GEOMETRIES.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(GeometryCount::calculate)),
 			new Entry(GeoConstants.GEOF_SPATIAL_DIMENSION.stringValue(), 1,
-					new UnaryGeometryIntegerProvider(GeometryWrapper::getSpatialDimension)));
+					new UnaryGeometryIntegerProvider(GeometryWrapper::getSpatialDimension)),
+			new Entry(GeoConstants.GEOF_SYM_DIFFERENCE.stringValue(), 2,
+					new BinaryGeometryProvider(GeometryWrapper::symDifference,
+							GeoJsonResultDimensionPolicy.XY_ONLY)),
+			new Entry(GeoConstants.GEOF_UNION.stringValue(), 2,
+					new BinaryGeometryProvider(GeometryWrapper::union,
+							GeoJsonResultDimensionPolicy.XY_ONLY)));
 
 	private QueryFunctionManifest() {
 	}
@@ -109,11 +121,21 @@ final class QueryFunctionManifest {
 	record Entry(String uri, int mandatoryArity, Provider provider) {
 	}
 
-	sealed interface Provider permits BinaryGeometryToDoubleProvider, BinaryGeometryUnitToDoubleProvider,
+	sealed interface Provider permits BinaryGeometryProvider, BinaryGeometryToDoubleProvider,
+			BinaryGeometryUnitToDoubleProvider,
 			GeometryMemberProvider, UnaryGeometryAnyUriProvider, UnaryGeometryBooleanProvider,
 			UnaryGeometryDoubleToGeometryProvider, UnaryGeometryDoubleUnitToGeometryProvider,
 			UnaryGeometryIntegerProvider, UnaryGeometryProvider, UnaryGeometryToDoubleProvider,
 			UnaryGeometryUnitToDoubleProvider {
+	}
+
+	@FunctionalInterface
+	interface BinaryGeometryCalculation {
+		GeometryWrapper apply(GeometryWrapper left, GeometryWrapper right) throws Exception;
+	}
+
+	record BinaryGeometryProvider(BinaryGeometryCalculation calculation,
+			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) implements Provider {
 	}
 
 	@FunctionalInterface
