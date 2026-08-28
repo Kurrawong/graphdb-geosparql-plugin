@@ -13,6 +13,7 @@ import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
 import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
 
 import java.util.List;
@@ -25,6 +26,7 @@ public class ConstructiveGeometryFunctionsTest {
 	private static final String BOUNDING_CIRCLE_URI = GeoConstants.NS_GEOF + "boundingCircle";
 	private static final String CONCAVE_HULL_URI = GeoConstants.NS_GEOF + "concaveHull";
 	private static final String CRS84 = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
+	private static final String EPSG_4326 = "http://www.opengis.net/def/crs/EPSG/0/4326";
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final List<String> FUNCTION_URIS = List.of(
 			BOUNDING_CIRCLE_URI, CONCAVE_HULL_URI);
@@ -56,6 +58,34 @@ public class ConstructiveGeometryFunctionsTest {
 		assertEquals("Polygon", resultGeometry.getGeometryType());
 		assertEquals(33, resultGeometry.getCoordinates().length);
 		assertTrue(resultGeometry.covers(geometry(source)));
+	}
+
+	@Test
+	public void concaveHullRetainsNormalizedCoordinatesForAxisReversedCrs() throws Exception {
+		Literal source = wkt("<" + EPSG_4326 + "> MULTIPOINT((10 30),(20 30))");
+
+		for (Literal input : List.of(source, gmlFromWkt(source.stringValue()))) {
+			Literal result = (Literal) evaluate(CONCAVE_HULL_URI, input);
+			Envelope envelope = xyGeometry(result).getEnvelopeInternal();
+
+			assertEquals(30.0, envelope.getMinX(), 0.0);
+			assertEquals(30.0, envelope.getMaxX(), 0.0);
+			assertEquals(10.0, envelope.getMinY(), 0.0);
+			assertEquals(20.0, envelope.getMaxY(), 0.0);
+		}
+	}
+
+	@Test
+	public void boundingCircleRetainsNormalizedCoordinatesForAxisReversedCrs() throws Exception {
+		Literal source = wkt("<" + EPSG_4326 + "> MULTIPOINT((10 30),(20 30))");
+
+		for (Literal input : List.of(source, gmlFromWkt(source.stringValue()))) {
+			Literal result = (Literal) evaluate(BOUNDING_CIRCLE_URI, input);
+			Coordinate centre = xyGeometry(result).getEnvelopeInternal().centre();
+
+			assertEquals(30.0, centre.x, 1e-12);
+			assertEquals(15.0, centre.y, 1e-12);
+		}
 	}
 
 	@Test
@@ -213,6 +243,11 @@ public class ConstructiveGeometryFunctionsTest {
 	private Geometry geometry(Literal literal) {
 		return JenaGeometryAdapter.toSourceGeometryLiteral(literal)
 				.asGeometryWrapper().getParsingGeometry();
+	}
+
+	private Geometry xyGeometry(Literal literal) {
+		return JenaGeometryAdapter.toSourceGeometryLiteral(literal)
+				.asGeometryWrapper().getXYGeometry();
 	}
 
 	private QueryFunctionManifest.Entry manifestEntry(String uri) {

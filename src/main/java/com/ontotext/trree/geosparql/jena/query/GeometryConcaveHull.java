@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.jena.query;
 
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
 import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
 import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
 import org.locationtech.jts.algorithm.hull.ConcaveHull;
@@ -22,8 +23,12 @@ public final class GeometryConcaveHull {
 		calculation.setMaximumEdgeLengthRatio(0.0);
 		calculation.setHolesAllowed(false);
 		Geometry result = xyGeometry(calculation.getHull());
-		return new GeometryWrapper(result, geometry.getSrsURI(), geometry.getGeometryDatatypeURI(),
-				new DimensionInfo(2, 2, result.getDimension()));
+		if (result.isEmpty()) {
+			return new GeometryWrapper(result, geometry.getSrsURI(), geometry.getGeometryDatatypeURI(),
+					new DimensionInfo(2, 2, result.getDimension()));
+		}
+		return GeometryWrapperFactory.createGeometry(
+				result, geometry.getSrsURI(), geometry.getGeometryDatatypeURI());
 	}
 
 	private static Geometry xyGeometry(Geometry geometry) {
