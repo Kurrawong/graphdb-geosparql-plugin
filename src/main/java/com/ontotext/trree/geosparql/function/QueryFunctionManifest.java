@@ -10,10 +10,11 @@ import com.ontotext.trree.geosparql.jena.query.GeometryCoordinateExtrema;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
+import com.ontotext.trree.geosparql.jena.query.MetricBuffer;
+import com.ontotext.trree.geosparql.jena.query.MetricDistance;
 import com.ontotext.trree.geosparql.jena.query.TopologicalDimension;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
-import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 
 import java.util.List;
 import java.util.function.BiFunction;
@@ -60,12 +61,10 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_METRIC_AREA.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(GeometryArea::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_BUFFER.stringValue(), 2,
-					new UnaryGeometryDoubleToGeometryProvider(
-							(geometry, radius) -> geometry.buffer(radius, Unit_URI.METRE_URL),
+					new UnaryGeometryDoubleToGeometryProvider(MetricBuffer::calculate,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
-					new BinaryGeometryToDoubleProvider(
-							(left, right) -> left.distance(right, Unit_URI.METRE_URL))),
+					new BinaryGeometryToDoubleProvider(MetricDistance::calculate)),
 			new Entry(GeoConstants.GEOF_METRIC_LENGTH.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(GeometryLength::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_PERIMETER.stringValue(), 1,
