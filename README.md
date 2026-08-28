@@ -71,6 +71,16 @@ The plugin supports reusable WKT, GML, and GeoJSON geometry literals and the `ge
 [Geometry serialization and conversion](docs/geosparql-geometry-serialization.md) for the supported formats,
 round-trip guarantees, dimension and metadata loss, indexing behavior, and upgrade steps.
 
+## GeoSPARQL 1.1 query-function profile
+
+The plugin implements the exact 37 non-topological filter-function IRIs named by GeoSPARQL 1.1 Requirements 39 and
+40: 23 Requirement 39 functions and 14 Requirement 40 functions. The supported profile is limited to the documented
+Jena-aligned, non-DGGS geometry-literal behavior. It is not a claim of complete Clause 10.9 or complete GeoSPARQL 1.1
+conformance.
+
+`geof:getSRID` is supported separately from this profile. The two-argument `geof:distance` and `geof:buffer` forms and
+legacy function aliases remain GraphDB compatibility extensions outside the 37-function profile.
+
 ## GML conversion
 
 `geof:asGML(geometry, profile)` converts a supported WKT, GML, or GeoJSON geometry literal to a reusable

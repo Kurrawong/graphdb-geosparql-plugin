@@ -238,7 +238,8 @@ public class UnaryGeometryFunctionsTest {
 
 	@Test
 	public void boundaryGeoJsonPolicyRejectsRequiredAltitudeLoss() {
-		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(BOUNDARY_URI, 1,
+		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
+				BOUNDARY_URI, QueryFunctionManifest.Requirement.R39, 1,
 				new QueryFunctionManifest.UnaryGeometryProvider(
 						geometry -> geometry.envelope(),
 						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));

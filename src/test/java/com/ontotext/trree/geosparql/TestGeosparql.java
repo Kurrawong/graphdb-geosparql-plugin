@@ -85,6 +85,47 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		return result;
 	}
 
+	@Test
+	public void queryFunctionProfileBindsScalarAndGeometryResultsThroughSparql() {
+		String polygon = "POLYGON((0 0,0 2,2 2,2 0,0 0))";
+		Literal scalar = singleLiteralResult("SELECT ?result WHERE { BIND(<"
+				+ GeoConstants.GEOF_DIMENSION + ">(\"" + polygon + "\"^^<"
+				+ GeoConstants.GEO_WKT_LITERAL + ">) AS ?result) }");
+		Literal geometry = singleLiteralResult("SELECT ?result WHERE { BIND(<"
+				+ GeoConstants.GEOF_CENTROID + ">(\"" + polygon + "\"^^<"
+				+ GeoConstants.GEO_WKT_LITERAL + ">) AS ?result) }");
+
+		assertEquals(2, scalar.intValue());
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, geometry.getDatatype());
+		assertEquals("Point", JenaGeometryAdapter.toSourceGeometryLiteral(geometry)
+				.asGeometryWrapper().getXYGeometry().getGeometryType());
+		assertEquals(1.0, JenaGeometryAdapter.toSourceGeometryLiteral(geometry)
+				.asGeometryWrapper().getXYGeometry().getCoordinate().x, 0.0);
+		assertEquals(1.0, JenaGeometryAdapter.toSourceGeometryLiteral(geometry)
+				.asGeometryWrapper().getXYGeometry().getCoordinate().y, 0.0);
+	}
+
+	@Test
+	public void queryFunctionProfileMandatoryArityFailureLeavesBindUnbound() {
+		boolean bound = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<" + GeoConstants.GEOF_METRIC_AREA + ">("
+						+ "\"POLYGON((0 0,0 2,2 2,2 0,0 0))\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL + ">, 1) AS ?result) "
+						+ "FILTER(BOUND(?result)) }").evaluate();
+
+		assertFalse(bound);
+	}
+
+	@Test
+	public void queryFunctionProfileGeometryErrorLeavesBindUnbound() {
+		String query = "ASK WHERE { BIND(<" + GeoConstants.GEOF_DIMENSION
+				+ ">(\"not geometry\"^^<" + GeoConstants.GEO_WKT_LITERAL
+				+ ">) AS ?result) FILTER(BOUND(?result)) }";
+		boolean bound = conn().prepareBooleanQuery(QueryLanguage.SPARQL, query).evaluate();
+
+		assertFalse(bound);
+	}
+
 	@Test public void areaFunctionReturnsResultForOneGeometryArgument() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POINT(0 0)", GeoConstants.XMLSCHEMA_OGC_WKT));
 		TupleQuery tq = conn().prepareTupleQuery(QueryLanguage.SPARQL, "SELECT ?dist WHERE { <u:1> <u:1> ?value . FILTER(<" + GeoConstants.EXT_AREA + ">(?value) = 0)}");
