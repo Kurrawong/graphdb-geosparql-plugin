@@ -107,6 +107,9 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_SYM_DIFFERENCE.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::symDifference,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
+			new Entry(GeoConstants.GEOF_TRANSFORM.stringValue(), 2,
+					new GeometryTargetSrsProvider(GeometryWrapper::transform,
+							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_UNION.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::union,
 							GeoJsonResultDimensionPolicy.XY_ONLY)));
@@ -123,7 +126,8 @@ final class QueryFunctionManifest {
 
 	sealed interface Provider permits BinaryGeometryProvider, BinaryGeometryToDoubleProvider,
 			BinaryGeometryUnitToDoubleProvider,
-			GeometryMemberProvider, UnaryGeometryAnyUriProvider, UnaryGeometryBooleanProvider,
+			GeometryMemberProvider, GeometryTargetSrsProvider, UnaryGeometryAnyUriProvider,
+			UnaryGeometryBooleanProvider,
 			UnaryGeometryDoubleToGeometryProvider, UnaryGeometryDoubleUnitToGeometryProvider,
 			UnaryGeometryIntegerProvider, UnaryGeometryProvider, UnaryGeometryToDoubleProvider,
 			UnaryGeometryUnitToDoubleProvider {
@@ -194,6 +198,15 @@ final class QueryFunctionManifest {
 	record GeometryMemberProvider(BiFunction<GeometryWrapper, Integer, GeometryWrapper> calculation,
 			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
 			implements Provider {
+	}
+
+	@FunctionalInterface
+	interface GeometryTargetSrsCalculation {
+		GeometryWrapper apply(GeometryWrapper geometry, String targetSrsUri) throws Exception;
+	}
+
+	record GeometryTargetSrsProvider(GeometryTargetSrsCalculation calculation,
+			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) implements Provider {
 	}
 
 	record UnaryGeometryAnyUriProvider(Function<GeometryWrapper, String> calculation) implements Provider {
