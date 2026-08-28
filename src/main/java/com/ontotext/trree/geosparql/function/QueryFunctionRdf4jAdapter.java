@@ -67,7 +67,8 @@ final class QueryFunctionRdf4jAdapter implements Function {
 			}
 			case QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider provider -> {
 				double result = provider.calculation().apply(
-						geometryArgument(args[0]), geometryArgument(args[1]), unitUri(args[2]));
+						geometryArgument(args[0]), geometryArgument(args[1]),
+						uriArgument(args[2], "unit"));
 				yield valueFactory.createLiteral(result);
 			}
 			case QueryFunctionManifest.GeometryMemberProvider provider -> {
@@ -76,6 +77,16 @@ final class QueryFunctionRdf4jAdapter implements Function {
 						source.asGeometryWrapper(), memberIndex(args[1]));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
 						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
+			}
+			case QueryFunctionManifest.GeometryTargetSrsProvider provider -> {
+				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
+				GeometryWrapper sourceGeometry = source.asGeometryWrapper();
+				String requestedTargetSrsUri = targetSrsUri(args[1]);
+				GeometryWrapper result = provider.calculation().apply(
+						sourceGeometry, requestedTargetSrsUri);
+				yield JenaGeometryAdapter.toTransformQueryGeometryLiteral(valueFactory, sourceGeometry,
+						result, requestedTargetSrsUri, source.datatype(),
+						provider.geoJsonResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.UnaryGeometryAnyUriProvider provider -> {
 				String result = provider.calculation().apply(geometryArgument(args[0]));
@@ -95,7 +106,8 @@ final class QueryFunctionRdf4jAdapter implements Function {
 			case QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
 				GeometryWrapper result = provider.calculation().apply(
-						source.asGeometryWrapper(), finiteNumeric(args[1]), unitUri(args[2]));
+						source.asGeometryWrapper(), finiteNumeric(args[1]),
+						uriArgument(args[2], "unit"));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
 						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
 			}
@@ -115,7 +127,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 			}
 			case QueryFunctionManifest.UnaryGeometryUnitToDoubleProvider provider -> {
 				double result = provider.calculation().apply(
-						geometryArgument(args[0]), unitUri(args[1]));
+						geometryArgument(args[0]), uriArgument(args[1], "unit"));
 				yield valueFactory.createLiteral(result);
 			}
 		};
@@ -150,7 +162,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 		return numericValue;
 	}
 
-	private String unitUri(Value value) {
+	private String uriArgument(Value value, String role) {
 		String uri;
 		if (value instanceof IRI) {
 			uri = value.stringValue();
@@ -159,7 +171,16 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				&& XSD.ANYURI.equals(literal.getDatatype())) {
 			uri = literal.stringValue();
 		} else {
-			throw new IllegalArgumentException("Expected a unit IRI or xsd:anyURI literal, found: " + value);
+			throw new IllegalArgumentException("Expected a " + role
+					+ " IRI or xsd:anyURI literal, found: " + value);
+		}
+		return uri;
+	}
+
+	private String targetSrsUri(Value value) {
+		String uri = uriArgument(value, "target SRS");
+		if (uri.isEmpty()) {
+			throw new IllegalArgumentException("Target SRS URI must not be empty");
 		}
 		return uri;
 	}
