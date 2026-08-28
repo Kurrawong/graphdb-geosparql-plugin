@@ -11,6 +11,7 @@ import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
+import org.locationtech.jts.geom.GeometryCollection;
 
 import java.math.BigInteger;
 
@@ -49,6 +50,16 @@ final class QueryFunctionRdf4jAdapter implements Function {
 
 	private Value evaluateProvider(ValueFactory valueFactory, Value[] args) throws Exception {
 		return switch (entry.provider()) {
+			case QueryFunctionManifest.BinaryGeometryProvider provider -> {
+				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
+				GeometryWrapper left = source.asGeometryWrapper();
+				GeometryWrapper right = geometryArgument(args[1]);
+				requireOverlayOperand(left);
+				requireOverlayOperand(right);
+				GeometryWrapper result = provider.calculation().apply(left, right);
+				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, left,
+						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
+			}
 			case QueryFunctionManifest.BinaryGeometryToDoubleProvider provider -> {
 				double result = provider.calculation().apply(
 						geometryArgument(args[0]), geometryArgument(args[1]));
@@ -108,6 +119,14 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				yield valueFactory.createLiteral(result);
 			}
 		};
+	}
+
+	private void requireOverlayOperand(GeometryWrapper geometry) {
+		if (geometry.getXYGeometry().getClass().equals(GeometryCollection.class)
+				&& !geometry.isEmpty()) {
+			throw new IllegalArgumentException(
+					"Nonempty generic GeometryCollection geometry literals are not supported by binary overlays");
+		}
 	}
 
 	private GeometryWrapper geometryArgument(Value value) {
