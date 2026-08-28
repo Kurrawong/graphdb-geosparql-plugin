@@ -39,7 +39,7 @@ public final class GeometryBoundingCircle {
 			MinimumBoundingCircle calculation = new MinimumBoundingCircle(source);
 			Coordinate centre = calculation.getCentre();
 			double radius = calculation.getRadius();
-			result = circumscribedPolygon(factory, centre, radius);
+			result = circumscribedPolygon(factory, source, centre, radius);
 		}
 		if (result.isEmpty()) {
 			return new GeometryWrapper(result, geometry.getSrsURI(), geometry.getGeometryDatatypeURI(),
@@ -61,10 +61,11 @@ public final class GeometryBoundingCircle {
 	}
 
 	private static Geometry circumscribedPolygon(
-			GeometryFactory factory, Coordinate centre, double radius) {
+			GeometryFactory factory, Geometry source, Coordinate centre, double radius) {
 		double vertexRadius = Math.nextUp(radius / Math.cos(Math.PI / SEGMENT_COUNT));
 		Polygon polygon = polygon(factory, centre, vertexRadius);
-		while (!containsAnalyticCircle(polygon, centre, radius)) {
+		while (!containsAnalyticCircle(polygon, centre, radius)
+				|| !containsSourceCoordinates(polygon, source)) {
 			vertexRadius = widenedVertexRadius(vertexRadius, polygon);
 			polygon = polygon(factory, centre, vertexRadius);
 		}
@@ -103,6 +104,25 @@ public final class GeometryBoundingCircle {
 			if (cross.signum() < 0 || edgeLengthSquared.signum() == 0
 					|| cross.pow(2).compareTo(radiusSquared.multiply(edgeLengthSquared)) < 0) {
 				return false;
+			}
+		}
+		return true;
+	}
+
+	private static boolean containsSourceCoordinates(Polygon polygon, Geometry source) {
+		Coordinate[] vertices = polygon.getExteriorRing().getCoordinates();
+		for (Coordinate coordinate : source.getCoordinates()) {
+			for (int index = 0; index < vertices.length - 1; index++) {
+				BigDecimal startX = exact(vertices[index].x);
+				BigDecimal startY = exact(vertices[index].y);
+				BigDecimal edgeX = exact(vertices[index + 1].x).subtract(startX);
+				BigDecimal edgeY = exact(vertices[index + 1].y).subtract(startY);
+				BigDecimal pointX = exact(coordinate.x).subtract(startX);
+				BigDecimal pointY = exact(coordinate.y).subtract(startY);
+				BigDecimal cross = edgeX.multiply(pointY).subtract(edgeY.multiply(pointX));
+				if (cross.signum() < 0) {
+					return false;
+				}
 			}
 		}
 		return true;
