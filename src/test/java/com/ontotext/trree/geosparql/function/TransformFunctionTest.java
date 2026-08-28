@@ -305,6 +305,23 @@ public class TransformFunctionTest {
 	}
 
 	@Test
+	public void transformResultBoundaryRejectsUnexpectedTargetSrs() {
+		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
+				TRANSFORM_URI, 2,
+				new QueryFunctionManifest.GeometryTargetSrsProvider(
+						(geometry, targetSrsUri) -> GeometryWrapperFactory.createPoint(
+								new Coordinate(1, 2), CRS84,
+								geometry.getGeometryDatatypeURI()),
+						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+		Function function = new QueryFunctionRdf4jAdapter(entry);
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> function.evaluate(
+						TRIPLE_SOURCE, wkt("POINT(1 2)"),
+						VALUE_FACTORY.createIRI(EPSG_32634)));
+	}
+
+	@Test
 	public void transformReturnsComputableProjectedResultsOutsideTheTargetCrsDomainOfValidity()
 			throws Exception {
 		Literal result = (Literal) evaluate(
