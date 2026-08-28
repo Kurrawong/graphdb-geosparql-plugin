@@ -1,14 +1,8 @@
 # GeoSPARQL functions reference
 
-This page lists the SPARQL extension functions registered by the GraphDB GeoSPARQL plugin. As in the
-[GraphDB SPARQL functions reference](https://graphdb.ontotext.com/documentation/11.5/sparql-functions-reference.html),
-each signature shows the result type before the function name.
-
-The plugin supports the 37 non-topological GeoSPARQL 1.1 filter functions identified by
-[Requirements 39 and 40](https://docs.ogc.org/is/22-047r1/22-047r1.html#_non_topological_query_functions) for its
-Jena-aligned, non-DGGS geometry-literal profile. This bounded profile does not claim complete Clause 10.9 or complete
-GeoSPARQL 1.1 conformance. The plugin also registers the topological, conversion, compatibility, and extension
-functions listed below; those functions are outside the 37-function profile.
+The GraphDB GeoSPARQL plugin provides SPARQL functions for working with geometry literals, including geometry
+operations, measurements, coordinate transformations, spatial relationships, and format conversion. The tables below
+list the supported functions and their signatures. Each signature shows the result type before the function name.
 
 Use these prefixes with the signatures below:
 
@@ -35,9 +29,7 @@ coordinate reference system of the first source geometry literal. See
 [Geometry serialization and conversion](geosparql-geometry-serialization.md) for format-specific result rules and
 [GeoSPARQL CRS deployment](geosparql-crs-deployment.md) for runtime CRS requirements.
 
-## Requirement 39 query functions
-
-These 23 functions form the Simple Features part of the bounded query-function profile.
+## Geometry operations
 
 | Function | Description |
 | --- | --- |
@@ -48,34 +40,37 @@ These 23 functions form the Simple Features part of the bounded query-function p
 | `geomLiteral geof:centroid(geomLiteral geometry)` | Returns the centroid of `geometry`. |
 | `geomLiteral geof:convexHull(geomLiteral geometry)` | Returns the convex hull of `geometry`. |
 | `geomLiteral geof:concaveHull(geomLiteral geometry)` | Returns the planar concave hull of the complete input vertex set, without holes. |
-| `xsd:integer geof:coordinateDimension(geomLiteral geometry)` | Returns the number of ordinates in the coordinate layout: 2, 3, or 4. |
 | `geomLiteral geof:difference(geomLiteral left, geomLiteral right)` | Returns the point-set difference of `left` and `right` in the CRS of `left`. |
-| `xsd:integer geof:dimension(geomLiteral geometry)` | Returns the topological dimension. A heterogeneous collection returns its largest member dimension. |
-| `xsd:double geof:metricDistance(geomLiteral left, geomLiteral right)` | Returns the shortest distance in metres, calculated in the CRS of `left`. |
-| `xsd:double geof:distance(geomLiteral left, geomLiteral right, uri unit)` | Returns the shortest distance in the specified unit, calculated in the CRS of `left`. |
 | `geomLiteral geof:envelope(geomLiteral geometry)` | Returns the axis-aligned bounding rectangle of `geometry`. |
-| `xsd:anyURI geof:geometryType(geomLiteral geometry)` | Returns the Simple Features class IRI for the geometry type. |
 | `geomLiteral geof:intersection(geomLiteral left, geomLiteral right)` | Returns the point-set intersection of `left` and `right` in the CRS of `left`. |
-| `xsd:boolean geof:is3D(geomLiteral geometry)` | Returns `true` when the coordinate layout contains a Z ordinate. |
-| `xsd:boolean geof:isEmpty(geomLiteral geometry)` | Returns `true` when `geometry` contains no coordinates. |
-| `xsd:boolean geof:isMeasured(geomLiteral geometry)` | Returns `true` when the coordinate layout contains an M ordinate. |
-| `xsd:boolean geof:isSimple(geomLiteral geometry)` | Returns `true` when `geometry` is simple under the JTS Simple Features rules. |
-| `xsd:integer geof:spatialDimension(geomLiteral geometry)` | Returns the number of spatial coordinate dimensions. |
 | `geomLiteral geof:symDifference(geomLiteral left, geomLiteral right)` | Returns the points that occur in either input but not in both, in the CRS of `left`. |
-| `geomLiteral geof:transform(geomLiteral geometry, uri targetSrs)` | Transforms the geometry coordinates to `targetSrs`. |
 | `geomLiteral geof:union(geomLiteral left, geomLiteral right)` | Returns the point-set union of `left` and `right` in the CRS of `left`. |
 
-## Requirement 40 query functions
-
-These 14 functions form the non-Simple Features part of the bounded query-function profile.
+## Measurements
 
 | Function | Description |
 | --- | --- |
+| `xsd:double geof:metricDistance(geomLiteral left, geomLiteral right)` | Returns the shortest distance in metres, calculated in the CRS of `left`. |
+| `xsd:double geof:distance(geomLiteral left, geomLiteral right, uri unit)` | Returns the shortest distance in the specified unit, calculated in the CRS of `left`. |
 | `xsd:double geof:metricArea(geomLiteral geometry)` | Returns area in square metres. Geographic source CRSes are not supported. |
 | `xsd:double geof:area(geomLiteral geometry, uri unit)` | Returns area in the square of the specified linear unit. Geographic source CRSes are not supported. |
-| `geomLiteral geof:geometryN(geomLiteral geometry, numeric index)` | Returns the direct geometry member at the one-based integral `index`. |
 | `xsd:double geof:metricLength(geomLiteral geometry)` | Returns length in metres. |
 | `xsd:double geof:length(geomLiteral geometry, uri unit)` | Returns length in the specified linear unit. |
+| `xsd:double geof:perimeter(geomLiteral geometry, uri unit)` | Returns perimeter in the specified linear unit. Non-area members use their length. |
+| `xsd:double geof:metricPerimeter(geomLiteral geometry)` | Returns perimeter in metres. Non-area members use their length. |
+
+## Geometry information
+
+| Function | Description |
+| --- | --- |
+| `xsd:integer geof:coordinateDimension(geomLiteral geometry)` | Returns the number of ordinates in the coordinate layout: 2, 3, or 4. |
+| `xsd:integer geof:dimension(geomLiteral geometry)` | Returns the topological dimension. A heterogeneous collection returns its largest member dimension. |
+| `geomLiteral geof:geometryN(geomLiteral geometry, numeric index)` | Returns the direct geometry member at the one-based integral `index`. |
+| `xsd:anyURI geof:geometryType(geomLiteral geometry)` | Returns the Simple Features class IRI for the geometry type. |
+| `xsd:boolean geof:is3D(geomLiteral geometry)` | Returns `true` when the coordinate layout contains a Z ordinate. |
+| `xsd:boolean geof:isEmpty(geomLiteral geometry)` | Returns `true` when `geometry` contains no coordinates. |
+| `xsd:boolean geof:isMeasured(geomLiteral geometry)` | Returns `true` when the coordinate layout contains an M ordinate. |
+| `xsd:boolean geof:isSimple(geomLiteral geometry)` | Returns `true` when `geometry` is simple under the Simple Features rules. |
 | `xsd:double geof:maxX(geomLiteral geometry)` | Returns the largest X coordinate according to the source SRS axes. |
 | `xsd:double geof:maxY(geomLiteral geometry)` | Returns the largest Y coordinate according to the source SRS axes. |
 | `xsd:double geof:maxZ(geomLiteral geometry)` | Returns the largest finite Z ordinate. An XY or XYM geometry produces an error. |
@@ -83,13 +78,19 @@ These 14 functions form the non-Simple Features part of the bounded query-functi
 | `xsd:double geof:minY(geomLiteral geometry)` | Returns the smallest Y coordinate according to the source SRS axes. |
 | `xsd:double geof:minZ(geomLiteral geometry)` | Returns the smallest finite Z ordinate. An XY or XYM geometry produces an error. |
 | `xsd:integer geof:numGeometries(geomLiteral geometry)` | Returns the number of direct structural geometry members. An atomic geometry counts as one. |
-| `xsd:double geof:perimeter(geomLiteral geometry, uri unit)` | Returns perimeter in the specified linear unit. Non-area members use their length. |
-| `xsd:double geof:metricPerimeter(geomLiteral geometry)` | Returns perimeter in metres. Non-area members use their length. |
+| `xsd:integer geof:spatialDimension(geomLiteral geometry)` | Returns the number of spatial coordinate dimensions. |
 
-## Topological functions
+## Coordinate reference systems
 
-All topological functions take two source geometry literals. The right geometry is transformed to the CRS of the left
-geometry when required. The Simple Features, Egenhofer, and RCC8 relation names follow
+| Function | Description |
+| --- | --- |
+| `geomLiteral geof:transform(geomLiteral geometry, uri targetSrs)` | Transforms the geometry coordinates to `targetSrs`. |
+| `xsd:anyURI geof:getSRID(geomLiteral geometry)` | Returns the source geometry literal's CRS URI. |
+
+## Spatial relationships
+
+The Simple Features, Egenhofer, and RCC8 functions take two source geometry literals. The right geometry is
+transformed to the CRS of the left geometry when required. The relation names follow
 [GeoSPARQL 1.1](https://docs.ogc.org/is/22-047r1/22-047r1.html).
 
 ### Simple Features relations
@@ -139,22 +140,20 @@ RCC8 functions apply to area/area geometry pairs.
 | --- | --- |
 | `xsd:boolean geof:relate(geomLiteral left, geomLiteral right, xsd:string pattern)` | Tests the geometries against a DE-9IM intersection pattern. |
 
-## Geometry conversion and CRS functions
+## Geometry conversion
 
 | Function | Description |
 | --- | --- |
 | `geo:geoJSONLiteral geof:asGeoJSON(geomLiteral geometry)` | Converts `geometry` to CRS84 GeoJSON. |
 | `geo:wktLiteral geof:asWKT(geomLiteral geometry)` | Converts `geometry` to WKT without changing its CRS. |
 | `geo:gmlLiteral geof:asGML(geomLiteral geometry, xsd:string profile)` | Converts `geometry` to the supported GML 3.2 geometry-fragment profile. |
-| `xsd:anyURI geof:getSRID(geomLiteral geometry)` | Returns the source geometry literal's CRS URI. |
 
 The `geof:asGML` profile string must be
 `http://www.opengis.net/def/profile/ogc/2.0/gml-sf0`.
 
 ## Compatibility functions
 
-The following overloads and aliases are retained for GraphDB compatibility. They are not members of the bounded
-37-function profile.
+The following overloads and aliases are retained for compatibility with existing GraphDB queries.
 
 | Function | Description |
 | --- | --- |
@@ -173,12 +172,12 @@ functions.
 
 | Function | Description |
 | --- | --- |
-| `xsd:double geoext:area(geomLiteral geometry)` | Returns planar JTS area in the square of the source coordinate unit. |
+| `xsd:double geoext:area(geomLiteral geometry)` | Returns planar area in the square of the source CRS coordinate unit. |
 | `geomLiteral geoext:closestPoint(geomLiteral left, geomLiteral right)` | Returns the nearest point on `left` to `right`, in the CRS of `left`. |
 | `xsd:boolean geoext:containsProperly(geomLiteral left, geomLiteral right)` | Tests whether `left` properly contains `right`. |
 | `xsd:boolean geoext:coveredBy(geomLiteral left, geomLiteral right)` | Tests whether `left` is covered by `right`. |
 | `xsd:boolean geoext:covers(geomLiteral left, geomLiteral right)` | Tests whether `left` covers `right`. |
-| `xsd:double geoext:hausdorffDistance(geomLiteral left, geomLiteral right)` | Returns the JTS Hausdorff similarity measure after CRS alignment. Identical geometries return `1.0`. |
+| `xsd:double geoext:hausdorffDistance(geomLiteral left, geomLiteral right)` | Returns the normalized Hausdorff similarity measure after CRS alignment. Identical geometries return `1.0`. |
 | `geomLiteral geoext:shortestLine(geomLiteral left, geomLiteral right)` | Returns the line between the nearest points of the two geometries, in the CRS of `left`. |
 | `geomLiteral geoext:simplify(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the Douglas-Peucker algorithm. |
 | `geomLiteral geoext:simplifyPreserveTopology(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry while preserving topology. |
