@@ -11,7 +11,6 @@ import org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
-import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.GeometryCollection;
 
 import java.math.BigInteger;
@@ -84,8 +83,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				GeometryWrapper sourceGeometry = source.asGeometryWrapper();
 				GeometryWrapper result = provider.calculation().apply(
 						sourceGeometry, uriArgument(args[1], "target SRS"));
-				requireWithinTargetCrsDomain(result);
-				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, sourceGeometry,
+				yield JenaGeometryAdapter.toTransformQueryGeometryLiteral(valueFactory, sourceGeometry,
 						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.UnaryGeometryAnyUriProvider provider -> {
@@ -131,17 +129,6 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				yield valueFactory.createLiteral(result);
 			}
 		};
-	}
-
-	private void requireWithinTargetCrsDomain(GeometryWrapper result) {
-		if (result.isEmpty()) {
-			return;
-		}
-		Envelope domain = result.getSrsInfo().getDomainEnvelope();
-		if (domain != null && !domain.contains(result.getXYGeometry().getEnvelopeInternal())) {
-			throw new IllegalArgumentException("Geometry coordinates are outside the CRS domain for "
-					+ result.getSrsURI());
-		}
 	}
 
 	private void requireOverlayOperand(GeometryWrapper geometry) {

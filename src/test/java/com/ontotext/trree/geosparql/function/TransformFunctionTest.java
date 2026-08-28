@@ -15,6 +15,8 @@ import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
 import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.io.WKTReader;
+import org.opengis.referencing.operation.TransformException;
 
 import java.util.List;
 
@@ -126,14 +128,38 @@ public class TransformFunctionTest {
 	@Test
 	public void transformRejectsUnsupportedCrsAndUnavailableCoordinateOperations() {
 		Literal source = wkt("POINT(1 2)");
+		Literal unsupportedSource = wkt(
+				"<http://example.com/crs/unknown> POINT(1 2)");
 		Literal threeDimensional = wkt(
 				"<" + EPSG_4979 + "> POINT Z(-27.47 153.03 55)");
 
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(unsupportedSource, VALUE_FACTORY.createIRI(CRS84)));
 		assertThrows(ValueExprEvaluationException.class,
 				() -> evaluate(source,
 						VALUE_FACTORY.createIRI("http://example.com/crs/unknown")));
 		assertThrows(ValueExprEvaluationException.class,
 				() -> evaluate(threeDimensional, VALUE_FACTORY.createIRI(EPSG_32634)));
+	}
+
+	@Test
+	public void transformReportsTransformationFailuresAsExpressionErrors() {
+		TransformException failure = new TransformException("Coordinate transformation failed");
+		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
+				TRANSFORM_URI, 2,
+				new QueryFunctionManifest.GeometryTargetSrsProvider(
+						(geometry, targetSrsUri) -> {
+							throw failure;
+						},
+						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+		Function function = new QueryFunctionRdf4jAdapter(entry);
+
+		ValueExprEvaluationException exception = assertThrows(
+				ValueExprEvaluationException.class,
+				() -> function.evaluate(
+						TRIPLE_SOURCE, wkt("POINT(1 2)"), VALUE_FACTORY.createIRI(CRS84)));
+
+		assertEquals(failure, exception.getCause());
 	}
 
 	@Test
@@ -240,25 +266,50 @@ public class TransformFunctionTest {
 	}
 
 	@Test
-	public void transformRejectsResultsOutsideTheTargetCrsDomain() {
-		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
-				TRANSFORM_URI, 2,
-				new QueryFunctionManifest.GeometryTargetSrsProvider(
-						(geometry, targetSrsUri) -> GeometryWrapperFactory.createPoint(
-								new Coordinate(181, 0), targetSrsUri,
-								geometry.getGeometryDatatypeURI()),
-						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
-		Function function = new QueryFunctionRdf4jAdapter(entry);
+	public void transformResultBoundaryReturnsFiniteResultsOutsideTheTargetCrsDomainOfValidity()
+			throws Exception {
+		Function function = transformAdapterReturning(new Coordinate(181, 0));
 
-		assertThrows(ValueExprEvaluationException.class,
-				() -> function.evaluate(TRIPLE_SOURCE, wkt("POINT(1 2)"),
-						VALUE_FACTORY.createIRI(CRS84)));
+		Literal result = (Literal) function.evaluate(
+				TRIPLE_SOURCE, wkt("POINT(1 2)"), VALUE_FACTORY.createIRI(CRS84));
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		Coordinate coordinate = new WKTReader().read(result.stringValue()).getCoordinate();
+		assertTrue(Double.isFinite(coordinate.x));
+		assertTrue(Double.isFinite(coordinate.y));
+		assertEquals(181.0, coordinate.x, 0.0);
+		assertEquals(0.0, coordinate.y, 0.0);
 	}
 
 	@Test
-	public void transformRejectsProjectedResultsOutsideTheTargetCrsDomain() {
-		assertThrows(ValueExprEvaluationException.class,
-				() -> evaluate(wkt("POINT(0 0)"), VALUE_FACTORY.createIRI(EPSG_32634)));
+	public void transformResultBoundaryRejectsNonFiniteCoordinates() {
+		Function function = transformAdapterReturning(
+				new Coordinate(Double.POSITIVE_INFINITY, 0));
+
+		for (Literal source : List.of(
+				wkt("POINT(1 2)"),
+				gmlFromWkt("POINT(1 2)"),
+				geoJson("{\"type\":\"Point\",\"coordinates\":[1,2]}"))) {
+			assertThrows(source.getDatatype().stringValue(), ValueExprEvaluationException.class,
+					() -> function.evaluate(
+							TRIPLE_SOURCE, source, VALUE_FACTORY.createIRI(CRS84)));
+		}
+	}
+
+	@Test
+	public void transformReturnsComputableProjectedResultsOutsideTheTargetCrsDomainOfValidity()
+			throws Exception {
+		Literal result = (Literal) evaluate(
+				wkt("POINT(0 0)"), VALUE_FACTORY.createIRI(EPSG_32634));
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		SourceGeometryLiteral transformed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+		assertEquals(EPSG_32634, transformed.effectiveCrsUri());
+		Coordinate coordinate = transformed.asGeometryWrapper().getXYGeometry().getCoordinate();
+		assertTrue(Double.isFinite(coordinate.x));
+		assertTrue(Double.isFinite(coordinate.y));
+		assertEquals(-1891310.54, coordinate.x, 0.1);
+		assertEquals(0.0, coordinate.y, 1e-6);
 	}
 
 	@Test
