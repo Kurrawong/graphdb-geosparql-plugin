@@ -92,8 +92,9 @@ public final class JenaGeometryAdapter {
 	}
 
 	/**
-	 * Serializes a transform result without treating the target CRS domain of validity as a
-	 * mathematical transformation limit.
+	 * Serializes a transform result while enforcing the requested target SRS and representability.
+	 * Coordinates outside the target CRS domain of validity are accepted when the transformation
+	 * is mathematically valid.
 	 */
 	public static Literal toTransformQueryGeometryLiteral(ValueFactory valueFactory,
 			GeometryWrapper source, GeometryWrapper result, String requestedTargetSrsUri, IRI datatype,
