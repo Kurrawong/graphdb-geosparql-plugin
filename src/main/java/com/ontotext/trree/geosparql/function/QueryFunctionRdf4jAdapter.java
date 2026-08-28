@@ -82,7 +82,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
 				GeometryWrapper sourceGeometry = source.asGeometryWrapper();
 				GeometryWrapper result = provider.calculation().apply(
-						sourceGeometry, uriArgument(args[1], "target SRS"));
+						sourceGeometry, targetSrsUri(args[1]));
 				yield JenaGeometryAdapter.toTransformQueryGeometryLiteral(valueFactory, sourceGeometry,
 						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
 			}
@@ -171,6 +171,14 @@ final class QueryFunctionRdf4jAdapter implements Function {
 		} else {
 			throw new IllegalArgumentException("Expected a " + role
 					+ " IRI or xsd:anyURI literal, found: " + value);
+		}
+		return uri;
+	}
+
+	private String targetSrsUri(Value value) {
+		String uri = uriArgument(value, "target SRS");
+		if (uri.isEmpty()) {
+			throw new IllegalArgumentException("Target SRS URI must not be empty");
 		}
 		return uri;
 	}

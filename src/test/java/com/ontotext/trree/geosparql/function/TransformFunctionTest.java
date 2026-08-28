@@ -79,6 +79,14 @@ public class TransformFunctionTest {
 	}
 
 	@Test
+	public void transformRejectsEmptyAnyUriTargetSrs() {
+		Literal source = wkt("POINT(1 2)");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(source, VALUE_FACTORY.createLiteral("", XSD.ANYURI)));
+	}
+
+	@Test
 	public void transformRejectsOtherTargetSrsRdfTerms() {
 		Literal source = wkt("POINT(1 2)");
 
