@@ -167,7 +167,7 @@ public class GeometryMemberFunctionsTest {
 	@Test
 	public void geometryNResultBoundaryRejectsRequiredAltitudeLoss() {
 		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
-				GEOMETRY_N_URI, QueryFunctionManifest.Requirement.R40, 2,
+				GEOMETRY_N_URI, 2,
 				new QueryFunctionManifest.GeometryMemberProvider(
 						(geometry, index) -> geometry.envelope(),
 						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
