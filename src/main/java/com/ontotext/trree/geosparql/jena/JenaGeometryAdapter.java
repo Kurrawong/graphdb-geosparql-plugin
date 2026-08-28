@@ -96,8 +96,13 @@ public final class JenaGeometryAdapter {
 	 * mathematical transformation limit.
 	 */
 	public static Literal toTransformQueryGeometryLiteral(ValueFactory valueFactory,
-			GeometryWrapper source, GeometryWrapper result, IRI datatype,
+			GeometryWrapper source, GeometryWrapper result, String requestedTargetSrsUri, IRI datatype,
 			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) {
+		if (!requestedTargetSrsUri.equals(result.getSrsURI())) {
+			throw new JenaGeoSparqlException(
+					"Transform result SRS does not match the requested target SRS: expected "
+							+ requestedTargetSrsUri + ", found " + result.getSrsURI());
+		}
 		return toQueryGeometryLiteral(valueFactory, source, result, datatype,
 				geoJsonResultDimensionPolicy, QueryGeometryResultPolicy.TRANSFORM);
 	}
