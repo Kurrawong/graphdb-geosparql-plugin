@@ -87,18 +87,37 @@ public final class JenaGeometryAdapter {
 	public static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper source,
 			GeometryWrapper result, IRI datatype,
 			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) {
+		return toQueryGeometryLiteral(valueFactory, source, result, datatype,
+				geoJsonResultDimensionPolicy, QueryGeometryResultPolicy.STANDARD);
+	}
+
+	/**
+	 * Serializes a transform result without treating the target CRS domain of validity as a
+	 * mathematical transformation limit.
+	 */
+	public static Literal toTransformQueryGeometryLiteral(ValueFactory valueFactory,
+			GeometryWrapper source, GeometryWrapper result, IRI datatype,
+			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) {
+		return toQueryGeometryLiteral(valueFactory, source, result, datatype,
+				geoJsonResultDimensionPolicy, QueryGeometryResultPolicy.TRANSFORM);
+	}
+
+	private static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper source,
+			GeometryWrapper result, IRI datatype,
+			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy,
+			QueryGeometryResultPolicy resultPolicy) {
 		result = normalizeQueryGeometryType(result);
-		SourceGeometryLiteral.validateGeometryWrapper(result);
+		validateQueryGeometryResult(result, resultPolicy);
 		requireRepresentableGeometryType(result);
 		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
 		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
 			Literal literal = toQueryWktLiteral(valueFactory, result);
-			requireRoundTrippableWktResult(result, literal);
+			requireRoundTrippableWktResult(result, literal, resultPolicy);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
 			Literal literal = toGmlLiteral(valueFactory, result);
-			requireRoundTrippableGeometryResult(literal);
+			requireRoundTrippableGeometryResult(literal, resultPolicy);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
@@ -109,6 +128,41 @@ public final class JenaGeometryAdapter {
 					geoJsonCoordinateDimension(source, result, geoJsonResultDimensionPolicy));
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
+	}
+
+	private static void validateQueryGeometryResult(GeometryWrapper result,
+			QueryGeometryResultPolicy resultPolicy) {
+		if (resultPolicy == QueryGeometryResultPolicy.TRANSFORM) {
+			SourceGeometryLiteral.requireRecognizedCrs(result);
+			requireFiniteCoordinates(result);
+		} else {
+			SourceGeometryLiteral.validateGeometryWrapper(result);
+		}
+	}
+
+	private static void requireFiniteCoordinates(GeometryWrapper wrapper) {
+		wrapper.getParsingGeometry().apply(new CoordinateSequenceFilter() {
+			@Override
+			public void filter(CoordinateSequence sequence, int index) {
+				if (!Double.isFinite(sequence.getX(index))
+						|| !Double.isFinite(sequence.getY(index))
+						|| (sequence.hasZ() && !Double.isFinite(sequence.getZ(index)))
+						|| (sequence.hasM() && !Double.isFinite(sequence.getM(index)))) {
+					throw new JenaGeoSparqlException(
+							"Geometry result coordinates must be finite");
+				}
+			}
+
+			@Override
+			public boolean isDone() {
+				return false;
+			}
+
+			@Override
+			public boolean isGeometryChanged() {
+				return false;
+			}
+		});
 	}
 
 	private static Literal toQueryWktLiteral(ValueFactory valueFactory, GeometryWrapper result) {
@@ -224,10 +278,11 @@ public final class JenaGeometryAdapter {
 				coordinates.getDimension(), coordinates.getDimension() - coordinates.getMeasures());
 	}
 
-	private static void requireRoundTrippableWktResult(GeometryWrapper expected, Literal literal) {
+	private static void requireRoundTrippableWktResult(GeometryWrapper expected, Literal literal,
+			QueryGeometryResultPolicy resultPolicy) {
 		GeometryWrapper actual;
 		try {
-			actual = SourceGeometryLiteral.fromLiteral(literal).asGeometryWrapper();
+			actual = parseQueryGeometryResult(literal, resultPolicy);
 		} catch (JenaGeoSparqlException e) {
 			throw new JenaGeoSparqlException(
 					"Geometry result cannot represent its required coordinate layout", e);
@@ -361,13 +416,28 @@ public final class JenaGeometryAdapter {
 		}
 	}
 
-	private static void requireRoundTrippableGeometryResult(Literal literal) {
+	private static void requireRoundTrippableGeometryResult(Literal literal,
+			QueryGeometryResultPolicy resultPolicy) {
 		try {
-			SourceGeometryLiteral.fromLiteral(literal).asGeometryWrapper();
+			parseQueryGeometryResult(literal, resultPolicy);
 		} catch (JenaGeoSparqlException e) {
 			throw new JenaGeoSparqlException(
 					"Geometry result cannot represent its required coordinate layout", e);
 		}
+	}
+
+	private static GeometryWrapper parseQueryGeometryResult(Literal literal,
+			QueryGeometryResultPolicy resultPolicy) {
+		SourceGeometryLiteral parsed = SourceGeometryLiteral.fromLiteral(literal);
+		GeometryWrapper wrapper = resultPolicy == QueryGeometryResultPolicy.TRANSFORM
+				? parsed.asTransformResultGeometryWrapper()
+				: parsed.asGeometryWrapper();
+		return wrapper;
+	}
+
+	private enum QueryGeometryResultPolicy {
+		STANDARD,
+		TRANSFORM
 	}
 
 	private static GeometryWrapper normalizeQueryGeometryType(GeometryWrapper wrapper) {
