@@ -62,12 +62,6 @@ public final class JenaFunctionEvaluator {
 				GeometryWrapper buffered = wrapper.buffer(radius, wrapper.getUnitsOfMeasure().getUnitURI());
 				return geometryLiteral(valueFactory, buffered, source.datatype());
 			}
-			if (GeoConstants.GEOF_INTERSECTION.stringValue().equals(functionUri)
-					|| GeoConstants.GEOF_UNION.stringValue().equals(functionUri)
-					|| GeoConstants.GEOF_DIFFERENCE.stringValue().equals(functionUri)
-					|| GeoConstants.GEOF_SYM_DIFFERENCE.stringValue().equals(functionUri)) {
-				return binaryGeometry(valueFactory, functionUri, args);
-			}
 			if (GeoConstants.GEOF_GETSRID.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
 				return valueFactory.createLiteral(geometry(args[0]).getSRID(), XSD.ANYURI);
@@ -369,25 +363,6 @@ public final class JenaFunctionEvaluator {
 		}
 		return valueFactory.createLiteral(
 				left.getXYGeometry().distance(left.checkTransformSRS(right).getXYGeometry()));
-	}
-
-	private static Literal binaryGeometry(ValueFactory valueFactory, String functionUri, Value... args)
-			throws Exception {
-		requireArgs(functionUri, args, 2);
-		SourceGeometryLiteral source = sourceLiteral(args[0]);
-		GeometryWrapper left = source.asGeometryWrapper();
-		GeometryWrapper right = geometry(args[1]);
-		GeometryWrapper result;
-		if (GeoConstants.GEOF_INTERSECTION.stringValue().equals(functionUri)) {
-			result = left.intersection(right);
-		} else if (GeoConstants.GEOF_UNION.stringValue().equals(functionUri)) {
-			result = left.union(right);
-		} else if (GeoConstants.GEOF_DIFFERENCE.stringValue().equals(functionUri)) {
-			result = left.difference(right);
-		} else {
-			result = left.symDifference(right);
-		}
-		return geometryLiteral(valueFactory, result, source.datatype());
 	}
 
 	private static Literal nearestGeometry(ValueFactory valueFactory, String functionUri, Value... args)
