@@ -56,6 +56,7 @@ public class GeometryBoundingCircleTest {
 		Polygon polygon = (Polygon) GeometryBoundingCircle.calculate(source).getXYGeometry();
 
 		assertEquals(0, coordinatesOutsidePolygon(polygon, source.getXYGeometry()));
+		assertTrue(polygon.covers(source.getXYGeometry()));
 	}
 
 	@Test
