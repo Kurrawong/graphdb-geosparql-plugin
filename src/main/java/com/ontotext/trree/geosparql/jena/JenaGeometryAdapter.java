@@ -205,10 +205,7 @@ public final class JenaGeometryAdapter {
 	 *
 	 * <p>This path operates only on the typed geometry returned by a query-function provider; it
 	 * cannot and must not reconstruct structure or layout already lost while parsing the source
-	 * literal. It can be replaced by the normal {@link #toWktLiteral(ValueFactory, GeometryWrapper)}
-	 * path when the supported Jena writer preserves member-bearing empty collections and per-member
-	 * XY/XYZ/XYM/XYZM layouts. The recursive result-boundary tests characterize that removal
-	 * condition.</p>
+	 * literal.</p>
 	 */
 	private static Literal toGeometryCollectionWktLiteral(ValueFactory valueFactory,
 			GeometryWrapper result) {

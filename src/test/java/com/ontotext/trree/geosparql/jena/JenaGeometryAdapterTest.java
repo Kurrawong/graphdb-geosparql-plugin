@@ -4,7 +4,6 @@ import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
 import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
-import com.ontotext.trree.geosparql.jena.query.MetricDistance;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.configuration.GeoSPARQLConfig;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
@@ -15,6 +14,7 @@ import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions
 import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
 import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
+import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -694,9 +694,9 @@ public class JenaGeometryAdapterTest {
 				GeoConstants.GEO_WKT_LITERAL);
 		Literal projectedPoint = VALUE_FACTORY.createLiteral(PROJECTED_POINT_WKT, GeoConstants.GEO_WKT_LITERAL);
 
-		double result = MetricDistance.calculate(
-				JenaGeometryAdapter.toSourceGeometryLiteral(crs84Point).asGeometryWrapper(),
-				JenaGeometryAdapter.toSourceGeometryLiteral(projectedPoint).asGeometryWrapper());
+		GeometryWrapper left = JenaGeometryAdapter.toSourceGeometryLiteral(crs84Point).asGeometryWrapper();
+		GeometryWrapper right = JenaGeometryAdapter.toSourceGeometryLiteral(projectedPoint).asGeometryWrapper();
+		double result = left.distance(right, Unit_URI.METRE_URL);
 
 		assertEquals(0d, result, 0.2d);
 	}
