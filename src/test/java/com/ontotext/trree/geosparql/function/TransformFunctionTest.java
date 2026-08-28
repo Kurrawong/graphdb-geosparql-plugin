@@ -154,7 +154,7 @@ public class TransformFunctionTest {
 	public void transformReportsTransformationFailuresAsExpressionErrors() {
 		TransformException failure = new TransformException("Coordinate transformation failed");
 		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
-				TRANSFORM_URI, QueryFunctionManifest.Requirement.R39, 2,
+				TRANSFORM_URI, 2,
 				new QueryFunctionManifest.GeometryTargetSrsProvider(
 						(geometry, targetSrsUri) -> {
 							throw failure;
@@ -321,7 +321,7 @@ public class TransformFunctionTest {
 	@Test
 	public void transformResultBoundaryRejectsUnexpectedTargetSrs() {
 		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
-				TRANSFORM_URI, QueryFunctionManifest.Requirement.R39, 2,
+				TRANSFORM_URI, 2,
 				new QueryFunctionManifest.GeometryTargetSrsProvider(
 						(geometry, targetSrsUri) -> GeometryWrapperFactory.createPoint(
 								new Coordinate(1, 2), CRS84,
@@ -396,7 +396,7 @@ public class TransformFunctionTest {
 
 	private Function transformAdapterReturning(Coordinate coordinate) {
 		QueryFunctionManifest.Entry entry = new QueryFunctionManifest.Entry(
-				TRANSFORM_URI, QueryFunctionManifest.Requirement.R39, 2,
+				TRANSFORM_URI, 2,
 				new QueryFunctionManifest.GeometryTargetSrsProvider(
 						(geometry, targetSrsUri) -> GeometryWrapperFactory.createPoint(
 								coordinate, targetSrsUri, geometry.getGeometryDatatypeURI()),

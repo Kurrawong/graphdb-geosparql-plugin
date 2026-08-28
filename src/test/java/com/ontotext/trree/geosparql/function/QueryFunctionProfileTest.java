@@ -28,20 +28,12 @@ public class QueryFunctionProfileTest {
 			new ValueFactoryTripleSource(VALUE_FACTORY);
 
 	@Test
-	public void manifestClassifiesTwentyThreeRequirement39AndFourteenRequirement40Functions() {
-		long requirement39Count = QueryFunctionManifest.entries().stream()
-				.filter(entry -> entry.requirement() == QueryFunctionManifest.Requirement.R39)
-				.count();
-		long requirement40Count = QueryFunctionManifest.entries().stream()
-				.filter(entry -> entry.requirement() == QueryFunctionManifest.Requirement.R40)
-				.count();
+	public void manifestListsThirtySevenDistinctGeoSparqlFunctionUris() {
 		long distinctUris = QueryFunctionManifest.entries().stream()
 				.map(QueryFunctionManifest.Entry::uri)
 				.distinct()
 				.count();
 
-		assertEquals(23, requirement39Count);
-		assertEquals(14, requirement40Count);
 		assertEquals(37, QueryFunctionManifest.entries().size());
 		assertEquals(37, distinctUris);
 		assertTrue(QueryFunctionManifest.entries().stream()
