@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.jena.query;
 
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
 import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
 import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
 import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
@@ -37,8 +38,12 @@ public final class GeometryBoundingCircle {
 			double radius = calculation.getRadius();
 			result = circumscribedPolygon(factory, centre, radius);
 		}
-		return new GeometryWrapper(result, geometry.getSrsURI(), geometry.getGeometryDatatypeURI(),
-				new DimensionInfo(2, 2, result.getDimension()));
+		if (result.isEmpty()) {
+			return new GeometryWrapper(result, geometry.getSrsURI(), geometry.getGeometryDatatypeURI(),
+					new DimensionInfo(2, 2, result.getDimension()));
+		}
+		return GeometryWrapperFactory.createGeometry(
+				result, geometry.getSrsURI(), geometry.getGeometryDatatypeURI());
 	}
 
 	private static boolean hasOneUniqueCoordinate(Geometry geometry) {
