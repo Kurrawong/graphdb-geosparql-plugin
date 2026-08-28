@@ -256,6 +256,12 @@ public class TransformFunctionTest {
 	}
 
 	@Test
+	public void transformRejectsProjectedResultsOutsideTheTargetCrsDomain() {
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(wkt("POINT(0 0)"), VALUE_FACTORY.createIRI(EPSG_32634)));
+	}
+
+	@Test
 	public void transformSupportsGenericGeometryCollections() throws Exception {
 		Literal source = wkt("<" + EPSG_4326 + "> GEOMETRYCOLLECTION("
 				+ "POINT(41 24),LINESTRING(41 24,42 25))");
