@@ -122,7 +122,7 @@ public final class JenaGeometryAdapter {
 		}
 		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype)) {
 			Literal literal = toGmlLiteral(valueFactory, result);
-			requireRoundTrippableGeometryResult(literal, resultPolicy);
+			requireRoundTrippableGeometryResult(result, literal, resultPolicy);
 			return valueFactory.createLiteral(literal.stringValue(), datatype);
 		}
 		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
@@ -421,13 +421,20 @@ public final class JenaGeometryAdapter {
 		}
 	}
 
-	private static void requireRoundTrippableGeometryResult(Literal literal,
+	private static void requireRoundTrippableGeometryResult(GeometryWrapper expected, Literal literal,
 			QueryGeometryResultPolicy resultPolicy) {
+		GeometryWrapper actual;
 		try {
-			parseQueryGeometryResult(literal, resultPolicy);
+			actual = parseQueryGeometryResult(literal, resultPolicy);
 		} catch (JenaGeoSparqlException e) {
 			throw new JenaGeoSparqlException(
 					"Geometry result cannot represent its required coordinate layout", e);
+		}
+		if (resultPolicy == QueryGeometryResultPolicy.TRANSFORM
+				&& !expected.getSrsURI().equals(actual.getSrsURI())) {
+			throw new JenaGeoSparqlException(
+					"Geometry result cannot represent its required SRS: expected "
+							+ expected.getSrsURI() + ", found " + actual.getSrsURI());
 		}
 	}
 

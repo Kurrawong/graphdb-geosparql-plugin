@@ -231,6 +231,20 @@ public class TransformFunctionTest {
 	}
 
 	@Test
+	public void emptyGmlTransformRequiresRepresentableTargetSrs() throws Exception {
+		Literal source = gmlFromWkt("POINT EMPTY");
+
+		Literal crs84Result = (Literal) evaluate(
+				source, VALUE_FACTORY.createIRI(CRS84));
+		assertEquals(GeoConstants.GEO_GML_LITERAL, crs84Result.getDatatype());
+		assertEquals("", crs84Result.stringValue());
+		assertEquals(CRS84,
+				JenaGeometryAdapter.toSourceGeometryLiteral(crs84Result).effectiveCrsUri());
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(source, VALUE_FACTORY.createIRI(EPSG_32634)));
+	}
+
+	@Test
 	public void geoJsonIdentityTransformRetainsDefinedZAndCanonicalizesEmptyResultsToXy() throws Exception {
 		Literal xy = geoJson("{\"type\":\"Point\",\"coordinates\":[1,2]}");
 		Literal xyz = geoJson("{\"type\":\"Point\",\"coordinates\":[1,2,3]}");
