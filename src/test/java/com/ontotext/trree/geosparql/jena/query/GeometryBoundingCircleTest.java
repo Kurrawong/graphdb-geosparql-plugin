@@ -49,6 +49,16 @@ public class GeometryBoundingCircleTest {
 	}
 
 	@Test
+	public void finishedPolygonContainsSourceCoordinatesAfterCentreRounding() {
+		GeometryWrapper source = wrapper(
+				"MULTIPOINT((34.66862840385779 -32.00186562417142),"
+						+ "(34.73185855756457 -31.92481945895624))");
+		Polygon polygon = (Polygon) GeometryBoundingCircle.calculate(source).getXYGeometry();
+
+		assertEquals(0, coordinatesOutsidePolygon(polygon, source.getXYGeometry()));
+	}
+
+	@Test
 	public void emptyAndSingleCoordinateInputsReturnXyDegenerateResults() {
 		GeometryWrapper empty = GeometryBoundingCircle.calculate(wrapper("POINT Z EMPTY"));
 		GeometryWrapper point = GeometryBoundingCircle.calculate(wrapper(
@@ -92,6 +102,27 @@ public class GeometryBoundingCircleTest {
 			}
 		}
 		return inside;
+	}
+
+	private int coordinatesOutsidePolygon(Polygon polygon, Geometry source) {
+		Coordinate[] vertices = polygon.getExteriorRing().getCoordinates();
+		int outside = 0;
+		for (Coordinate coordinate : source.getCoordinates()) {
+			for (int index = 0; index < vertices.length - 1; index++) {
+				BigDecimal startX = exact(vertices[index].x);
+				BigDecimal startY = exact(vertices[index].y);
+				BigDecimal edgeX = exact(vertices[index + 1].x).subtract(startX);
+				BigDecimal edgeY = exact(vertices[index + 1].y).subtract(startY);
+				BigDecimal pointX = exact(coordinate.x).subtract(startX);
+				BigDecimal pointY = exact(coordinate.y).subtract(startY);
+				BigDecimal cross = edgeX.multiply(pointY).subtract(edgeY.multiply(pointX));
+				if (cross.signum() < 0) {
+					outside++;
+					break;
+				}
+			}
+		}
+		return outside;
 	}
 
 	private BigDecimal exact(double value) {
