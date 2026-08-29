@@ -69,7 +69,7 @@ update again.
 The plugin provides GeoSPARQL functions for geometry operations, measurements, spatial relationships, CRS
 transformation, and geometry conversion, together with GeoSPARQL predicates for indexed spatial queries. See the
 [GeoSPARQL functions and predicates reference](docs/geosparql-functions-and-predicates.md) for the complete list of
-supported functions, signatures, and predicates.
+supported functions, signatures, indexed predicates, and geometry data-model properties.
 
 ## Geometry serialization and conversion
 

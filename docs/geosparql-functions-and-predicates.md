@@ -154,23 +154,35 @@ FILTER(geof:sfWithin(?leftGeometry, ?rightGeometry))
 ?left geo:sfWithin ?right .
 ```
 
-Functions in the `geof:` namespace are SPARQL functions that operate on geometry literals. Predicates in the `geo:`
-namespace are triple-pattern spatial relations supported directly by the GraphDB GeoSPARQL plugin. The predicate form
-uses the GeoSPARQL index for candidate lookup followed by exact relation evaluation, so it is the appropriate form for
-indexed spatial queries.
+Functions in the `geof:` namespace are ordinary SPARQL functions that operate on geometry literals. They do not use
+the GeoSPARQL index and remain available independently of whether the plugin is enabled. The topological predicates in
+the `geo:` namespace are triple-pattern spatial relations interpreted by the GraphDB GeoSPARQL plugin. This indexed
+predicate path is available only while the plugin is enabled.
 
-At least one of the predicate's subject or object must be bound. The subject and object may be `geo:Feature` or
-`geo:Geometry` resources. For a Feature, the plugin uses the Geometry resources linked through
-`geo:hasDefaultGeometry`. For a Geometry, it uses the geometry literals supplied through `geo:asWKT`, `geo:asGML`,
-or `geo:asGeoJSON`. As a GraphDB extension, a `geo:wktLiteral`, `geo:gmlLiteral`, or `geo:geoJSONLiteral` may also
-appear directly in the object position. When one side is unbound, matching Feature and Geometry resources are returned
-from the GeoSPARQL index.
+At least one predicate operand must be bound. When one operand is unbound, the plugin uses the GeoSPARQL index for
+candidate lookup and then performs exact relation evaluation. When both operands are bound, the pair is evaluated
+directly without an index candidate search.
+
+The subject and object may be `geo:Feature` or `geo:Geometry` resources. For a Feature, the plugin uses the Geometry
+resources linked through `geo:hasDefaultGeometry`. For a Geometry, it uses the geometry literals supplied through
+`geo:asWKT`, `geo:asGML`, or `geo:asGeoJSON`. A `geo:wktLiteral`, `geo:gmlLiteral`, or `geo:geoJSONLiteral` may also
+be supplied as a bound operand on either side. To bind a geometry literal on the subject side, use a variable rather
+than placing the literal directly in triple-subject syntax:
+
+```sparql
+VALUES ?leftGeometry { "POINT(153 -27)"^^geo:wktLiteral }
+?leftGeometry geo:sfWithin ?right .
+```
+
+When one side is unbound, matching Feature and Geometry resources are returned from the GeoSPARQL index.
+
+### Indexed spatial relationship predicates
 
 The predicate semantics correspond to the matching topological functions described under
 [Spatial relationships](#spatial-relationships) and to the relation definitions in the
 [GeoSPARQL specification](https://docs.ogc.org/is/22-047r1/22-047r1.html).
 
-### Simple Features predicates
+#### Simple Features predicates
 
 | Predicate | Description |
 | --- | --- |
@@ -183,7 +195,7 @@ The predicate semantics correspond to the matching topological functions describ
 | `geo:sfOverlaps` | Relates spatial objects that overlap under Simple Features semantics. |
 | `geo:sfCrosses` | Relates spatial objects that cross under Simple Features semantics. |
 
-### Egenhofer predicates
+#### Egenhofer predicates
 
 | Predicate | Description |
 | --- | --- |
@@ -196,7 +208,7 @@ The predicate semantics correspond to the matching topological functions describ
 | `geo:ehInside` | Relates a subject spatial object that is inside the object spatial object. |
 | `geo:ehContains` | Relates a subject spatial object that contains the object spatial object. |
 
-### RCC8 predicates
+#### RCC8 predicates
 
 RCC8 predicates apply to area/area geometry pairs.
 
@@ -211,6 +223,35 @@ RCC8 predicates apply to area/area geometry pairs.
 | `geo:rcc8ntpp` | Relates a subject region that is a non-tangential proper part of the object region. |
 | `geo:rcc8ntppi` | Relates a subject region that is the non-tangential proper-part inverse of the object region. |
 
+### GeoSPARQL data-model properties
+
+The following ordinary RDF properties describe the geometry data used by this plugin. Querying these properties is an
+ordinary repository triple lookup; it does not itself perform a spatial-index search. When the plugin is enabled, it
+uses these statements to discover geometry data during full index builds and for incremental index maintenance as the
+statements change.
+
+| Property | Role |
+| --- | --- |
+| `geo:hasDefaultGeometry` | Links a Feature to its default Geometry resource. |
+| `geo:asWKT` | Associates a Geometry resource with a WKT geometry literal. |
+| `geo:asGML` | Associates a Geometry resource with a GML geometry literal. |
+| `geo:asGeoJSON` | Associates a Geometry resource with a GeoJSON geometry literal. |
+
+For example, the following update gives a Feature a default Geometry and supplies its WKT serialization:
+
+```sparql
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX ex: <http://example.com/>
+
+INSERT DATA {
+  ex:feature geo:hasDefaultGeometry ex:geometry .
+  ex:geometry geo:asWKT "POINT(153 -27)"^^geo:wktLiteral .
+}
+```
+
+Use `geo:asGML` with a `geo:gmlLiteral` or `geo:asGeoJSON` with a `geo:geoJSONLiteral` to supply the corresponding
+alternative serialization.
+
 ## Geometry conversion
 
 | Function | Description |
@@ -224,7 +265,8 @@ The `geof:asGML` profile string must be
 
 ## Compatibility functions
 
-The following overloads and aliases are retained for compatibility with existing GraphDB queries.
+The following overloads and aliases are retained for compatibility with existing GraphDB queries. Despite their
+prefix, the `geo:` entries in this table are registered SPARQL function aliases, not RDF properties.
 
 | Function | Description |
 | --- | --- |
