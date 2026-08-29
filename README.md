@@ -64,12 +64,12 @@ The update runs synchronously and may take significant time for a large reposito
 finishes. If the rebuild fails, resolve the reported geometry, CRS-data, storage, or configuration problem and run the
 update again.
 
-## SPARQL functions
+## GeoSPARQL functions and predicates
 
 The plugin provides GeoSPARQL functions for geometry operations, measurements, spatial relationships, CRS
-transformation, and geometry conversion. See the
-[GeoSPARQL functions reference](docs/geosparql-functions.md) for the complete list of supported functions and
-signatures.
+transformation, and geometry conversion, together with GeoSPARQL predicates for indexed spatial queries. See the
+[GeoSPARQL functions and predicates reference](docs/geosparql-functions-and-predicates.md) for the complete list of
+supported functions, signatures, and predicates.
 
 ## Geometry serialization and conversion
 

@@ -13,10 +13,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginTest {
 	private static final String SERIALIZATION_GUIDE = "docs/geosparql-geometry-serialization.md";
+	private static final String FUNCTIONS_AND_PREDICATES_REFERENCE =
+			"docs/geosparql-functions-and-predicates.md";
 	private static final String PREFIXES = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
@@ -54,6 +57,20 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 	}
 
 	@Test
+	public void readmeLinksTheFunctionsAndPredicatesReference() throws IOException {
+		String readme = Files.readString(Path.of("README.md"));
+		String reference = Files.readString(Path.of(FUNCTIONS_AND_PREDICATES_REFERENCE));
+
+		assertTrue(readme.contains("[GeoSPARQL functions and predicates reference]("
+				+ FUNCTIONS_AND_PREDICATES_REFERENCE + ")"));
+		assertTrue(reference.contains("# GeoSPARQL functions and predicates reference"));
+		assertTrue(reference.contains("FILTER(geof:sfWithin(?leftGeometry, ?rightGeometry))"));
+		assertTrue(reference.contains("?left geo:sfWithin ?right ."));
+		assertTrue(reference.contains("uses the GeoSPARQL index for candidate lookup followed by exact relation "
+				+ "evaluation"));
+	}
+
+	@Test
 	public void geofFunctionsAreAvailableWhenPluginIsDisabled() {
 		assertAsk(PREFIXES
 				+ "ASK {\n"
@@ -65,7 +82,7 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 	}
 
 	@Test
-	public void documentedPropertyRelationPredicatesAreRegistered() {
+	public void documentedPropertyRelationPredicatesAreRegistered() throws IOException {
 		Set<IRI> expected = Set.of(
 				GeoConstants.GEO_SF_EQUALS,
 				GeoConstants.GEO_SF_DISJOINT,
@@ -97,6 +114,13 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 				.collect(Collectors.toSet());
 
 		assertEquals(expected, actual);
+
+		String reference = Files.readString(Path.of(FUNCTIONS_AND_PREDICATES_REFERENCE));
+		for (IRI predicate : actual) {
+			assertTrue("Missing documented predicate " + predicate,
+					reference.contains("| `geo:" + predicate.getLocalName() + "` |"));
+		}
+		assertFalse(reference.contains("| `geo:relate` |"));
 	}
 
 	@Test
