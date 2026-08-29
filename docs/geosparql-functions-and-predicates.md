@@ -1,10 +1,11 @@
-# GeoSPARQL functions reference
+# GeoSPARQL functions and predicates reference
 
-The GraphDB GeoSPARQL plugin provides SPARQL functions for working with geometry literals, including geometry
-operations, measurements, coordinate transformations, spatial relationships, and format conversion. The tables below
-list the supported functions and their signatures. Each signature shows the result type before the function name.
+The GraphDB GeoSPARQL plugin provides GeoSPARQL functions for working with geometry literals, including geometry
+operations, measurements, coordinate transformations, spatial relationships, and format conversion. It also provides
+GeoSPARQL predicates for indexed spatial queries. The tables below list the supported functions, signatures, and
+predicates. Each function signature shows the result type before the function name.
 
-Use these prefixes with the signatures below:
+Use these prefixes with the examples and signatures below:
 
 ```sparql
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>
@@ -140,6 +141,75 @@ RCC8 functions apply to area/area geometry pairs.
 | Function | Description |
 | --- | --- |
 | `xsd:boolean geof:relate(geomLiteral left, geomLiteral right, xsd:string pattern)` | Tests the geometries against a DE-9IM intersection pattern. |
+
+## GeoSPARQL predicates
+
+GeoSPARQL topological relations can be queried in function form or predicate form:
+
+```sparql
+# Function form
+FILTER(geof:sfWithin(?leftGeometry, ?rightGeometry))
+
+# Predicate form
+?left geo:sfWithin ?right .
+```
+
+Functions in the `geof:` namespace are SPARQL functions that operate on geometry literals. Predicates in the `geo:`
+namespace are triple-pattern spatial relations supported directly by the GraphDB GeoSPARQL plugin. The predicate form
+uses the GeoSPARQL index for candidate lookup followed by exact relation evaluation, so it is the appropriate form for
+indexed spatial queries.
+
+At least one of the predicate's subject or object must be bound. The subject and object may be `geo:Feature` or
+`geo:Geometry` resources. For a Feature, the plugin uses the Geometry resources linked through
+`geo:hasDefaultGeometry`. For a Geometry, it uses the geometry literals supplied through `geo:asWKT`, `geo:asGML`,
+or `geo:asGeoJSON`. As a GraphDB extension, a `geo:wktLiteral`, `geo:gmlLiteral`, or `geo:geoJSONLiteral` may also
+appear directly in the object position. When one side is unbound, matching Feature and Geometry resources are returned
+from the GeoSPARQL index.
+
+The predicate semantics correspond to the matching topological functions described under
+[Spatial relationships](#spatial-relationships) and to the relation definitions in the
+[GeoSPARQL specification](https://docs.ogc.org/is/22-047r1/22-047r1.html).
+
+### Simple Features predicates
+
+| Predicate | Description |
+| --- | --- |
+| `geo:sfEquals` | Relates spatial objects that are spatially equal under Simple Features semantics. |
+| `geo:sfDisjoint` | Relates spatial objects that have no point in common. |
+| `geo:sfIntersects` | Relates spatial objects that have at least one point in common. |
+| `geo:sfTouches` | Relates spatial objects that touch without overlapping interiors. |
+| `geo:sfWithin` | Relates a subject spatial object that is within the object spatial object. |
+| `geo:sfContains` | Relates a subject spatial object that contains the object spatial object. |
+| `geo:sfOverlaps` | Relates spatial objects that overlap under Simple Features semantics. |
+| `geo:sfCrosses` | Relates spatial objects that cross under Simple Features semantics. |
+
+### Egenhofer predicates
+
+| Predicate | Description |
+| --- | --- |
+| `geo:ehEquals` | Relates spatial objects that are spatially equal under Egenhofer semantics. |
+| `geo:ehDisjoint` | Relates spatial objects that are disjoint under Egenhofer semantics. |
+| `geo:ehMeet` | Relates spatial objects that meet under Egenhofer semantics. |
+| `geo:ehOverlap` | Relates spatial objects that overlap under Egenhofer semantics. |
+| `geo:ehCovers` | Relates a subject spatial object that covers the object spatial object. |
+| `geo:ehCoveredBy` | Relates a subject spatial object that is covered by the object spatial object. |
+| `geo:ehInside` | Relates a subject spatial object that is inside the object spatial object. |
+| `geo:ehContains` | Relates a subject spatial object that contains the object spatial object. |
+
+### RCC8 predicates
+
+RCC8 predicates apply to area/area geometry pairs.
+
+| Predicate | Description |
+| --- | --- |
+| `geo:rcc8eq` | Relates equal regions. |
+| `geo:rcc8dc` | Relates disconnected regions. |
+| `geo:rcc8ec` | Relates externally connected regions. |
+| `geo:rcc8po` | Relates partially overlapping regions. |
+| `geo:rcc8tppi` | Relates a subject region that is the tangential proper-part inverse of the object region. |
+| `geo:rcc8tpp` | Relates a subject region that is a tangential proper part of the object region. |
+| `geo:rcc8ntpp` | Relates a subject region that is a non-tangential proper part of the object region. |
+| `geo:rcc8ntppi` | Relates a subject region that is the non-tangential proper-part inverse of the object region. |
 
 ## Geometry conversion
 
