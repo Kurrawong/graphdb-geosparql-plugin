@@ -20,6 +20,11 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 	private static final String SERIALIZATION_GUIDE = "docs/geosparql-geometry-serialization.md";
 	private static final String FUNCTIONS_AND_PREDICATES_REFERENCE =
 			"docs/geosparql-functions-and-predicates.md";
+	private static final Set<IRI> GEOMETRY_DATA_MODEL_PROPERTIES = Set.of(
+			GeoConstants.GEO_HAS_DEFAULT_GEOMETRY,
+			GeoConstants.GEO_AS_WKT,
+			GeoConstants.GEO_AS_GML,
+			GeoConstants.GEO_AS_GEO_JSON);
 	private static final String PREFIXES = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
@@ -60,14 +65,17 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 	public void readmeLinksTheFunctionsAndPredicatesReference() throws IOException {
 		String readme = Files.readString(Path.of("README.md"));
 		String reference = Files.readString(Path.of(FUNCTIONS_AND_PREDICATES_REFERENCE));
+		String prose = normalizeWhitespace(reference);
 
 		assertTrue(readme.contains("[GeoSPARQL functions and predicates reference]("
 				+ FUNCTIONS_AND_PREDICATES_REFERENCE + ")"));
 		assertTrue(reference.contains("# GeoSPARQL functions and predicates reference"));
 		assertTrue(reference.contains("FILTER(geof:sfWithin(?leftGeometry, ?rightGeometry))"));
 		assertTrue(reference.contains("?left geo:sfWithin ?right ."));
-		assertTrue(reference.contains("uses the GeoSPARQL index for candidate lookup followed by exact relation "
-				+ "evaluation"));
+		assertTrue(prose.contains("This indexed predicate path is available only while the plugin is enabled"));
+		assertTrue(prose.contains("When one operand is unbound, the plugin uses the GeoSPARQL index"));
+		assertTrue(prose.contains("When both operands are bound"));
+		assertTrue(prose.contains("remain available independently of whether the plugin is enabled"));
 	}
 
 	@Test
@@ -124,6 +132,32 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 	}
 
 	@Test
+	public void documentedDataModelPropertiesMatchGeometryDiscoveryContract() throws IOException {
+		String reference = Files.readString(Path.of(FUNCTIONS_AND_PREDICATES_REFERENCE));
+		int sectionStart = reference.indexOf("### GeoSPARQL data-model properties");
+		int sectionEnd = reference.indexOf("## Geometry conversion", sectionStart);
+
+		assertTrue(sectionStart >= 0);
+		assertTrue(sectionEnd > sectionStart);
+		String section = reference.substring(sectionStart, sectionEnd);
+		String prose = normalizeWhitespace(section);
+		for (IRI property : GEOMETRY_DATA_MODEL_PROPERTIES) {
+			assertTrue("Missing documented data-model property " + property,
+					section.contains("| `geo:" + property.getLocalName() + "` |"));
+		}
+		assertTrue(prose.contains("ordinary repository triple lookup"));
+		assertTrue(prose.contains("discover geometry data during full index builds"));
+		assertTrue(prose.contains("incremental index maintenance"));
+		assertFalse(section.contains("`geo:hasSerialization`"));
+		assertFalse(section.contains("`geo:hasGeometry`"));
+		assertFalse(section.contains("`geo:coordinateDimension`"));
+		assertFalse(section.contains("`geo:dimension`"));
+		assertFalse(section.contains("`geo:spatialDimension`"));
+		assertFalse(section.contains("`geo:isEmpty`"));
+		assertFalse(section.contains("`geo:isSimple`"));
+	}
+
+	@Test
 	public void indexedPropertyRelationsCoverSimpleFeaturesEgenhoferAndRcc8() {
 		executeSparqlUpdateQuery(PREFIXES
 				+ "INSERT DATA {\n"
@@ -137,9 +171,12 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 				+ "    geo:asWKT \"POLYGON((1 1,1 2,2 2,2 1,1 1))\"^^geo:wktLiteral .\n"
 				+ "}");
 
+		String featureRelationQuery = PREFIXES + "ASK { ex:inner geo:sfWithin ex:outer }";
+		assertFalse(evaluateAsk(featureRelationQuery));
+
 		enablePlugin();
 
-		assertAsk(PREFIXES + "ASK { ex:inner geo:sfWithin ex:outer }");
+		assertAsk(featureRelationQuery);
 		assertAsk(PREFIXES + "ASK { ex:inner geo:ehInside ex:outer }");
 		assertAsk(PREFIXES + "ASK { ex:inner geo:rcc8ntpp ex:outer }");
 		assertAsk(PREFIXES
@@ -147,9 +184,22 @@ public class GeoSparqlDocumentationContractTest extends AbstractGeoSparqlPluginT
 				+ "  ex:innerGeom geo:sfWithin\n"
 				+ "    \"POLYGON((0 0,0 4,4 4,4 0,0 0))\"^^geo:wktLiteral .\n"
 				+ "}");
+		assertAsk(PREFIXES
+				+ "ASK {\n"
+				+ "  VALUES ?leftGeometry { \"POINT(1 1)\"^^geo:wktLiteral }\n"
+				+ "  ?leftGeometry geo:sfWithin ex:outer .\n"
+				+ "}");
 	}
 
 	private void assertAsk(String query) {
-		assertTrue(connection.prepareBooleanQuery(QueryLanguage.SPARQL, query).evaluate());
+		assertTrue(evaluateAsk(query));
+	}
+
+	private boolean evaluateAsk(String query) {
+		return connection.prepareBooleanQuery(QueryLanguage.SPARQL, query).evaluate();
+	}
+
+	private static String normalizeWhitespace(String value) {
+		return value.replaceAll("\\s+", " ");
 	}
 }
