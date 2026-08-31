@@ -42,6 +42,12 @@ directory. To install the plugin follow these steps:
 1. Unzip the built zip file in `lib/plugins`. This creates `lib/plugins/geosparql-plugin`.
 1. Restart GraphDB.
 
+## Using the plugin
+
+The plugin is configured separately for each repository. See [Using the GeoSPARQL plugin](docs/geosparql-usage.md)
+for a quick start, configuration parameters, enabling and disabling the spatial index, rebuilding, error handling, and
+indexed query examples.
+
 ## Rebuilding the GeoSPARQL index
 
 Rebuilding regenerates the GeoSPARQL Lucene index from the current repository data and applies the currently configured
@@ -69,7 +75,8 @@ update again.
 The plugin provides GeoSPARQL functions for geometry operations, measurements, spatial relationships, CRS
 transformation, and geometry conversion, together with GeoSPARQL predicates for indexed spatial queries. See the
 [GeoSPARQL functions and predicates reference](docs/geosparql-functions-and-predicates.md) for the complete list of
-supported functions, signatures, indexed predicates, and geometry data-model properties.
+supported functions, signatures, indexed predicates, and geometry data-model properties. For setup and index controls,
+see [Using the GeoSPARQL plugin](docs/geosparql-usage.md).
 
 ## Geometry serialization and conversion
 
