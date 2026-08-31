@@ -69,8 +69,8 @@ mvn -Pgraphdb-packaging-smoke verify
 
 The smoke test uses GraphDB 10.8.12 as its unattended test host; this does not establish GraphDB 10.8 compatibility.
 The production target remains GraphDB 11. See the
-[repository packaging smoke test](docs/geosparql-crs-deployment.md#repository-packaging-smoke-test) for its external
-Apache SIS data requirements.
+[GeoSPARQL CRS deployment guide](docs/geosparql-crs-deployment.md#configure-crs-data) for its external Apache SIS data
+requirements.
 
 ## License
 
