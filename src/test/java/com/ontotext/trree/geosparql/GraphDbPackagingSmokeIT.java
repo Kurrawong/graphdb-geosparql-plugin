@@ -34,6 +34,7 @@ public class GraphDbPackagingSmokeIT {
 	/*
 	 * The EPSG:3006 points reuse the GDB-10773 3-4-5 metre fixture. The surrounding polygon is the smallest
 	 * additional data needed to exercise an indexed GeoSPARQL property relation with the same external CRS definition.
+	 * The NZGD49 point and NZGD2000 result use LINZ's distortion-grid example 1, converted to decimal degrees.
 	 */
 	private static final String INSERT_GEOMETRIES = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
@@ -83,6 +84,20 @@ public class GraphDbPackagingSmokeIT {
 			+ "  FILTER(abs(?distance - 5.0) < 0.01)\n"
 			+ "}";
 
+	private static final String NZGD49_TO_NZGD2000_GRID_QUERY = ""
+			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
+			+ "PREFIX uom: <http://www.opengis.net/def/uom/OGC/1.0/>\n"
+			+ "ASK {\n"
+			+ "  BIND(geof:transform(\n"
+			+ "    \"<http://www.opengis.net/def/crs/EPSG/0/4272> POINT(-36.5 175)\"^^geo:wktLiteral,\n"
+			+ "    <http://www.opengis.net/def/crs/EPSG/0/4167>\n"
+			+ "  ) AS ?transformed)\n"
+			+ "  BIND(\"<http://www.opengis.net/def/crs/EPSG/0/4167> "
+			+ "POINT(-36.498190227778 175.000192969444)\"^^geo:wktLiteral AS ?expected)\n"
+			+ "  FILTER(geof:distance(?transformed, ?expected, uom:metre) < 0.1)\n"
+			+ "}";
+
 	private static final Pattern TRUE_BOOLEAN_RESULT =
 			Pattern.compile("\\\"boolean\\\"\\s*:\\s*true");
 
@@ -108,7 +123,7 @@ public class GraphDbPackagingSmokeIT {
 			.build();
 
 	@Test
-	public void assembledPluginUsesExternalCrsDataForIndexedPropertyRelationAndDistanceFunction() throws Exception {
+	public void assembledPluginUsesExternalCrsDataForQueriesAndDatumGridTransformation() throws Exception {
 		createRepository();
 		executeUpdate(INSERT_GEOMETRIES, "insert smoke-test geometries");
 		executeUpdate(ENABLE_GEOSPARQL, "enable GeoSPARQL and build its index");
@@ -116,6 +131,8 @@ public class GraphDbPackagingSmokeIT {
 		assertAskTrue(WITHIN_QUERY, "execute indexed geo:sfWithin query");
 		assertAskTrue(EPSG_3006_WITHIN_QUERY, "execute EPSG:3006 indexed geo:sfWithin query");
 		assertAskTrue(EPSG_3006_DISTANCE_QUERY, "evaluate EPSG:3006 five-metre distance function");
+		assertAskTrue(NZGD49_TO_NZGD2000_GRID_QUERY,
+				"evaluate NZGD49 to NZGD2000 datum-grid transformation");
 	}
 
 	private void assertAskTrue(String query, String operation) throws Exception {

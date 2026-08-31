@@ -260,6 +260,47 @@ ASK {
 }
 ```
 
+### Example verification using an NTv2 datum grid
+
+The following optional verification checks that GraphDB can load and use an NTv2 datum-shift grid, rather than only
+resolving CRS definitions from the EPSG database. It uses the LINZ transformation from NZGD49 (`EPSG:4272`) to
+NZGD2000 (`EPSG:4167`) and the `nzgd2kgrid0005.gsb` grid required by EPSG operation 1568.
+
+Obtain the grid from an approved source, such as the
+[OSGeo PROJ datum-grid repository](https://github.com/OSGeo/proj-datumgrid/blob/master/nzgd2kgrid0005.gsb), review its
+[CC BY 3.0 NZ licence](https://creativecommons.org/licenses/by/3.0/nz/), and place it at:
+
+```text
+$SIS_DATA/DatumChanges/nzgd2kgrid0005.gsb
+```
+
+Restart GraphDB after adding the file. If the GeoSPARQL index already contains data, run a
+[full force reindex](geosparql-usage.md#rebuild-the-index) before resuming indexed queries. This query uses the first
+[LINZ NZGD49-to-NZGD2000 transformation example](https://www.linz.govt.nz/guidance/geodetic-system/understanding-coordinate-conversions/geodetic-datum-conversions/transformations-nzgd1949-nzgd2000/geodetic-datum-transformation-examples-nzgd1949-nzgd2000).
+The EPSG coordinate order for both CRSs is latitude, longitude, so the input is written as `POINT(-36.5 175)`. The
+expected value is the published distortion-grid result converted from degrees, minutes, and seconds to decimal
+degrees.
+
+```sparql
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+PREFIX uom: <http://www.opengis.net/def/uom/OGC/1.0/>
+
+ASK {
+  BIND(geof:transform(
+    "<http://www.opengis.net/def/crs/EPSG/0/4272> POINT(-36.5 175)"^^geo:wktLiteral,
+    <http://www.opengis.net/def/crs/EPSG/0/4167>
+  ) AS ?transformed)
+  BIND("<http://www.opengis.net/def/crs/EPSG/0/4167> POINT(-36.498190227778 175.000192969444)"^^geo:wktLiteral AS ?expected)
+  FILTER(geof:distance(?transformed, ?expected, uom:metre) < 0.1)
+}
+```
+
+The expected result is `true`. With the EPSG database available but this grid missing, Apache SIS can select a
+lower-accuracy transformation instead; the query then returns `false` and the GraphDB log reports that the NTv2 file
+cannot be found. Use an equivalent known-point check from the responsible data authority for the datum grids required
+by your deployment.
+
 ### Validate the CRSs used by the deployment
 
 Validate each projected CRS used by the deployment with representative geometry data. Check both GeoSPARQL function
@@ -267,8 +308,8 @@ evaluation and indexed predicate queries. For cross-CRS transformations or CRSs 
 compare a transformed known point with an authoritative expected result. The EPSG:3006 example above does not verify
 cross-CRS transformation accuracy or the availability of grid files.
 
-For `EPSG:27700`, use an OSGB known point from a trusted source and check that the required NTv2 grid file is
-available. Get the expected value from the authority or data provider chosen for the installation.
+For other CRS pairs, use a known point from a trusted source and check that the required datum grid is available. Get
+the expected value from the authority or data provider chosen for the installation.
 
 ## Troubleshooting
 

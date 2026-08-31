@@ -26,4 +26,7 @@ COPY --from=plugin-build /plugin/geosparql-plugin \
 COPY sis-data/SIS-DATA/Databases/SpatialMetadata/ \
   /opt/graphdb/sis-data/Databases/SpatialMetadata/
 
+COPY sis-data/SIS-DATA/DatumChanges/ \
+  /opt/graphdb/sis-data/DatumChanges/
+
 ENV SIS_DATA=/opt/graphdb/sis-data
