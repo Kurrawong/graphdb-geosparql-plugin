@@ -59,6 +59,10 @@ WHERE {
 }
 ```
 
+The bound query polygon in this example is a GraphDB query convenience. GeoSPARQL defines relation properties between
+`geo:SpatialObject` resources, so queries intended to be portable should use Feature or Geometry resources as
+predicate operands.
+
 The predicate form uses the spatial index to find possible matches and then verifies the relationship. Use the
 corresponding `geof:` function when the query already has both geometry literals and does not need an indexed search.
 See the [GeoSPARQL functions and predicates reference](geosparql-functions-and-predicates.md) for the available query
