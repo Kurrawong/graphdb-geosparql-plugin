@@ -12,8 +12,8 @@ For GeoSPARQL documentation for the latest GraphDB release, see
 
 ## Compatibility and prerequisites
 
-The plugin targets GraphDB 11 and is compiled for Java 21. JDK 21 is required to build the plugin and run it in
-GraphDB.
+The plugin targets GraphDB 11 and is compiled for Java 21. JDK 21 is required to build from source, and GraphDB must
+run on Java 21.
 
 CRS84 geometry data works without additional CRS configuration. Projected and other EPSG CRSs may require Apache SIS
 CRS data and grid files supplied to GraphDB through `SIS_DATA`. See

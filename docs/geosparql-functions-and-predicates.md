@@ -28,9 +28,10 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 | `uri` | An IRI or a simple `xsd:anyURI` literal. |
 | `xsd:string` | A simple string literal without a language tag. |
 
-Invalid RDF terms, malformed geometry literals, unsupported coordinate reference systems, incompatible units, and
-ineligible geometry types produce a SPARQL expression error. Geometry results normally retain the datatype and
-coordinate reference system of the first source geometry literal. See
+Invalid RDF terms, malformed geometry literals, unsupported coordinate reference systems, and incompatible units
+generally produce a SPARQL expression error. Geometry-type eligibility and empty-geometry behavior are
+function-specific, as described below. Geometry results normally retain the datatype and coordinate reference system
+of the first source geometry literal. See
 [Geometry serialization and conversion](geosparql-geometry-serialization.md) for format-specific result rules and
 [GeoSPARQL CRS deployment](geosparql-crs-deployment.md) for runtime CRS requirements.
 
@@ -126,7 +127,8 @@ transformed to the CRS of the left geometry when required. The relation names fo
 
 ### RCC8 relations
 
-Both inputs to an RCC8 function must be area geometries, such as Polygon or MultiPolygon.
+RCC8 functions are defined for two area geometries, such as Polygon or MultiPolygon. If either input is not an area
+geometry, the function returns `false`.
 
 | Function | Description |
 | --- | --- |
@@ -213,7 +215,8 @@ The predicate semantics correspond to the matching topological functions describ
 
 #### RCC8 predicates
 
-Both sides of an RCC8 predicate must be area geometries, such as Polygon or MultiPolygon.
+RCC8 predicates are defined between two area geometries, such as Polygon or MultiPolygon. The relation evaluates to
+`false` for a pair containing a non-area geometry, so the predicate does not match that pair.
 
 | Predicate | Description |
 | --- | --- |
