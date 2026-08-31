@@ -3,12 +3,16 @@ package com.ontotext.trree.geosparql;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.eclipse.rdf4j.model.IRI;
 import org.junit.Before;
 import org.junit.Test;
 import org.locationtech.jts.geom.Dimension;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -41,6 +45,41 @@ public class GeoSparqlPropertyRelationTest {
 					: CandidateLookupPolicy.ENVELOPE_INTERSECTS;
 			assertEquals(relation + " candidate policy", expected, relation.getCandidateLookupPolicy());
 		}
+	}
+
+	@Test
+	public void supportedPredicateUrisCoverSimpleFeaturesEgenhoferAndRcc8() {
+		Set<IRI> expected = Set.of(
+				GeoConstants.GEO_SF_EQUALS,
+				GeoConstants.GEO_SF_DISJOINT,
+				GeoConstants.GEO_SF_INTERSECTS,
+				GeoConstants.GEO_SF_TOUCHES,
+				GeoConstants.GEO_SF_CROSSES,
+				GeoConstants.GEO_SF_WITHIN,
+				GeoConstants.GEO_SF_CONTAINS,
+				GeoConstants.GEO_SF_OVERLAPS,
+				GeoConstants.GEO_EH_EQUALS,
+				GeoConstants.GEO_EH_DISJOINT,
+				GeoConstants.GEO_EH_MEET,
+				GeoConstants.GEO_EH_OVERLAP,
+				GeoConstants.GEO_EH_COVERS,
+				GeoConstants.GEO_EH_COVERED_BY,
+				GeoConstants.GEO_EH_INSIDE,
+				GeoConstants.GEO_EH_CONTAINS,
+				GeoConstants.GEO_RCC8_EQ,
+				GeoConstants.GEO_RCC8_DC,
+				GeoConstants.GEO_RCC8_EC,
+				GeoConstants.GEO_RCC8_PO,
+				GeoConstants.GEO_RCC8_TPPI,
+				GeoConstants.GEO_RCC8_TPP,
+				GeoConstants.GEO_RCC8_NTPP,
+				GeoConstants.GEO_RCC8_NTPPI);
+
+		Set<IRI> actual = Arrays.stream(GeoSparqlPropertyRelation.values())
+				.map(GeoSparqlPropertyRelation::getPredicateUri)
+				.collect(Collectors.toSet());
+
+		assertEquals(expected, actual);
 	}
 
 	@Test

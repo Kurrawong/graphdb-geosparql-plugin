@@ -7,7 +7,8 @@ public final class MetricBuffer {
 	private MetricBuffer() {
 	}
 
-	public static GeometryWrapper calculate(GeometryWrapper geometry, double radius) throws Exception {
+	public static GeometryWrapper calculate(GeometryWrapper geometry, double radius)
+			throws Exception {
 		return geometry.buffer(radius, Unit_URI.METRE_URL);
 	}
 }

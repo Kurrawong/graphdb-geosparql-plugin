@@ -1,8 +1,9 @@
 package com.ontotext.trree.geosparql.jena.query;
 
-import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
-import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.datatype.GeometryDatatype;
+import org.apache.jena.geosparql.implementation.datatype.WKTDatatype;
+import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -14,7 +15,8 @@ public class MetricBufferTest {
 
 	@BeforeClass
 	public static void initializeJena() {
-		JenaGeometryAdapter.initialize();
+		SRSRegistry.setupDefaultSRS();
+		GeometryDatatype.registerDatatypes();
 	}
 
 	@Test
@@ -31,6 +33,6 @@ public class MetricBufferTest {
 	}
 
 	private GeometryWrapper geometry(String wkt) {
-		return SourceGeometryLiteral.fromWkt(wkt).asGeometryWrapper();
+		return GeometryWrapper.extract(wkt, WKTDatatype.URI);
 	}
 }
