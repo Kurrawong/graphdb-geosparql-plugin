@@ -92,11 +92,14 @@ Applications embedding the fragment must supply document-level information such 
 
 ## Empty geometries
 
-A zero-length `geo:geoJSONLiteral` represents an empty CRS84 Point. It has topological dimension zero and uses XY
-coordinate and spatial dimensions. `geof:asWKT` converts it to `POINT EMPTY`, `geof:asGeoJSON` emits a typed empty
-Point object, and `geof:asGML` emits the zero-length `geo:gmlLiteral` form. Typed empty WKT and GeoJSON roots remain
-reusable; converting an empty value through the zero-length GML form loses the original empty geometry type because
-that form represents an empty Point.
+A zero-length `geo:geoJSONLiteral` or `geo:gmlLiteral` is an empty Geometry. When evaluating or converting either
+generic empty value, the plugin treats it as an empty CRS84 Point with XY coordinate and spatial dimensions.
+Consequently, `geof:asWKT` produces `POINT EMPTY`, `geof:asGeoJSON` produces a typed empty Point object, and
+`geof:asGML` produces a zero-length `geo:gmlLiteral`.
+
+Typed empty WKT and GeoJSON values retain their geometry type across WKT and GeoJSON conversions. Passing an empty
+value through the zero-length GML form loses that type because the plugin subsequently evaluates the generic empty
+GML value as an empty Point.
 
 Empty geometry serializations retain empty topology and remain available for relation evaluation. Because they have
 no spatial extent, they are not returned by spatial-envelope candidate searches.
