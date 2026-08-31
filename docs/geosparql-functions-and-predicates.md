@@ -21,7 +21,7 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 | --- | --- |
 | `geomLiteral` | A source geometry literal with datatype `geo:wktLiteral`, `geo:gmlLiteral`, or `geo:geoJSONLiteral`. |
 | `numeric` | A literal with a valid numeric XSD datatype. |
-| `doubleLiteral` | A literal whose lexical form can be parsed as an `xsd:double`. This type is used only by compatibility and extension functions. |
+| `doubleLiteral` | A literal whose lexical form can be parsed as an `xsd:double`. This type is used by alternative signatures and GraphDB extension functions. |
 | `uri` | An IRI or a simple `xsd:anyURI` literal. |
 | `xsd:string` | A simple string literal without a language tag. |
 
@@ -37,7 +37,7 @@ coordinate reference system of the first source geometry literal. See
 | --- | --- |
 | `geomLiteral geof:boundary(geomLiteral geometry)` | Returns the topological boundary of `geometry`. |
 | `geomLiteral geof:boundingCircle(geomLiteral geometry)` | Returns a conservative polygonal representation of the planar minimum bounding circle. |
-| `geomLiteral geof:metricBuffer(geomLiteral geometry, numeric radius)` | Returns a buffer whose radius is measured in metres. The source CRS must support a linear metre radius. |
+| `geomLiteral geof:metricBuffer(geomLiteral geometry, numeric radius)` | Returns a buffer whose radius is measured in metres. The input geometry must use a CRS with linear units; geographic CRSs are not supported. |
 | `geomLiteral geof:buffer(geomLiteral geometry, numeric radius, uri unit)` | Returns a buffer using `radius` in the specified unit. |
 | `geomLiteral geof:centroid(geomLiteral geometry)` | Returns the centroid of `geometry`. |
 | `geomLiteral geof:convexHull(geomLiteral geometry)` | Returns the convex hull of `geometry`. |
@@ -54,12 +54,12 @@ coordinate reference system of the first source geometry literal. See
 | --- | --- |
 | `xsd:double geof:metricDistance(geomLiteral left, geomLiteral right)` | Returns the shortest distance in metres, calculated in the CRS of `left`. |
 | `xsd:double geof:distance(geomLiteral left, geomLiteral right, uri unit)` | Returns the shortest distance in the specified unit, calculated in the CRS of `left`. |
-| `xsd:double geof:metricArea(geomLiteral geometry)` | Returns area in square metres. Geographic source CRSes are not supported. |
-| `xsd:double geof:area(geomLiteral geometry, uri unit)` | Returns area in the square of the specified linear unit. Geographic source CRSes are not supported. |
+| `xsd:double geof:metricArea(geomLiteral geometry)` | Returns area in square metres. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |
+| `xsd:double geof:area(geomLiteral geometry, uri unit)` | Returns area in the square of the specified linear unit. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |
 | `xsd:double geof:metricLength(geomLiteral geometry)` | Returns length in metres. |
 | `xsd:double geof:length(geomLiteral geometry, uri unit)` | Returns length in the specified linear unit. |
-| `xsd:double geof:perimeter(geomLiteral geometry, uri unit)` | Returns perimeter in the specified linear unit. Non-area members use their length. |
-| `xsd:double geof:metricPerimeter(geomLiteral geometry)` | Returns perimeter in metres. Non-area members use their length. |
+| `xsd:double geof:perimeter(geomLiteral geometry, uri unit)` | Returns perimeter in the specified linear unit. Non-polygon inputs and collection members contribute their length. |
+| `xsd:double geof:metricPerimeter(geomLiteral geometry)` | Returns perimeter in metres. Non-polygon inputs and collection members contribute their length. |
 
 ## Geometry information
 
@@ -123,7 +123,7 @@ transformed to the CRS of the left geometry when required. The relation names fo
 
 ### RCC8 relations
 
-RCC8 functions apply to area/area geometry pairs.
+Both inputs to an RCC8 function must be area geometries, such as Polygon or MultiPolygon.
 
 | Function | Description |
 | --- | --- |
@@ -154,20 +154,20 @@ FILTER(geof:sfWithin(?leftGeometry, ?rightGeometry))
 ?left geo:sfWithin ?right .
 ```
 
-Functions in the `geof:` namespace are ordinary SPARQL functions that operate on geometry literals. They do not use
-the GeoSPARQL index and remain available independently of whether the plugin is enabled. The topological predicates in
-the `geo:` namespace are triple-pattern spatial relations interpreted by the GraphDB GeoSPARQL plugin. This indexed
-predicate path is available only while the plugin is enabled.
+Use a `geof:` function when the query already has two geometry literals to compare. Functions evaluate the relation
+directly, do not use the GeoSPARQL index, and remain available when the plugin is not enabled. Use the corresponding
+`geo:` predicate to find Features or Geometries that have a spatial relationship. Predicate queries use the GeoSPARQL
+index and require the plugin to be enabled.
 
-At least one predicate operand must be bound. When one operand is unbound, the plugin uses the GeoSPARQL index for
-candidate lookup and then performs exact relation evaluation. When both operands are bound, the pair is evaluated
-directly without an index candidate search.
+At least one side of a predicate query must already have a value. When one side is unknown, the index finds possible
+matches and the plugin verifies the spatial relationship. When both sides have values, the plugin evaluates the pair
+directly without searching the index.
 
 The subject and object may be `geo:Feature` or `geo:Geometry` resources. For a Feature, the plugin uses the Geometry
 resources linked through `geo:hasDefaultGeometry`. For a Geometry, it uses the geometry literals supplied through
 `geo:asWKT`, `geo:asGML`, or `geo:asGeoJSON`. A `geo:wktLiteral`, `geo:gmlLiteral`, or `geo:geoJSONLiteral` may also
-be supplied as a bound operand on either side. To bind a geometry literal on the subject side, use a variable rather
-than placing the literal directly in triple-subject syntax:
+be supplied as a bound value on either side. Because a triple pattern with a literal subject cannot match an RDF graph,
+bind a subject-side geometry literal to a variable first:
 
 ```sparql
 VALUES ?leftGeometry { "POINT(153 -27)"^^geo:wktLiteral }
@@ -210,7 +210,7 @@ The predicate semantics correspond to the matching topological functions describ
 
 #### RCC8 predicates
 
-RCC8 predicates apply to area/area geometry pairs.
+Both sides of an RCC8 predicate must be area geometries, such as Polygon or MultiPolygon.
 
 | Predicate | Description |
 | --- | --- |
@@ -227,8 +227,7 @@ RCC8 predicates apply to area/area geometry pairs.
 
 The following ordinary RDF properties describe the geometry data used by this plugin. Querying these properties is an
 ordinary repository triple lookup; it does not itself perform a spatial-index search. When the plugin is enabled, it
-uses these statements to discover geometry data during full index builds and for incremental index maintenance as the
-statements change.
+reads these statements when building or updating the spatial index.
 
 | Property | Role |
 | --- | --- |
@@ -263,10 +262,10 @@ alternative serialization.
 The `geof:asGML` profile string must be
 `http://www.opengis.net/def/profile/ogc/2.0/gml-sf0`.
 
-## Compatibility functions
+## Alternative signatures and aliases
 
-The following overloads and aliases are retained for compatibility with existing GraphDB queries. Despite their
-prefix, the `geo:` entries in this table are registered SPARQL function aliases, not RDF properties.
+The plugin also supports the following alternative function signatures and aliases. The `geo:` entries are SPARQL
+functions called with parentheses, not RDF properties used in triple patterns.
 
 | Function | Description |
 | --- | --- |
