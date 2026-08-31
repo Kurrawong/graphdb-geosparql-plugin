@@ -295,6 +295,6 @@ In addition to the GeoSPARQL functions, GraphDB provides several useful extensio
 | `xsd:boolean geoext:covers(geomLiteral left, geomLiteral right)` | Tests whether every point of `right` is also a point of `left`. |
 | `xsd:double geoext:hausdorffDistance(geomLiteral left, geomLiteral right)` | Measures geometric similarity after CRS alignment, normalized to the range `0`–`1`. Higher values indicate greater similarity; identical geometries return `1.0`. |
 | `geomLiteral geoext:shortestLine(geomLiteral left, geomLiteral right)` | Computes the shortest line between the geometries and returns it as a LineString in the CRS of `left`. |
-| `geomLiteral geoext:simplify(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the Douglas-Peucker algorithm, using `tolerance` as the maximum allowed deviation. |
-| `geomLiteral geoext:simplifyPreserveTopology(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the Douglas-Peucker algorithm while avoiding invalid derived geometries. |
+| `geomLiteral geoext:simplify(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the [Douglas-Peucker algorithm](https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm), using `tolerance` as the maximum allowed deviation. |
+| `geomLiteral geoext:simplifyPreserveTopology(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the [Douglas-Peucker algorithm](https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm) while avoiding invalid derived geometries. |
 | `xsd:boolean geoext:isValid(geomLiteral geometry)` | Tests whether the input is a valid geometry. |
