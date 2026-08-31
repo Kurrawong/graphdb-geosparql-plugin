@@ -52,6 +52,10 @@ reduce performance, but each possible match is still verified before it is retur
 [GeoSPARQL index](geosparql-usage.md#rebuild-the-index) after changing the CRS definitions or grid files available to
 GraphDB.
 
+For a non-empty GeoSPARQL index, the plugin records the CRS transformation environment used to derive its CRS84
+search bounds. If the Apache SIS version, EPSG dataset identity, or datum transformation grid files change, indexed
+predicate queries and index updates fail until a full force reindex completes.
+
 ## Loading data with an unsupported CRS
 
 `ignoreErrors` is `false` by default.
@@ -62,7 +66,8 @@ insert or during a full reindex.
 
 If `ignoreErrors=true`, invalid or unsupported repository geometries are skipped during indexing with a warning. This
 can help load incomplete data, but it does not make the skipped geometries queryable. The setting applies only to
-geometry parsing and transformation errors; an index storage failure still fails the repository update.
+geometry parsing, validation, and CRS transformation errors; an index storage failure still fails the repository
+update.
 
 Set the option with this SPARQL update:
 
@@ -143,13 +148,6 @@ docker run \
   -e SIS_DATA=/opt/graphdb/sis-data \
   -v /srv/graphdb/sis-data:/opt/graphdb/sis-data \
   graphdb-with-geosparql
-```
-
-systemd example:
-
-```ini
-[Service]
-Environment=SIS_DATA=/var/lib/graphdb/sis-data
 ```
 
 The exact path is up to you. It must be visible to the JVM that runs GraphDB. Do not mount the Derby database read-only
@@ -281,7 +279,7 @@ Cannot find NTv2 file named "OSTN02_NTv2.gsb".
 then a CRS operation needs a grid-shift file that is not present in the deployed CRS data. Install the required file,
 restart GraphDB, and rerun known-point validation.
 
-If a geometry fails with an unsupported CRS error, treat it as one of:
+If a geometry fails with a CRS-related parsing, validation, or transformation error, check for:
 
 - The CRS URI is not supported by Apache Jena and Apache SIS.
 - Apache Jena and Apache SIS support the CRS, but required SIS data is missing from the GraphDB installation.
