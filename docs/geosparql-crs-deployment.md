@@ -262,10 +262,10 @@ ASK {
 
 ### Validate the CRSs used by the deployment
 
-Repeat the relevant function and indexed-predicate checks with every projected CRS used by the deployment. Where a
-query transforms between CRSs or depends on datum grid files, compare at least one transformed known point with an
-authoritative expected result. The EPSG:3006 example above does not verify cross-CRS transformation accuracy or the
-availability of grid files.
+Validate each projected CRS used by the deployment with representative geometry data. Check both GeoSPARQL function
+evaluation and indexed predicate queries. For cross-CRS transformations or CRSs that depend on datum grid files,
+compare a transformed known point with an authoritative expected result. The EPSG:3006 example above does not verify
+cross-CRS transformation accuracy or the availability of grid files.
 
 For `EPSG:27700`, use an OSGB known point from a trusted source and check that the required NTv2 grid file is
 available. Get the expected value from the authority or data provider chosen for the installation.
