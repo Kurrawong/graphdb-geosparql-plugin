@@ -5,6 +5,9 @@ operations, measurements, coordinate transformations, spatial relationships, and
 GeoSPARQL predicates for indexed spatial queries. The tables below list the supported functions, signatures, and
 predicates. Each function signature shows the result type before the function name.
 
+For repository setup, index configuration, and a first query, see
+[Using the GeoSPARQL plugin](geosparql-usage.md).
+
 Use these prefixes with the examples and signatures below:
 
 ```sparql
@@ -279,18 +282,19 @@ functions called with parentheses, not RDF properties used in triple patterns.
 
 ## GraphDB extension functions
 
-These functions use the `http://rdf.useekm.com/ext#` namespace. They are GraphDB extension functions, not GeoSPARQL
-functions.
+In addition to the GeoSPARQL functions, GraphDB provides several useful extensions based on the
+[USeekM](https://www.w3.org/2001/sw/wiki/USeekM) library. These functions use the `geoext:` prefix for the
+`http://rdf.useekm.com/ext#` namespace; they are GraphDB extensions rather than GeoSPARQL functions.
 
 | Function | Description |
 | --- | --- |
-| `xsd:double geoext:area(geomLiteral geometry)` | Returns planar area in the square of the source CRS coordinate unit. |
-| `geomLiteral geoext:closestPoint(geomLiteral left, geomLiteral right)` | Returns the nearest point on `left` to `right`, in the CRS of `left`. |
-| `xsd:boolean geoext:containsProperly(geomLiteral left, geomLiteral right)` | Tests whether `left` properly contains `right`. |
-| `xsd:boolean geoext:coveredBy(geomLiteral left, geomLiteral right)` | Tests whether `left` is covered by `right`. |
-| `xsd:boolean geoext:covers(geomLiteral left, geomLiteral right)` | Tests whether `left` covers `right`. |
-| `xsd:double geoext:hausdorffDistance(geomLiteral left, geomLiteral right)` | Returns the normalized Hausdorff similarity measure after CRS alignment. Identical geometries return `1.0`. |
-| `geomLiteral geoext:shortestLine(geomLiteral left, geomLiteral right)` | Returns the line between the nearest points of the two geometries, in the CRS of `left`. |
-| `geomLiteral geoext:simplify(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the Douglas-Peucker algorithm. |
-| `geomLiteral geoext:simplifyPreserveTopology(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry while preserving topology. |
-| `xsd:boolean geoext:isValid(geomLiteral geometry)` | Tests whether the geometry literal parses and the geometry is valid. |
+| `xsd:double geoext:area(geomLiteral geometry)` | Calculates planar surface area in the square of the source CRS coordinate unit. |
+| `geomLiteral geoext:closestPoint(geomLiteral left, geomLiteral right)` | Computes the point on `left` that is closest to `right`, in the CRS of `left`. |
+| `xsd:boolean geoext:containsProperly(geomLiteral left, geomLiteral right)` | Tests whether `left` contains `right` and their boundaries do not intersect. |
+| `xsd:boolean geoext:coveredBy(geomLiteral left, geomLiteral right)` | Tests whether every point of `left` is also a point of `right`. |
+| `xsd:boolean geoext:covers(geomLiteral left, geomLiteral right)` | Tests whether every point of `right` is also a point of `left`. |
+| `xsd:double geoext:hausdorffDistance(geomLiteral left, geomLiteral right)` | Measures geometric similarity after CRS alignment, normalized to the range `0`–`1`. Higher values indicate greater similarity; identical geometries return `1.0`. |
+| `geomLiteral geoext:shortestLine(geomLiteral left, geomLiteral right)` | Computes the shortest line between the geometries and returns it as a LineString in the CRS of `left`. |
+| `geomLiteral geoext:simplify(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the Douglas-Peucker algorithm, using `tolerance` as the maximum allowed deviation. |
+| `geomLiteral geoext:simplifyPreserveTopology(geomLiteral geometry, doubleLiteral tolerance)` | Simplifies the geometry with the Douglas-Peucker algorithm while avoiding invalid derived geometries. |
+| `xsd:boolean geoext:isValid(geomLiteral geometry)` | Tests whether the input is a valid geometry. |
