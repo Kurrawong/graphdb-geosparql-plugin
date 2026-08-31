@@ -1,7 +1,16 @@
 # Geometry serialization and conversion
 
-The plugin supports WKT, GML, and GeoJSON geometry serializations as a bounded interoperability feature. The
-supported RDF datatypes, geometry serialization properties, and conversion functions are:
+The GraphDB GeoSPARQL plugin supports WKT, GML, and GeoJSON geometry literals. These formats can be stored using the
+corresponding GeoSPARQL properties, used with GeoSPARQL functions and predicates, and converted using the functions
+below.
+
+Use these prefixes with the examples and function names on this page:
+
+```sparql
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+```
 
 | Format | RDF datatype | Geometry serialization property | Conversion function |
 | --- | --- | --- | --- |
@@ -9,11 +18,22 @@ supported RDF datatypes, geometry serialization properties, and conversion funct
 | GML | `geo:gmlLiteral` | `geo:asGML` | `geof:asGML(geometry, profile)` |
 | GeoJSON | `geo:geoJSONLiteral` | `geo:asGeoJSON` | `geof:asGeoJSON(geometry)` |
 
-Conversion results are geometry literals that can be passed to the supported conversion functions and GeoSPARQL
-topological relations. The guarantee is semantic: it does not promise preservation of the source lexical form,
-decimal spelling, metadata, or every coordinate ordinate.
+Conversion produces a new geometry literal. The rules below describe which coordinate reference system and
+coordinate layout the result retains. Conversion may change the source text, numeric formatting, format-specific
+metadata, or omit Z and M ordinates where described below.
 
-## Conversion contract
+## Coordinate layouts
+
+The conversion rules use the following coordinate-layout notation:
+
+| Layout | Ordinates |
+| --- | --- |
+| XY | Two horizontal spatial coordinates. |
+| XYZ | Two horizontal spatial coordinates and a Z ordinate. In native GeoJSON, Z is altitude. |
+| XYM | Two horizontal spatial coordinates and a non-spatial measure ordinate. |
+| XYZM | Two horizontal spatial coordinates, a Z ordinate, and a non-spatial measure ordinate. |
+
+## Conversion behavior
 
 `geof:asWKT` preserves the source coordinate reference system and supported coordinate layout without transforming
 the geometry. A native XYZ GeoJSON literal therefore becomes XYZ WKT with CRS84 as its coordinate reference system.
@@ -27,34 +47,33 @@ CRS84. GeoJSON generated from WKT, GML, or a geometry-changing function is XY: Z
 the conversion cannot establish RFC 7946 altitude semantics for them. A native GeoJSON identity conversion may
 preserve a valid XYZ altitude.
 
-These rules give the following round-trip boundaries:
+These rules affect round trips as follows:
 
-- Direct WKT-to-GML-to-WKT and GML-to-WKT-to-GML conversions retain the source SRS and axis semantics within the
-  supported GML dimension contract.
+- Direct WKT-to-GML-to-WKT and GML-to-WKT-to-GML conversions retain the source CRS and axis semantics for the
+  supported GML coordinate layouts.
 - A round trip that passes through generated GeoJSON compares the CRS84-transformed XY geometry. It does not retain a
   non-CRS84 identifier, the source lexical form, or vertical and measured ordinates.
-- Native XYZ GeoJSON converts to XYZ WKT. It cannot convert directly to GML because CRS84 is two-dimensional. A later
-  conversion from that WKT to GeoJSON is a generated-GeoJSON path and emits XY.
-- GeoJSON output follows the JTS 1.20 ordinate formatter used by Apache Jena 6.2. It is deterministic for those
-  versions but is not a fixed-decimal or lossless-decimal format.
+- Native XYZ GeoJSON converts to XYZ WKT but cannot convert directly to GML because CRS84 is two-dimensional.
+  Converting that WKT back to GeoJSON produces generated GeoJSON and emits XY.
+- GeoJSON numeric output is deterministic, but it is not a fixed-decimal or lossless-decimal representation.
 
 ## GeoJSON input and output
 
-`geo:geoJSONLiteral` is fixed to CRS84. It accepts the seven RFC 7946 Geometry roots: Point, MultiPoint, LineString,
-MultiLineString, Polygon, MultiPolygon, and GeometryCollection. GeometryCollection members are checked recursively.
-Feature and FeatureCollection roots, a legacy `crs` member, malformed geometry structures, non-finite coordinates,
-mixed coordinate dimensions, and positions with more than three ordinates are rejected.
+`geo:geoJSONLiteral` is fixed to CRS84. It accepts the seven [RFC 7946](https://www.rfc-editor.org/rfc/rfc7946)
+Geometry roots: Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon, and GeometryCollection.
+GeometryCollection members are checked recursively. Feature and FeatureCollection roots, a legacy `crs` member,
+malformed geometry structures, non-finite coordinates, mixed coordinate dimensions, and positions with more than
+three ordinates are rejected.
 
 Coordinates must be homogeneous XY or XYZ and non-empty coordinate values must be inside the CRS84 domain. The third
-ordinate of native XYZ GeoJSON is altitude. A structurally and dimensionally valid finite `bbox` and genuine foreign
-members are accepted but ignored. They are not preserved or re-emitted. Members that define incompatible GeoJSON
-object types, such as `geometry`, `properties`, or `features`, are rejected when they occur on an actual Geometry
-object.
+ordinate of native XYZ GeoJSON is altitude. A structurally and dimensionally valid finite `bbox` and additional
+members permitted by RFC 7946 are accepted but ignored. They are not preserved or re-emitted. Members reserved for
+other GeoJSON object types, such as `geometry`, `properties`, or `features`, are rejected when they occur on a
+Geometry object.
 
-Generated GeoJSON omits the legacy `crs` member and writes polygon exteriors counter-clockwise. Antimeridian-crossing,
-polar, and large or global inputs retain Apache Jena's vertex-by-vertex CRS transformation behavior. The plugin does
-not add densification, antimeridian splitting, or ellipsoidal edge modelling, so this behavior is not a universal
-antimeridian or global-geometry guarantee.
+Generated GeoJSON omits the legacy `crs` member and writes polygon exteriors counter-clockwise. It transforms existing
+vertices to CRS84 without densifying edges, splitting geometries at the antimeridian, or modelling edges on an
+ellipsoid. Review the generated coordinates when converting antimeridian-crossing, polar, or large global geometries.
 
 ## GML profile
 
@@ -66,37 +85,35 @@ http://www.opengis.net/def/profile/ogc/2.0/gml-sf0
 ```
 
 Language-tagged literals, differently typed literals, IRIs, and other profile strings produce a SPARQL expression
-error. The selector identifies the supported Apache Jena GML 3.2 geometry-fragment subset: Point, LineString,
-Polygon, MultiPoint, MultiCurve, MultiSurface, and MultiGeometry output. Non-empty XY fragments are validated against
-the corresponding GML 3.2.1 geometry content models. This is not complete GML Simple Features application-schema
-conformance; applications embedding a fragment remain responsible for document-level requirements such as `gml:id`.
+error. The profile selects the supported GML 3.2 geometry-fragment types: Point, LineString, Polygon, MultiPoint,
+MultiCurve, MultiSurface, and MultiGeometry. Non-empty XY fragments are validated against the corresponding GML 3.2.1
+geometry content models. `geof:asGML` returns a geometry fragment, not a complete GML application-schema document.
+Applications embedding the fragment must supply document-level information such as `gml:id`.
 
 ## Empty geometries
 
-A zero-length `geo:geoJSONLiteral` represents an empty, zero-dimensional CRS84 Point with XY coordinate and spatial
-dimensions. `geof:asWKT` converts it to `POINT EMPTY`, `geof:asGeoJSON` emits a typed empty Point object, and
-`geof:asGML` emits the zero-length `geo:gmlLiteral` form. Typed empty WKT and GeoJSON roots remain reusable; converting
-an empty value through the zero-length GML form loses the original empty geometry type because that form represents
-an empty Point.
+A zero-length `geo:geoJSONLiteral` represents an empty CRS84 Point. It has topological dimension zero and uses XY
+coordinate and spatial dimensions. `geof:asWKT` converts it to `POINT EMPTY`, `geof:asGeoJSON` emits a typed empty
+Point object, and `geof:asGML` emits the zero-length `geo:gmlLiteral` form. Typed empty WKT and GeoJSON roots remain
+reusable; converting an empty value through the zero-length GML form loses the original empty geometry type because
+that form represents an empty Point.
 
-Empty geometry serializations retain empty topology. They are stored as non-spatial sentinel documents for exact
-evaluation and are not treated as Lucene spatial candidates.
+Empty geometry serializations retain empty topology and remain available for relation evaluation. Because they have
+no spatial extent, they are not returned by spatial-envelope candidate searches.
 
 ## Geometry serialization indexing
 
-Each WKT, GML, or GeoJSON geometry serialization attached to a Geometry is a distinct source geometry literal. No
-format is preferred. A GeoSPARQL property relation has existential source-literal semantics: it succeeds when any
-source-literal pair satisfies the relation.
+Each WKT, GML, or GeoJSON serialization attached to a Geometry is indexed independently, and no format is preferred.
+A GeoSPARQL predicate matches when any pair of the available geometry serializations satisfies the relation.
 
-Full indexing and incremental additions, replacements, and removals discover all three serialization properties for
-direct Geometry resources and for Features through their default Geometries. Lucene index geometry is used only for
-coarse candidate lookup. Exact evaluation continues to use the CRS-preserving source geometry literal.
+During initial indexing and subsequent repository updates, the plugin reads all three serialization properties from
+Geometry resources and from Features through their default Geometries. The spatial index finds possible matches, and
+the plugin verifies each relation using the original geometry literal and its coordinate reference system.
 
 ## Upgrading an existing repository
 
-An index built without GeoJSON serialization discovery is incompatible because it may omit existing
-`geo:asGeoJSON` statements. The plugin fails closed instead of returning incomplete spatial results. After upgrading,
-force reindex each enabled repository so the index is rebuilt under the WKT, GML, and GeoJSON discovery policy:
+After upgrading from a plugin version that did not index `geo:asGeoJSON` statements, force a reindex of each enabled
+repository so existing WKT, GML, and GeoJSON geometry data is included:
 
 ```sparql
 PREFIX plugin: <http://www.ontotext.com/plugins/geosparql#>
@@ -106,11 +123,5 @@ INSERT DATA {
 }
 ```
 
-Resolve any reported geometry, CRS-data, storage, or configuration failure and run the update again. A failed or
-rolled-back rebuild does not mark the index compatible.
-
-## Scope limits
-
-KML and DGGS geometry serializations are unsupported. The plugin does not provide `geof:asKML` or `geof:asDGGS`.
-The contract above covers reusable WKT, GML, and GeoJSON geometry serialization, conversion, indexing, and exact
-topological evaluation. It does not claim complete GeoSPARQL 1.1 conformance.
+Resolve any reported geometry, CRS-data, storage, or configuration failure and run the update again. If the rebuild
+fails, indexed spatial predicate queries remain unavailable.
