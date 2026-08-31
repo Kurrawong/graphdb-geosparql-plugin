@@ -22,11 +22,10 @@ COPY --from=plugin-build /plugin/geosparql-plugin \
   /opt/graphdb/dist/lib/plugins/geosparql-plugin
 
 # Optional EPSG data is deliberately not part of the assembled plugin. The smoke image
-# supplies only SIS_DATA; the Derby runtime must come from the assembled plugin.
+# supplies the external EPSG database; the Derby runtime must come from the assembled plugin.
 COPY sis-data/SIS-DATA/Databases/SpatialMetadata/ \
   /opt/graphdb/sis-data/Databases/SpatialMetadata/
 
-COPY sis-data/SIS-DATA/DatumChanges/ \
-  /opt/graphdb/sis-data/DatumChanges/
+RUN mkdir -p /opt/graphdb/sis-data/DatumChanges
 
 ENV SIS_DATA=/opt/graphdb/sis-data

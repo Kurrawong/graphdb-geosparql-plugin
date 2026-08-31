@@ -482,32 +482,6 @@
 					</plugin>
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-resources-plugin</artifactId>
-						<version>3.3.1</version>
-						<executions>
-							<execution>
-								<id>copy-packaging-smoke-datum-grid</id>
-								<phase>pre-integration-test</phase>
-								<goals>
-									<goal>copy-resources</goal>
-								</goals>
-								<configuration>
-									<outputDirectory>${graphdb.packaging-smoke.sis-data-dir}/SIS-DATA/DatumChanges</outputDirectory>
-									<resources>
-										<resource>
-											<directory>${project.basedir}/src/test/resources/datum-grids</directory>
-											<filtering>false</filtering>
-											<includes>
-												<include>nzgd2kgrid0005.gsb</include>
-											</includes>
-										</resource>
-									</resources>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-failsafe-plugin</artifactId>
 						<configuration>
 							<systemPropertyVariables>
