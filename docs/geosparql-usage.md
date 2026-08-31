@@ -80,8 +80,9 @@ The following predicates read or change the repository's GeoSPARQL configuration
 | `plugin:ignoreErrors` | Controls whether invalid or unsupported geometry data is skipped while indexing. | `false` |
 
 `plugin:prefixTree` and `plugin:precision` show the requested settings. Their `plugin:currentPrefixTree` and
-`plugin:currentPrecision` counterparts show the settings used to build the current index. Rebuild the index after
-changing the requested prefix tree or precision.
+`plugin:currentPrecision` counterparts show the settings used to build the current index. If the plugin is enabled,
+force a reindex after changing the requested prefix tree or precision. If the plugin is disabled, enabling it builds
+the index with the requested settings, so a separate force reindex is unnecessary.
 
 Precision controls index selectivity and size. Spatial relationships are still verified against the source geometry
 literals after candidate lookup.
@@ -101,8 +102,8 @@ INSERT DATA {
 }
 ```
 
-While disabled, the plugin does not process repository updates or answer indexed GeoSPARQL predicate queries.
-GeoSPARQL functions remain available because they evaluate their geometry arguments directly.
+While disabled, the plugin does not incrementally index geometry-data updates or answer indexed GeoSPARQL predicate
+queries. GeoSPARQL functions and plugin configuration controls remain available.
 
 ### Check the current configuration
 
@@ -129,7 +130,8 @@ INSERT DATA {
 }
 ```
 
-Run the update that rebuilds the index after changing these settings.
+If the plugin is enabled, run the update below to rebuild the index after changing these settings. If the plugin is
+disabled, enable it to build the index with the requested settings.
 
 ### Rebuild the index
 
@@ -160,8 +162,11 @@ INSERT DATA {
 }
 ```
 
-Skipped geometries are not available to indexed predicate queries. Query-supplied geometry literals still produce an
-error when they are invalid or use an unsupported CRS. See
+The setting applies to subsequent indexing work. Rebuild the GeoSPARQL index after changing it if existing repository
+geometries need to be reconsidered under the new policy.
+
+Skipped geometries are not available to indexed predicate queries. Query-supplied geometry literals still produce
+an error when they are invalid or use an unsupported CRS. See
 [GeoSPARQL CRS deployment](geosparql-crs-deployment.md#loading-data-with-unsupported-crs) for details.
 
 ### Tune index building
