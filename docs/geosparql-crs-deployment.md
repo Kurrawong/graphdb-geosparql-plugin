@@ -187,9 +187,14 @@ Recommended validation checks:
 - Confirm a CRS that cannot be resolved produces a clear error.
 - Use known-point checks to detect missing operation or grid data that reduces accuracy without causing an error.
 
-### Check the target GraphDB runtime
+### Example verification using EPSG:3006
 
-Use these EPSG:3006 points as a simple runtime check:
+The following optional verification uses EPSG:3006 as an example projected CRS. It is useful because loading its
+definition checks access to the external EPSG dataset, and its metre-based coordinates allow a simple 3-4-5 distance
+check. EPSG:3006 is not required by the plugin, and successfully running this example does not validate any other
+CRS or datum transformation used by the deployment.
+
+The example uses these points:
 
 ```text
 CRS:      http://www.opengis.net/def/crs/EPSG/0/3006
@@ -254,6 +259,13 @@ ASK {
   ex:thing geo:sfWithin ex:container
 }
 ```
+
+### Validate the CRSs used by the deployment
+
+Repeat the relevant function and indexed-predicate checks with every projected CRS used by the deployment. Where a
+query transforms between CRSs or depends on datum grid files, compare at least one transformed known point with an
+authoritative expected result. The EPSG:3006 example above does not verify cross-CRS transformation accuracy or the
+availability of grid files.
 
 For `EPSG:27700`, use an OSGB known point from a trusted source and check that the required NTv2 grid file is
 available. Get the expected value from the authority or data provider chosen for the installation.
