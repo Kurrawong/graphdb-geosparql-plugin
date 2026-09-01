@@ -17,19 +17,23 @@ public class GraphDbPluginArchiveIT {
 	private static final String PLUGIN_DIRECTORY = "geosparql-plugin/";
 
 	@Test
-	public void assembledPluginContainsRequiredCrsRuntimeOnly() {
+	public void assembledPluginContainsRequiredRuntimeLibrariesOnly() {
 		Path pluginArchive = requiredPluginArchive();
 		try (ZipFile archive = new ZipFile(pluginArchive.toFile())) {
 			assertArchiveContains(archive, "geosparql-plugin.jar");
 			assertArchiveContains(archive, "derby.jar");
 			assertArchiveContains(archive, "derbyshared.jar");
 			assertArchiveContains(archive, "derbytools.jar");
+			assertArchiveContains(archive, "jts-io-common.jar");
+			assertArchiveContains(archive, "json-simple.jar");
 
 			assertArchiveDoesNotContain(archive, "sis-embedded-data.jar");
 			assertArchiveDoesNotContain(archive, "gt-referencing.jar");
 			assertArchiveDoesNotContain(archive, "gt-epsg-extension.jar");
 			assertArchiveDoesNotContain(archive, "gt-epsg-hsql.jar");
 			assertArchiveDoesNotContain(archive, "hsqldb.jar");
+			assertArchiveDoesNotContain(archive, "junit.jar");
+			assertArchiveDoesNotContain(archive, "hamcrest-core.jar");
 		} catch (IOException e) {
 			throw new AssertionError("Unable to inspect assembled plugin archive at " + pluginArchive, e);
 		}
