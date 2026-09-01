@@ -14,6 +14,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -21,6 +22,49 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class QueryFunctionProfileTest {
+	private static final String GEOF = "http://www.opengis.net/def/function/geosparql/";
+	private static final Set<String> REQUIREMENT_39_FUNCTIONS = Set.of(
+			GEOF + "boundary",
+			GEOF + "boundingCircle",
+			GEOF + "metricBuffer",
+			GEOF + "buffer",
+			GEOF + "centroid",
+			GEOF + "convexHull",
+			GEOF + "concaveHull",
+			GEOF + "coordinateDimension",
+			GEOF + "difference",
+			GEOF + "dimension",
+			GEOF + "metricDistance",
+			GEOF + "distance",
+			GEOF + "envelope",
+			GEOF + "geometryType",
+			GEOF + "intersection",
+			GEOF + "is3D",
+			GEOF + "isEmpty",
+			GEOF + "isMeasured",
+			GEOF + "isSimple",
+			GEOF + "spatialDimension",
+			GEOF + "symDifference",
+			GEOF + "transform",
+			GEOF + "union");
+	private static final Set<String> REQUIREMENT_40_FUNCTIONS = Set.of(
+			GEOF + "metricArea",
+			GEOF + "area",
+			GEOF + "geometryN",
+			GEOF + "metricLength",
+			GEOF + "length",
+			GEOF + "maxX",
+			GEOF + "maxY",
+			GEOF + "maxZ",
+			GEOF + "minX",
+			GEOF + "minY",
+			GEOF + "minZ",
+			GEOF + "numGeometries",
+			GEOF + "perimeter",
+			GEOF + "metricPerimeter");
+	private static final Set<String> REQUIRED_QUERY_PROFILE_FUNCTIONS = Stream.concat(
+			REQUIREMENT_39_FUNCTIONS.stream(), REQUIREMENT_40_FUNCTIONS.stream())
+			.collect(Collectors.toUnmodifiableSet());
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String METRE = "http://www.opengis.net/def/uom/OGC/1.0/metre";
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
@@ -28,14 +72,16 @@ public class QueryFunctionProfileTest {
 			new ValueFactoryTripleSource(VALUE_FACTORY);
 
 	@Test
-	public void manifestListsThirtySevenDistinctGeoSparqlFunctionUris() {
-		long distinctUris = QueryFunctionManifest.entries().stream()
+	public void manifestContainsRequiredQueryProfileFunctionsWithoutDuplicateUris() {
+		Set<String> actualManifestUris = QueryFunctionManifest.entries().stream()
 				.map(QueryFunctionManifest.Entry::uri)
-				.distinct()
-				.count();
+				.collect(Collectors.toSet());
 
-		assertEquals(37, QueryFunctionManifest.entries().size());
-		assertEquals(37, distinctUris);
+		assertEquals(23, REQUIREMENT_39_FUNCTIONS.size());
+		assertEquals(14, REQUIREMENT_40_FUNCTIONS.size());
+		assertEquals(37, REQUIRED_QUERY_PROFILE_FUNCTIONS.size());
+		assertTrue(actualManifestUris.containsAll(REQUIRED_QUERY_PROFILE_FUNCTIONS));
+		assertEquals(QueryFunctionManifest.entries().size(), actualManifestUris.size());
 		assertTrue(QueryFunctionManifest.entries().stream()
 				.allMatch(entry -> entry.uri().startsWith(GeoConstants.NS_GEOF)));
 	}
@@ -45,13 +91,13 @@ public class QueryFunctionProfileTest {
 		GeoSparqlFunctionRegistration.registerAll();
 		GeoSparqlFunctionRegistration.registerAll();
 
-		Set<String> profileUris = QueryFunctionManifest.entries().stream()
+		Set<String> manifestUris = QueryFunctionManifest.entries().stream()
 				.map(QueryFunctionManifest.Entry::uri)
 				.collect(Collectors.toSet());
-		long registeredProfileUris = FunctionRegistry.getInstance().getKeys().stream()
-				.filter(profileUris::contains)
+		long registeredManifestUris = FunctionRegistry.getInstance().getKeys().stream()
+				.filter(manifestUris::contains)
 				.count();
-		assertEquals(37, registeredProfileUris);
+		assertEquals(manifestUris.size(), registeredManifestUris);
 
 		for (QueryFunctionManifest.Entry entry : QueryFunctionManifest.entries()) {
 			Function function = registeredFunction(entry);
