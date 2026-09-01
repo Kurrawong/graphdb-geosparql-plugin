@@ -65,6 +65,18 @@ of the first source geometry literal. See
 | `xsd:double geof:perimeter(geomLiteral geometry, uri unit)` | Returns perimeter in the specified linear unit. Non-polygon inputs and collection members contribute their length. |
 | `xsd:double geof:metricPerimeter(geomLiteral geometry)` | Returns perimeter in metres. Non-polygon inputs and collection members contribute their length. |
 
+### Known dependency behaviour
+
+Functions with a `unit` argument, including measurement functions and `geof:buffer`, use the pinned Apache Jena 6.2.0
+unit registry for supported-unit recognition and conversion. That Jena version has an
+[incorrect conversion factor](https://github.com/apache/jena/blob/d0676a2c402ead68a133596f4ac5977be64dd251/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java#L41)
+for the OGC `yard` unit (`uom:yard`). Measurements requested in `uom:yard`, and buffers whose radius is expressed in
+`uom:yard`, therefore inherit that behaviour and should not be relied on for correct yard conversion.
+
+Other units remain governed by the pinned Jena dependency; the plugin does not independently define or validate each
+conversion factor. It intentionally does not override the yard conversion locally, so behaviour stays aligned with
+Jena 6.2.0 and can inherit an upstream correction through a future dependency upgrade.
+
 ## Geometry information
 
 | Function | Description |
