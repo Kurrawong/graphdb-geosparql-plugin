@@ -4,12 +4,10 @@ import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
-import org.apache.jena.geosparql.implementation.UnitsOfMeasure;
 import org.apache.jena.geosparql.implementation.intersection_patterns.EgenhoferIntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.RCC8IntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.SimpleFeaturesIntersectionPattern;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
-import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -28,30 +26,12 @@ import org.locationtech.jts.operation.relateng.RelatePredicate;
 import org.locationtech.jts.simplify.DouglasPeuckerSimplifier;
 import org.locationtech.jts.simplify.TopologyPreservingSimplifier;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * Direct Jena-backed evaluator for RDF4J GeoSPARQL filter functions.
  */
 public final class JenaFunctionEvaluator {
-	private static final Map<String, String> EXTENSION_UNIT_TO_JENA = new HashMap<>();
-	private static final double LIGHT_YEAR_IN_METRES = 9.460528405E15D;
 	private static final HausdorffSimilarityMeasure HAUSDORFF_SIMILARITY = new HausdorffSimilarityMeasure();
 	private static final String GML_SF0_PROFILE = "http://www.opengis.net/def/profile/ogc/2.0/gml-sf0";
-
-	static {
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_CENTIMETRE.stringValue(), Unit_URI.CENTIMETRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_KILOMETRE.stringValue(), Unit_URI.KILOMETRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_MILLIMETRE.stringValue(), Unit_URI.MILLIMETRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_METRE.stringValue(), Unit_URI.METRE_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_FOOT.stringValue(), Unit_URI.FOOT_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_US_SURVEY_FOOT.stringValue(), Unit_URI.US_SURVEY_FOOT_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_INCH.stringValue(), Unit_URI.INCH_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_MILE.stringValue(), Unit_URI.MILE_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_NAUTICAL_MILE.stringValue(), Unit_URI.NAUTICAL_MILE_URL);
-		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_YARD.stringValue(), Unit_URI.YARD_URL);
-	}
 
 	private JenaFunctionEvaluator() {
 	}
@@ -72,32 +52,15 @@ public final class JenaFunctionEvaluator {
 			}
 			if (GeoConstants.GEOF_DISTANCE.stringValue().equals(functionUri)
 					|| GeoConstants.EXT_HAUSDORFF_DISTANCE.stringValue().equals(functionUri)) {
-				return distance(valueFactory, functionUri, args);
+				return compatibilityDistance(valueFactory, functionUri, args);
 			}
 			if (GeoConstants.GEOF_BUFFER.stringValue().equals(functionUri)) {
-				requireArgs(functionUri, args, 2, 3);
+				requireArgs(functionUri, args, 2);
 				SourceGeometryLiteral source = sourceLiteral(args[0]);
 				GeometryWrapper wrapper = source.asGeometryWrapper();
 				double radius = doubleArg(args[1]);
-				GeometryWrapper buffered = args.length == 3
-						? buffer(wrapper, radius, unitUri(args[2]))
-						: wrapper.buffer(radius, wrapper.getUnitsOfMeasure().getUnitURI());
+				GeometryWrapper buffered = wrapper.buffer(radius, wrapper.getUnitsOfMeasure().getUnitURI());
 				return geometryLiteral(valueFactory, buffered, source.datatype());
-			}
-			if (GeoConstants.GEOF_CONVEX_HULL.stringValue().equals(functionUri)) {
-				return unaryGeometry(valueFactory, functionUri, args, GeometryWrapper::convexHull);
-			}
-			if (GeoConstants.GEOF_ENVELOPE.stringValue().equals(functionUri)) {
-				return unaryGeometry(valueFactory, functionUri, args, GeometryWrapper::envelope);
-			}
-			if (GeoConstants.GEOF_BOUNDARY.stringValue().equals(functionUri)) {
-				return unaryGeometry(valueFactory, functionUri, args, GeometryWrapper::boundary);
-			}
-			if (GeoConstants.GEOF_INTERSECTION.stringValue().equals(functionUri)
-					|| GeoConstants.GEOF_UNION.stringValue().equals(functionUri)
-					|| GeoConstants.GEOF_DIFFERENCE.stringValue().equals(functionUri)
-					|| GeoConstants.GEOF_SYM_DIFFERENCE.stringValue().equals(functionUri)) {
-				return binaryGeometry(valueFactory, functionUri, args);
 			}
 			if (GeoConstants.GEOF_GETSRID.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
@@ -388,9 +351,9 @@ public final class JenaFunctionEvaluator {
 		return true;
 	}
 
-	private static Literal distance(ValueFactory valueFactory, String functionUri, Value... args)
+	private static Literal compatibilityDistance(ValueFactory valueFactory, String functionUri, Value... args)
 			throws Exception {
-		requireArgs(functionUri, args, 2, 3);
+		requireArgs(functionUri, args, 2);
 		GeometryWrapper left = geometry(args[0]);
 		GeometryWrapper right = geometry(args[1]);
 		if (GeoConstants.EXT_HAUSDORFF_DISTANCE.stringValue().equals(functionUri)) {
@@ -398,64 +361,8 @@ public final class JenaFunctionEvaluator {
 			return valueFactory.createLiteral(HAUSDORFF_SIMILARITY.measure(left.getXYGeometry(),
 					transformedRight.getXYGeometry()));
 		}
-		if (args.length == 2) {
-			return valueFactory.createLiteral(left.getXYGeometry().distance(left.checkTransformSRS(right).getXYGeometry()));
-		}
-		if (GeoSparqlUnits.URI_LIGHT_YEAR.equals(args[2])) {
-			return valueFactory.createLiteral(left.distance(right, Unit_URI.METRE_URL) / LIGHT_YEAR_IN_METRES);
-		}
-		if (isAngularDistanceUnit(args[2])) {
-			double radians = left.distance(right, Unit_URI.METRE_URL) / UnitsOfMeasure.EARTH_MEAN_RADIUS;
-			return valueFactory.createLiteral(GeoSparqlUnits.URI_DEGREE.equals(args[2])
-					? Math.toDegrees(radians)
-					: radians);
-		}
-		if (isRawCoordinateDistanceUnit(args[2])) {
-			return valueFactory.createLiteral(left.getXYGeometry().distance(left.checkTransformSRS(right).getXYGeometry()));
-		}
-		return valueFactory.createLiteral(left.distance(right, unitUri(args[2])));
-	}
-
-	private static GeometryWrapper buffer(GeometryWrapper wrapper, double radius, String unitUri) throws Exception {
-		return wrapper.buffer(radius, radius == 0.0 ? wrapper.getUnitsOfMeasure().getUnitURI() : unitUri);
-	}
-
-	private static boolean isAngularDistanceUnit(Value unit) {
-		return GeoSparqlUnits.URI_DEGREE.equals(unit) || GeoSparqlUnits.URI_RADIAN.equals(unit);
-	}
-
-	private static boolean isRawCoordinateDistanceUnit(Value unit) {
-		return GeoSparqlUnits.URI_GRID_SPACING.equals(unit) || GeoSparqlUnits.URI_UNITY.equals(unit);
-	}
-
-	private interface UnaryGeometryOperation {
-		GeometryWrapper apply(GeometryWrapper geometry) throws Exception;
-	}
-
-	private static Literal unaryGeometry(ValueFactory valueFactory, String functionUri, Value[] args,
-										 UnaryGeometryOperation operation) throws Exception {
-		requireArgs(functionUri, args, 1);
-		SourceGeometryLiteral source = sourceLiteral(args[0]);
-		return geometryLiteral(valueFactory, operation.apply(source.asGeometryWrapper()), source.datatype());
-	}
-
-	private static Literal binaryGeometry(ValueFactory valueFactory, String functionUri, Value... args)
-			throws Exception {
-		requireArgs(functionUri, args, 2);
-		SourceGeometryLiteral source = sourceLiteral(args[0]);
-		GeometryWrapper left = source.asGeometryWrapper();
-		GeometryWrapper right = geometry(args[1]);
-		GeometryWrapper result;
-		if (GeoConstants.GEOF_INTERSECTION.stringValue().equals(functionUri)) {
-			result = left.intersection(right);
-		} else if (GeoConstants.GEOF_UNION.stringValue().equals(functionUri)) {
-			result = left.union(right);
-		} else if (GeoConstants.GEOF_DIFFERENCE.stringValue().equals(functionUri)) {
-			result = left.difference(right);
-		} else {
-			result = left.symDifference(right);
-		}
-		return geometryLiteral(valueFactory, result, source.datatype());
+		return valueFactory.createLiteral(
+				left.getXYGeometry().distance(left.checkTransformSRS(right).getXYGeometry()));
 	}
 
 	private static Literal nearestGeometry(ValueFactory valueFactory, String functionUri, Value... args)
@@ -562,14 +469,6 @@ public final class JenaFunctionEvaluator {
 		} catch (NumberFormatException e) {
 			throw new ValueExprEvaluationException(e);
 		}
-	}
-
-	private static String unitUri(Value value) throws ValueExprEvaluationException {
-		if (!(value instanceof IRI)) {
-			throw new ValueExprEvaluationException("Expected unit IRI, found: " + value);
-		}
-		String uri = value.stringValue();
-		return EXTENSION_UNIT_TO_JENA.getOrDefault(uri, uri);
 	}
 
 	private static void requireArgs(String functionUri, Value[] args, int... allowed) throws ValueExprEvaluationException {

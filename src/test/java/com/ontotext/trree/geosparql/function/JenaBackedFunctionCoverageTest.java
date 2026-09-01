@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -89,15 +90,6 @@ public class JenaBackedFunctionCoverageTest {
 
 	private static final List<IRI> NON_TOPOLOGICAL_COVERAGE = List.of(
 			GeoConstants.GEOF_RELATE,
-			GeoConstants.GEOF_DISTANCE,
-			GeoConstants.GEOF_BUFFER,
-			GeoConstants.GEOF_CONVEX_HULL,
-			GeoConstants.GEOF_INTERSECTION,
-			GeoConstants.GEOF_UNION,
-			GeoConstants.GEOF_DIFFERENCE,
-			GeoConstants.GEOF_SYM_DIFFERENCE,
-			GeoConstants.GEOF_ENVELOPE,
-			GeoConstants.GEOF_BOUNDARY,
 			GeoConstants.GEOF_GETSRID,
 			GeoConstants.GEOF_AS_GEO_JSON,
 			GeoConstants.GEOF_AS_WKT,
@@ -124,8 +116,11 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
-	public void registeredFunctionUrisHaveCoverageCases() {
+	public void uriDispatcherFunctionUrisHaveCoverageCases() {
 		Set<String> expected = new HashSet<>(GeoSparqlFunctionRegistration.supportedFunctionUris());
+		QueryFunctionManifest.entries().stream()
+				.map(QueryFunctionManifest.Entry::uri)
+				.forEach(expected::remove);
 		Set<String> actual = coveredFunctionUris();
 
 		assertEquals(expected, actual);
@@ -210,22 +205,17 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
-	public void documentedDistanceUnitsHaveDirectCoverage() throws Exception {
+	public void distanceUsesOnlyJenaCompatibleOutputUnits() throws Exception {
 		Literal left = wkt("POINT(0 0)");
 		Literal right = wkt("POINT(1 0)");
 
 		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_METRE),
 				111195.07973436874, 1e-6);
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_DEGREE),
-				1.0, 1e-9);
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_RADIAN),
-				0.017453292519943295, 1e-12);
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_GRID_SPACING),
-				1.0, 1e-12);
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_UNITY),
-				1.0, 1e-12);
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_LIGHT_YEAR),
-				1.1753580241416625e-11, 1e-20);
+		for (IRI incompatibleUnit : List.of(GeoSparqlUnits.URI_DEGREE, GeoSparqlUnits.URI_RADIAN,
+				GeoSparqlUnits.URI_GRID_SPACING, GeoSparqlUnits.URI_UNITY, GeoSparqlUnits.URI_LIGHT_YEAR)) {
+			assertThrows(incompatibleUnit.stringValue(), ValueExprEvaluationException.class,
+					() -> evaluate(GeoConstants.GEOF_DISTANCE, left, right, incompatibleUnit));
+		}
 	}
 
 	@Test
@@ -233,15 +223,17 @@ public class JenaBackedFunctionCoverageTest {
 		Literal left = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 20.0)");
 		Literal right = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 21.0)");
 
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_KILOMETRE),
+		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right,
+				VF.createIRI(Unit_URI.KILOMETRE_URL)),
 				109.5057, 0.0001);
 	}
 
 	@Test
 	public void bufferWithDocumentedUnitArgumentUsesRegisteredFunction() throws Exception {
 		assertWktLiteral(evaluate(GeoConstants.GEOF_BUFFER,
-				wkt("POINT(0 0)"), VF.createLiteral("0.0"), GeoSparqlUnits.URI_METRE),
-				"POLYGON EMPTY");
+				wkt("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(500000 4600000)"),
+				VF.createLiteral(0.0), GeoSparqlUnits.URI_METRE),
+				"<http://www.opengis.net/def/crs/EPSG/0/32634> POLYGON EMPTY");
 	}
 
 	@Test
@@ -262,28 +254,9 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
-	public void geometryProducingFunctionsHaveDirectCoverage() throws Exception {
+	public void twoArgumentZeroRadiusBufferReturnsEmptyPolygon() throws Exception {
 		assertWktLiteral(evaluate(GeoConstants.GEOF_BUFFER, wkt("POINT(0 0)"), VF.createLiteral("0.0")),
 				"POLYGON EMPTY");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_CONVEX_HULL,
-				wkt("MULTIPOINT ((0 0), (1 1), (0 1))")),
-				"POLYGON ((0 0, 0 1, 1 1, 0 0))");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_INTERSECTION,
-				wkt("LINESTRING(0 0, 1 1)"), wkt("LINESTRING(1 1, 0 0)")),
-				"LINESTRING (0 0, 1 1)");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_UNION,
-				wkt("LINESTRING(0 0, 1 1)"), wkt("LINESTRING(1 1, 0 0)")),
-				"LINESTRING (0 0, 1 1)");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_DIFFERENCE,
-				wkt("LINESTRING(0 0, 1 1)"), wkt("LINESTRING(1 1, 0 0)")),
-				"LINESTRING EMPTY");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_SYM_DIFFERENCE,
-				wkt("LINESTRING(0 0, 1 1)"), wkt("LINESTRING(1 1, 2 2)")),
-				"MULTILINESTRING ((0 0, 1 1), (1 1, 2 2))");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_ENVELOPE, wkt("LINESTRING(0 0, 1 1)")),
-				"POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))");
-		assertWktLiteral(evaluate(GeoConstants.GEOF_BOUNDARY, wkt("LINESTRING(0 0, 1 1)")),
-				"MULTIPOINT ((0 0), (1 1))");
 	}
 
 	@Test
