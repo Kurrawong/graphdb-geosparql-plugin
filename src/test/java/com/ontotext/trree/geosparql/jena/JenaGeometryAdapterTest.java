@@ -18,6 +18,9 @@ import org.locationtech.jts.geom.Envelope;
 
 import static org.junit.Assert.*;
 
+/**
+ * Verifies CRS-preserving geometry adaptation and datatype-aware result serialization.
+ */
 public class JenaGeometryAdapterTest {
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 	private static final String CRS84 = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
@@ -53,6 +56,76 @@ public class JenaGeometryAdapterTest {
 
 		assertEquals(JenaCalculationPrecision.DECIMAL_PLACES,
 				GeoSPARQLConfig.DECIMAL_PLACES_PRECISION);
+	}
+
+	@Test
+	public void wktResultSerializationRetainsRequestedDatatypeAndCrs() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
+
+		Literal result = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+				source.asGeometryWrapper(), GeoConstants.GEO_WKT_LITERAL);
+		SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		assertEquals(EPSG_32634, parsed.effectiveCrsUri());
+		assertTrue(parsed.asGeometryWrapper().getXYGeometry()
+				.equalsExact(source.asGeometryWrapper().getXYGeometry()));
+	}
+
+	@Test
+	public void gmlResultSerializationRetainsRequestedDatatypeAndCrs() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
+
+		Literal result = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+				source.asGeometryWrapper(), GeoConstants.GEO_GML_LITERAL);
+		SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+
+		assertEquals(GeoConstants.GEO_GML_LITERAL, result.getDatatype());
+		assertTrue(result.stringValue().startsWith("<gml:"));
+		assertEquals(EPSG_32634, parsed.effectiveCrsUri());
+		assertTrue(parsed.asGeometryWrapper().getXYGeometry()
+				.equalsExact(source.asGeometryWrapper().getXYGeometry()));
+	}
+
+	@Test
+	public void wktResultSerializationUsesTwoDimensionalWriterAndPreservesEmptyGeometryType() {
+		SourceGeometryLiteral threeDimensional = SourceGeometryLiteral.fromWkt("LINESTRING Z (0 0 1, 1 1 2)");
+		SourceGeometryLiteral empty = SourceGeometryLiteral.fromWkt("POINT EMPTY");
+
+		Literal dimensionalResult = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+				threeDimensional.asGeometryWrapper(), GeoConstants.GEO_WKT_LITERAL);
+		Literal emptyResult = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+				empty.asGeometryWrapper(), GeoConstants.GEO_WKT_LITERAL);
+
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(dimensionalResult)
+				.asGeometryWrapper().getCoordinateDimension());
+		assertEquals("LINESTRING (0 0, 1 1)", dimensionalResult.stringValue());
+		assertEquals("POINT EMPTY", emptyResult.stringValue());
+	}
+
+	@Test
+	public void gmlResultSerializationPreservesEmptyGeometryType() {
+		SourceGeometryLiteral empty = SourceGeometryLiteral.fromWkt("POINT EMPTY");
+
+		Literal result = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+				empty.asGeometryWrapper(), GeoConstants.GEO_GML_LITERAL);
+		SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+
+		assertEquals(GeoConstants.GEO_GML_LITERAL, result.getDatatype());
+		assertTrue(parsed.asGeometryWrapper().isEmpty());
+		assertEquals("Point", parsed.asGeometryWrapper().getGeometryType());
+	}
+
+	@Test
+	public void resultSerializationRejectsUnsupportedDatatype() {
+		IRI unsupported = VALUE_FACTORY.createIRI("http://example.com/geometryLiteral");
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("POINT(1 2)");
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+						source.asGeometryWrapper(), unsupported));
+
+		assertTrue(exception.getMessage().contains("Unsupported GeoSPARQL geometry datatype"));
 	}
 
 	@Test

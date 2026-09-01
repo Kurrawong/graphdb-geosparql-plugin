@@ -41,12 +41,15 @@ import java.util.function.Supplier;
  * geometry literal snapshots. Returned iterators own their Lucene readers and are closed by their callers.
  *
  * <p>During startup, the indexer performs index-level schema and CRS transformation environment checks. A non-empty
- * index must have the current schema metadata and the fingerprint of the transformation inputs used for candidate
- * envelopes. Missing or mismatched commit metadata causes query and update paths to fail with a force-reindex
- * message. These checks read commit metadata rather than stored documents, so startup remains independent of the
- * number of indexed geometries. The fingerprint is required conservatively for every non-empty index.
+ * index must have the current schema metadata, serialization-discovery policy, and fingerprint of the
+ * transformation inputs used for candidate envelopes. Missing or mismatched commit metadata causes query and
+ * update paths to fail with a force-reindex message. These checks read commit metadata rather than stored
+ * documents, so startup remains independent of the number of indexed geometries. The fingerprint is required
+ * conservatively for every non-empty index.
  *
- * <p>Fresh indexes and empty indexes can accept v2 writes. Successful v2 writes schedule the compatibility metadata
+ * <p>A directory without a Lucene commit can accept initial writes. Every existing commit, including one with no
+ * geometry documents, must carry current compatibility metadata because an empty old index may omit repository
+ * serializations that were not part of its discovery policy. Successful writes schedule the compatibility metadata
  * to be written on commit. Document-level schema validation remains defensive: a marked index with malformed or
  * mixed documents fails during document decoding rather than silently using invalid source geometry literal data.
  *
@@ -69,6 +72,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	private IndexCommit preTransactionCommit;
 	private boolean transactionActive;
 	private boolean provisionalCommitPublished;
+	private boolean provisionalCommitWasRebuild;
 	private boolean schemaMismatchAtTransactionStart;
 	private boolean crsEnvironmentMismatchAtTransactionStart;
 	private boolean recoveryRequired;
@@ -142,6 +146,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			preTransactionCommit = existingCommit ? snapshotExistingCommit() : null;
 			transactionActive = true;
 			provisionalCommitPublished = false;
+			provisionalCommitWasRebuild = false;
 			schemaMismatchAtTransactionStart = schemaMismatchDetected;
 			crsEnvironmentMismatchAtTransactionStart = crsEnvironmentMismatchDetected;
 			recoveryRequiredAtTransactionStart = recoveryRequired;
@@ -186,6 +191,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 	@Override
 	public void commit() throws Exception {
 		boolean rebuildWasInProgress = schemaRebuildInProgress;
+		provisionalCommitWasRebuild = rebuildWasInProgress;
 		try {
 			if (recoveryRequiredAtTransactionStart && !rebuildWasInProgress) {
 				assertReadableCurrentSchema();
@@ -221,6 +227,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		indexWriter.rollback();
 		indexWriter = null;
 		provisionalCommitPublished = false;
+		provisionalCommitWasRebuild = false;
 		schemaMismatchDetected = schemaMismatchAtTransactionStart;
 		crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
 		compatibilityMetadataPending = false;
@@ -232,26 +239,16 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		if (!transactionActive) {
 			return;
 		}
-		IOException cleanupFailure = null;
 		try {
 			releasePreTransactionCommit();
 			deleteObsoleteCommits();
-		} catch (IOException e) {
-			cleanupFailure = e;
-		}
-		try {
 			pendingTransactionMarker.remove();
-		} catch (IOException e) {
-			if (cleanupFailure == null) {
-				cleanupFailure = e;
-			} else {
-				cleanupFailure.addSuppressed(e);
-			}
-		}
-		recoveryRequired = false;
-		clearTransactionState();
-		if (cleanupFailure != null) {
-			throw cleanupFailure;
+			recoveryRequired = false;
+		} catch (Exception e) {
+			retainRecoveryState(e);
+			throw e;
+		} finally {
+			clearTransactionState();
 		}
 	}
 
@@ -265,28 +262,34 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		if (!transactionActive) {
 			return;
 		}
-		boolean pendingCommit = pendingTransactionMarker.exists();
-		if (indexWriter != null && indexWriter.isOpen()) {
-			indexWriter.rollback();
+		try {
+			boolean pendingCommit = pendingTransactionMarker.exists();
+			if (indexWriter != null && indexWriter.isOpen()) {
+				indexWriter.rollback();
+			}
+			boolean commitWasPublished = provisionalCommitPublished
+					|| pendingCommit && hasCommitAfterPreTransactionCommit();
+			if (commitWasPublished) {
+				restorePreTransactionCommit();
+			}
+			releasePreTransactionCommit();
+			deleteObsoleteCommits();
+			schemaMismatchDetected = detectSchemaMismatch();
+			crsEnvironmentMismatchDetected = detectCrsEnvironmentMismatch();
+			recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
+			if (requireRecovery && !pendingTransactionMarker.exists()) {
+				pendingTransactionMarker.create();
+			}
+			if (!recoveryRequired) {
+				pendingTransactionMarker.remove();
+			}
+			initSettings();
+		} catch (Exception e) {
+			retainRecoveryState(e);
+			throw e;
+		} finally {
+			clearTransactionState();
 		}
-		boolean commitWasPublished = provisionalCommitPublished
-				|| pendingCommit && hasCommitAfterPreTransactionCommit();
-		if (commitWasPublished) {
-			restorePreTransactionCommit();
-		}
-		releasePreTransactionCommit();
-		deleteObsoleteCommits();
-		schemaMismatchDetected = schemaMismatchAtTransactionStart;
-		crsEnvironmentMismatchDetected = crsEnvironmentMismatchAtTransactionStart;
-		recoveryRequired = recoveryRequiredAtTransactionStart || requireRecovery;
-		if (requireRecovery && !pendingTransactionMarker.exists()) {
-			pendingTransactionMarker.create();
-		}
-		if (!recoveryRequired) {
-			pendingTransactionMarker.remove();
-		}
-		initSettings();
-		clearTransactionState();
 	}
 
 	@Override
@@ -565,9 +568,6 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 				return false;
 			}
 			try (DirectoryReader reader = DirectoryReader.open(directory)) {
-				if (reader.numDocs() == 0) {
-					return false;
-				}
 				return !LuceneGeoDocumentSchema.hasCurrentSchemaCommitData(reader.getIndexCommit().getUserData());
 			}
 		} catch (IndexNotFoundException e) {
@@ -613,7 +613,12 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 			restoreConfig.setIndexCommit(preTransactionCommit);
 		}
 		try (IndexWriter restoreWriter = new IndexWriter(directory, restoreConfig)) {
-			if (preTransactionCommit != null) {
+			if (preTransactionCommit == null) {
+				if (!provisionalCommitWasRebuild) {
+					restoreWriter.setLiveCommitData(LuceneGeoDocumentSchema.currentCompatibilityCommitData(
+							restoreWriter.getLiveCommitData(), currentCrsEnvironmentFingerprint));
+				}
+			} else {
 				restoreWriter.setLiveCommitData(preTransactionCommit.getUserData().entrySet());
 			}
 			restoreWriter.commit();
@@ -639,7 +644,7 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 	}
 
-	private void deleteObsoleteCommits() throws IOException {
+	protected void deleteObsoleteCommits() throws IOException {
 		IndexWriter cleanupWriter = new IndexWriter(directory, newIndexWriterConfig());
 		try {
 			cleanupWriter.deleteUnusedFiles();
@@ -648,9 +653,22 @@ public class LuceneGeoIndexer implements GeoSparqlIndexer {
 		}
 	}
 
+	private void retainRecoveryState(Exception failure) {
+		recoveryRequired = true;
+		if (pendingTransactionMarker.exists()) {
+			return;
+		}
+		try {
+			pendingTransactionMarker.create();
+		} catch (IOException markerFailure) {
+			failure.addSuppressed(markerFailure);
+		}
+	}
+
 	private void clearTransactionState() {
 		transactionActive = false;
 		provisionalCommitPublished = false;
+		provisionalCommitWasRebuild = false;
 		indexWriter = null;
 		compatibilityMetadataPending = false;
 		schemaRebuildInProgress = false;

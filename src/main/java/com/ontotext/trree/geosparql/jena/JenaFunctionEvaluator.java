@@ -25,7 +25,6 @@ import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 import org.locationtech.jts.operation.distance.DistanceOp;
 import org.locationtech.jts.operation.relateng.RelateNG;
 import org.locationtech.jts.operation.relateng.RelatePredicate;
-import org.locationtech.jts.io.WKTWriter;
 import org.locationtech.jts.simplify.DouglasPeuckerSimplifier;
 import org.locationtech.jts.simplify.TopologyPreservingSimplifier;
 
@@ -39,6 +38,7 @@ public final class JenaFunctionEvaluator {
 	private static final Map<String, String> EXTENSION_UNIT_TO_JENA = new HashMap<>();
 	private static final double LIGHT_YEAR_IN_METRES = 9.460528405E15D;
 	private static final HausdorffSimilarityMeasure HAUSDORFF_SIMILARITY = new HausdorffSimilarityMeasure();
+	private static final String GML_SF0_PROFILE = "http://www.opengis.net/def/profile/ogc/2.0/gml-sf0";
 
 	static {
 		EXTENSION_UNIT_TO_JENA.put(GeoSparqlUnits.URI_CENTIMETRE.stringValue(), Unit_URI.CENTIMETRE_URL);
@@ -102,6 +102,15 @@ public final class JenaFunctionEvaluator {
 			if (GeoConstants.GEOF_GETSRID.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
 				return valueFactory.createLiteral(geometry(args[0]).getSRID(), XSD.ANYURI);
+			}
+			if (GeoConstants.GEOF_AS_GEO_JSON.stringValue().equals(functionUri)) {
+				return asGeoJson(valueFactory, functionUri, args);
+			}
+			if (GeoConstants.GEOF_AS_WKT.stringValue().equals(functionUri)) {
+				return asWkt(valueFactory, functionUri, args);
+			}
+			if (GeoConstants.GEOF_AS_GML.stringValue().equals(functionUri)) {
+				return asGml(valueFactory, functionUri, args);
 			}
 			if (GeoConstants.GEO_DIMENSION.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
@@ -495,15 +504,42 @@ public final class JenaFunctionEvaluator {
 	}
 
 	private static Literal geometryLiteral(ValueFactory valueFactory, GeometryWrapper wrapper, IRI datatype) {
-		if (!GeoConstants.GEO_GML_LITERAL.equals(datatype)) {
-			String wkt = new WKTWriter().write(wrapper.getParsingGeometry());
-			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(wrapper.getSrsURI())) {
-				wkt = "<" + wrapper.getSrsURI() + "> " + wkt;
-			}
-			return valueFactory.createLiteral(wkt, datatype);
+		return JenaGeometryAdapter.toRdf4jLiteral(valueFactory, wrapper, datatype);
+	}
+
+	private static Literal asGeoJson(ValueFactory valueFactory, String functionUri, Value... args)
+			throws Exception {
+		requireArgs(functionUri, args, 1);
+		SourceGeometryLiteral source = sourceLiteral(args[0]);
+		GeometryWrapper sourceGeometry = source.asGeometryWrapper();
+		GeometryWrapper crs84 = sourceGeometry.transform(SRS_URI.DEFAULT_WKT_CRS84);
+		int coordinateDimension = GeoConstants.GEO_JSON_LITERAL.equals(source.jenaDatatype())
+				? sourceGeometry.getCoordinateDimension()
+				: 2;
+		return JenaGeometryAdapter.toGeoJsonLiteral(valueFactory, crs84, coordinateDimension);
+	}
+
+	private static Literal asWkt(ValueFactory valueFactory, String functionUri, Value... args)
+			throws Exception {
+		requireArgs(functionUri, args, 1);
+		return JenaGeometryAdapter.toWktLiteral(valueFactory, sourceLiteral(args[0]).asGeometryWrapper());
+	}
+
+	private static Literal asGml(ValueFactory valueFactory, String functionUri, Value... args)
+			throws Exception {
+		requireArgs(functionUri, args, 2);
+		requireGmlProfile(args[1]);
+		return JenaGeometryAdapter.toGmlLiteral(valueFactory, sourceLiteral(args[0]).asGeometryWrapper());
+	}
+
+	private static void requireGmlProfile(Value value) throws ValueExprEvaluationException {
+		if (!(value instanceof Literal)
+				|| ((Literal) value).getLanguage().isPresent()
+				|| !XSD.STRING.equals(((Literal) value).getDatatype())
+				|| !GML_SF0_PROFILE.equals(value.stringValue())) {
+			throw new ValueExprEvaluationException(
+					"Expected GML profile string literal " + GML_SF0_PROFILE + ", found: " + value);
 		}
-		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(wrapper.getGeometryDatatypeURI());
-		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
 	}
 
 	private static boolean isValid(Value value) throws ValueExprEvaluationException {

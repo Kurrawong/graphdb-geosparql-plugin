@@ -43,6 +43,7 @@ final class RepositoryGeometrySource {
 		List<IndexGeometry> geometries = new ArrayList<>();
 		addGeometriesWithPredicate(geometryResourceId, plugin.asWKT, geometries);
 		addGeometriesWithPredicate(geometryResourceId, plugin.asGML, geometries);
+		addGeometriesWithPredicate(geometryResourceId, plugin.asGeoJSON, geometries);
 		return Collections.unmodifiableList(geometries);
 	}
 

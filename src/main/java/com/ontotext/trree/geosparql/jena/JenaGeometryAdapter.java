@@ -1,17 +1,24 @@
 package com.ontotext.trree.geosparql.jena;
 
+import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.apache.jena.datatypes.TypeMapper;
+import org.apache.jena.geosparql.implementation.DimensionInfo;
+import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.datatype.GeometryDatatype;
 import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
+import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.io.WKTWriter;
 
 /**
  * Central RDF4J-to-Jena conversion entry point for geometry values.
  *
  * <p>The adapter initializes Jena's geometry registries, preserves RDF literal datatype and lexical form in
-	 * {@link SourceGeometryLiteral}, and derives the CRS84 {@link IndexGeometry} value used by Lucene.
+ * {@link SourceGeometryLiteral}, and derives the CRS84 {@link IndexGeometry} value used by Lucene.
  * Exact relation semantics remain in the Jena evaluator rather than this conversion layer.
  */
 public final class JenaGeometryAdapter {
@@ -22,6 +29,7 @@ public final class JenaGeometryAdapter {
 		JenaCalculationPrecision.configure();
 		SRSRegistry.setupDefaultSRS();
 		GeometryDatatype.registerDatatypes();
+		TypeMapper.getInstance().registerDatatype(GeoJsonGeometryDatatype.INSTANCE);
 	}
 
 	public static SourceGeometryLiteral toSourceGeometryLiteral(Literal literal) {
@@ -44,10 +52,56 @@ public final class JenaGeometryAdapter {
 		return IndexGeometry.fromSourceGeometryLiteral(sourceGeometryLiteral);
 	}
 
-	public static Literal toRdf4jLiteral(ValueFactory valueFactory, org.apache.jena.geosparql.implementation.GeometryWrapper wrapper,
-										 IRI datatype) {
-		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(SourceGeometryLiteral.fromLiteral(
-				valueFactory.createLiteral(wrapper.getLexicalForm(), datatype)).jenaDatatype().stringValue());
+	public static Literal toRdf4jLiteral(ValueFactory valueFactory,
+			org.apache.jena.geosparql.implementation.GeometryWrapper wrapper, IRI datatype) {
+		IRI jenaDatatype = SourceGeometryLiteral.normalizeDatatype(datatype);
+		if (GeoConstants.GEO_WKT_LITERAL.equals(jenaDatatype)) {
+			String wkt = new WKTWriter().write(wrapper.getParsingGeometry());
+			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(wrapper.getSrsURI())) {
+				wkt = "<" + wrapper.getSrsURI() + "> " + wkt;
+			}
+			return valueFactory.createLiteral(wkt, datatype);
+		}
+		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
+			return toGeoJsonLiteral(valueFactory, wrapper, 2);
+		}
+		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype) && wrapper.isEmpty()) {
+			return valueFactory.createLiteral("", datatype);
+		}
+		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(jenaDatatype.stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), datatype);
+	}
+
+	static Literal toGeoJsonLiteral(ValueFactory valueFactory, GeometryWrapper wrapper,
+			int coordinateDimension) {
+		Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(
+				wrapper.getParsingGeometry(), coordinateDimension);
+		GeometryWrapper output = new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84,
+				GeoConstants.GEO_JSON_LITERAL.stringValue(),
+				new DimensionInfo(coordinateDimension, coordinateDimension, geometry.getDimension()));
+		org.apache.jena.rdf.model.Literal literal = output.asLiteral(GeoConstants.GEO_JSON_LITERAL.stringValue());
+		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_JSON_LITERAL);
+	}
+
+	static Literal toWktLiteral(ValueFactory valueFactory, GeometryWrapper wrapper) {
+		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(GeoConstants.GEO_WKT_LITERAL.stringValue());
+		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_WKT_LITERAL);
+	}
+
+	static Literal toGmlLiteral(ValueFactory valueFactory, GeometryWrapper wrapper) {
+		if (wrapper.isEmpty()) {
+			return valueFactory.createLiteral("", GeoConstants.GEO_GML_LITERAL);
+		}
+		DimensionInfo dimensions = wrapper.getDimensionInfo();
+		if (dimensions.getCoordinate() != dimensions.getSpatial()) {
+			throw new JenaGeoSparqlException("GML output does not support measured coordinate layouts");
+		}
+		if (dimensions.getSpatial() == 3
+				&& wrapper.getSrsInfo().getCrs().getCoordinateSystem().getDimension() != 3) {
+			throw new JenaGeoSparqlException(
+					"GML XYZ output requires a three-dimensional source CRS: " + wrapper.getSrsURI());
+		}
+		org.apache.jena.rdf.model.Literal literal = wrapper.asLiteral(GeoConstants.GEO_GML_LITERAL.stringValue());
+		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_GML_LITERAL);
 	}
 }
