@@ -49,6 +49,9 @@ public class GraphDbPackagingSmokeIT {
 			+ "  ex:thing a geo:Feature ; geo:hasDefaultGeometry ex:thingGeometry .\n"
 			+ "  ex:thingGeometry a geo:Geometry ;\n"
 			+ "    geo:asWKT \"POINT(1 1)\"^^geo:wktLiteral .\n"
+			+ "  ex:geoJsonThing a geo:Feature ; geo:hasDefaultGeometry ex:geoJsonThingGeometry .\n"
+			+ "  ex:geoJsonThingGeometry a geo:Geometry ;\n"
+			+ "    geo:asGeoJSON \"{\\\"type\\\":\\\"Point\\\",\\\"coordinates\\\":[2,2]}\"^^geo:geoJSONLiteral .\n"
 			+ "  ex:projectedContainer a geo:Feature ; geo:hasDefaultGeometry ex:projectedContainerGeometry .\n"
 			+ "  ex:projectedContainerGeometry a geo:Geometry ;\n"
 			+ "    geo:asWKT \"<http://www.opengis.net/def/crs/EPSG/0/3006> "
@@ -68,6 +71,11 @@ public class GraphDbPackagingSmokeIT {
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
 			+ "PREFIX ex: <http://example.com/packaging-smoke/>\n"
 			+ "ASK { ex:thing geo:sfWithin ex:container }";
+
+	private static final String GEOJSON_WITHIN_QUERY = ""
+			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+			+ "PREFIX ex: <http://example.com/packaging-smoke/>\n"
+			+ "ASK { ex:geoJsonThing geo:sfWithin ex:container }";
 
 	private static final String EPSG_3006_WITHIN_QUERY = ""
 			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
@@ -143,6 +151,8 @@ public class GraphDbPackagingSmokeIT {
 			executeUpdate(graphDb, ENABLE_GEOSPARQL, "enable GeoSPARQL and build its index");
 
 			assertAskTrue(graphDb, WITHIN_QUERY, "execute indexed geo:sfWithin query");
+			assertAskTrue(graphDb, GEOJSON_WITHIN_QUERY,
+					"execute GeoJSON indexed geo:sfWithin query");
 			assertAskTrue(graphDb, EPSG_3006_WITHIN_QUERY,
 					"execute EPSG:3006 indexed geo:sfWithin query");
 			assertAskTrue(graphDb, EPSG_3006_DISTANCE_QUERY,
