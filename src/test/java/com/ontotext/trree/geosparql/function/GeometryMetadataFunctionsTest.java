@@ -206,6 +206,53 @@ public class GeometryMetadataFunctionsTest {
 		}
 	}
 
+	@Test
+	public void gmlSubtypesSurviveJtsApproximation() throws Exception {
+		assertGmlType("Curve", "<g:segments><g:Arc><g:posList>5 0 0 5 -5 0</g:posList></g:Arc></g:segments>");
+		assertGmlType("Surface", "<g:patches><g:PolygonPatch>" + polygonRing() + "</g:PolygonPatch></g:patches>");
+		assertGmlType("MultiCurve", "<g:curveMember><g:LineString><g:posList>0 0 1 1</g:posList></g:LineString></g:curveMember>");
+		assertGmlType("MultiSurface", "<g:surfaceMember><g:Polygon>" + polygonRing() + "</g:Polygon></g:surfaceMember>");
+	}
+
+	@Test
+	public void gmlEnvelopeReportsItsOwnType() throws Exception {
+		Literal curve = VALUE_FACTORY.createLiteral(gml("Curve",
+			"<g:segments><g:LineStringSegment><g:posList>0 0 10 10 20 0</g:posList></g:LineStringSegment></g:segments>"), GeoConstants.GEO_GML_LITERAL);
+		Value envelope = evaluate("http://www.opengis.net/def/function/geosparql/envelope", curve);
+		assertEquals("http://www.opengis.net/ont/gml#Polygon", evaluate(GEOMETRY_TYPE_URI, envelope).stringValue());
+	}
+
+	@Test
+	public void typedEmptyGmlRetainsItsType() throws Exception {
+		for (String type : new String[] { "Point", "LineString", "Curve", "MultiCurve", "MultiSurface", "MultiGeometry" }) {
+			assertGmlType(type, "");
+		}
+	}
+
+	private static String polygonRing() {
+		return "<g:exterior><g:LinearRing><g:posList>0 0 10 0 10 10 0 0</g:posList></g:LinearRing></g:exterior>";
+	}
+
+	private static String gml(String type, String contents) {
+		return "<g:" + type + " xmlns:g=\"http://www.opengis.net/gml/3.2\" "
+			   + "srsName=\"http://www.opengis.net/def/crs/EPSG/0/27700\">" + contents + "</g:" + type + ">";
+	}
+
+	private void assertGmlType(String type, String contents) throws Exception {
+		Value result = evaluate(GEOMETRY_TYPE_URI,
+			VALUE_FACTORY.createLiteral(gml(type, contents), GeoConstants.GEO_GML_LITERAL));
+		assertEquals("http://www.opengis.net/ont/gml#" + type, result.stringValue());
+		assertEquals(XSD.ANYURI, ((Literal) result).getDatatype());
+	}
+
+	@Test
+	public void legacyGmlNamespaceRetainsSubtype() throws Exception {
+		String curve = gml("Curve", "<g:segments><g:LineStringSegment><g:posList>0 0 10 10</g:posList></g:LineStringSegment></g:segments>")
+				.replace("http://www.opengis.net/gml/3.2", "http://www.opengis.net/gml");
+		assertEquals("http://www.opengis.net/ont/gml#Curve", evaluate(GEOMETRY_TYPE_URI,
+				VALUE_FACTORY.createLiteral(curve, GeoConstants.GEO_GML_LITERAL)).stringValue());
+	}
+
 	private Value evaluate(String functionUri, Value... args) throws ValueExprEvaluationException {
 		GeoSparqlFunctionRegistration.registerAll();
 		Function function = FunctionRegistry.getInstance().get(functionUri)

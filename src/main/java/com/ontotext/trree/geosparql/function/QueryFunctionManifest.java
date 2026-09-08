@@ -90,7 +90,7 @@ final class QueryFunctionManifest {
 					new GeometryMemberProvider(GeometryMember::calculate,
 							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_GEOMETRY_TYPE.stringValue(), 1,
-					new UnaryGeometryAnyUriProvider(GeometryMetadata::simpleFeaturesTypeUri)),
+					new UnaryGeometryAnyUriProvider(GeometryMetadata::geometryTypeUri)),
 			new Entry(GeoConstants.GEOF_IS_3D.stringValue(), 1,
 					new UnaryGeometryBooleanProvider(GeometryMetadata::is3D)),
 			new Entry(GeoConstants.GEOF_IS_EMPTY.stringValue(), 1,
