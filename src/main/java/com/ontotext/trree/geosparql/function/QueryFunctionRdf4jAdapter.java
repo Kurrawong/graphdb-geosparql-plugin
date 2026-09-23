@@ -65,6 +65,11 @@ final class QueryFunctionRdf4jAdapter implements Function {
 						geometryArgument(args[0]), geometryArgument(args[1]));
 				yield valueFactory.createLiteral(result);
 			}
+			case QueryFunctionManifest.BinaryGeometryDoubleToBooleanProvider provider -> {
+				boolean result = provider.calculation().apply(
+						geometryArgument(args[0]), geometryArgument(args[1]), finiteNumeric(args[2], "distance"));
+				yield valueFactory.createLiteral(result);
+			}
 			case QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider provider -> {
 				GeometryWrapper left = geometryArgument(args[0]);
 				GeometryWrapper right = geometryArgument(args[1]);
@@ -100,13 +105,13 @@ final class QueryFunctionRdf4jAdapter implements Function {
 			case QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
 				GeometryWrapper result = provider.calculation().apply(
-						source.asGeometryWrapper(), finiteNumeric(args[1]));
+						source.asGeometryWrapper(), finiteNumeric(args[1], "radius"));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
 						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
-				double radius = finiteNumeric(args[1]);
+				double radius = finiteNumeric(args[1], "radius");
 				QueryUnits.ResolvedUnit unit = unitArgument(args[2]);
 				GeometryWrapper result = provider.calculation().apply(
 						source.asGeometryWrapper(), unit.toNative(radius), unit.unitUri());
@@ -152,15 +157,15 @@ final class QueryFunctionRdf4jAdapter implements Function {
 		return JenaGeometryAdapter.toSourceGeometryLiteral(value, true);
 	}
 
-	private double finiteNumeric(Value value) {
+	private double finiteNumeric(Value value, String role) {
 		if (!(value instanceof Literal literal)
 				|| !XMLDatatypeUtil.isNumericDatatype(literal.getDatatype())
 				|| !XMLDatatypeUtil.isValidValue(literal.getLabel(), literal.getDatatype())) {
-			throw new IllegalArgumentException("Expected a numeric radius, found: " + value);
+			throw new IllegalArgumentException("Expected a numeric " + role + ", found: " + value);
 		}
 		double numericValue = literal.doubleValue();
 		if (!Double.isFinite(numericValue)) {
-			throw new IllegalArgumentException("Expected a finite radius, found: " + value);
+			throw new IllegalArgumentException("Expected a finite " + role + ", found: " + value);
 		}
 		return numericValue;
 	}
