@@ -87,7 +87,7 @@ public class QueryFunctionProfileTest {
 	}
 
 	@Test
-	public void everyProfileFunctionRegistersOnceAndUsesItsManifestContract() throws Exception {
+	public void everyManifestFunctionRegistersOnceAndUsesItsContract() throws Exception {
 		GeoSparqlFunctionRegistration.registerAll();
 		GeoSparqlFunctionRegistration.registerAll();
 
@@ -117,7 +117,7 @@ public class QueryFunctionProfileTest {
 	}
 
 	@Test
-	public void everyProfileFunctionRejectsInvalidRdfAndGeometryInputs() {
+	public void everyManifestFunctionRejectsInvalidRdfAndGeometryInputs() {
 		GeoSparqlFunctionRegistration.registerAll();
 
 		for (QueryFunctionManifest.Entry entry : QueryFunctionManifest.entries()) {
@@ -161,6 +161,8 @@ public class QueryFunctionProfileTest {
 					new Value[]{geometry, otherGeometry};
 			case QueryFunctionManifest.BinaryGeometryToDoubleProvider ignored ->
 					new Value[]{geometry, otherGeometry};
+			case QueryFunctionManifest.BinaryGeometryDoubleToBooleanProvider ignored ->
+					new Value[]{geometry, otherGeometry, VALUE_FACTORY.createLiteral(1)};
 			case QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider ignored ->
 					new Value[]{geometry, otherGeometry, unit};
 			case QueryFunctionManifest.GeometryMemberProvider ignored ->
@@ -190,7 +192,8 @@ public class QueryFunctionProfileTest {
 			assertEquals(entry.uri(), GeoConstants.GEO_WKT_LITERAL, literal.getDatatype());
 		} else if (provider instanceof QueryFunctionManifest.UnaryGeometryAnyUriProvider) {
 			assertEquals(entry.uri(), XSD.ANYURI, literal.getDatatype());
-		} else if (provider instanceof QueryFunctionManifest.UnaryGeometryBooleanProvider) {
+		} else if (provider instanceof QueryFunctionManifest.UnaryGeometryBooleanProvider
+				|| provider instanceof QueryFunctionManifest.BinaryGeometryDoubleToBooleanProvider) {
 			assertEquals(entry.uri(), XSD.BOOLEAN, literal.getDatatype());
 		} else if (provider instanceof QueryFunctionManifest.UnaryGeometryIntegerProvider) {
 			assertEquals(entry.uri(), XSD.INTEGER, literal.getDatatype());

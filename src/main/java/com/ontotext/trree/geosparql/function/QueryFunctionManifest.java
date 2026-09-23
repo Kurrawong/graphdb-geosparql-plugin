@@ -11,6 +11,7 @@ import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
 import com.ontotext.trree.geosparql.jena.query.MetricBuffer;
+import com.ontotext.trree.geosparql.jena.query.MetricWithinDistance;
 import com.ontotext.trree.geosparql.jena.query.TopologicalDimension;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
@@ -64,6 +65,8 @@ final class QueryFunctionManifest {
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
 					new BinaryGeometryToDoubleProvider(GeometryWrapper::distance)),
+			new Entry(GeoConstants.GEOF_METRIC_WITHIN_DISTANCE.stringValue(), 3,
+					new BinaryGeometryDoubleToBooleanProvider(MetricWithinDistance::calculate)),
 			new Entry(GeoConstants.GEOF_METRIC_LENGTH.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(GeometryLength::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_PERIMETER.stringValue(), 1,
@@ -124,6 +127,7 @@ final class QueryFunctionManifest {
 	}
 
 	sealed interface Provider permits BinaryGeometryProvider, BinaryGeometryToDoubleProvider,
+			BinaryGeometryDoubleToBooleanProvider,
 			BinaryGeometryUnitToDoubleProvider,
 			GeometryMemberProvider, GeometryTargetSrsProvider, UnaryGeometryAnyUriProvider,
 			UnaryGeometryBooleanProvider,
@@ -147,6 +151,15 @@ final class QueryFunctionManifest {
 	}
 
 	record BinaryGeometryToDoubleProvider(BinaryGeometryToDoubleCalculation calculation) implements Provider {
+	}
+
+	@FunctionalInterface
+	interface BinaryGeometryDoubleToBooleanCalculation {
+		boolean apply(GeometryWrapper left, GeometryWrapper right, double distance) throws Exception;
+	}
+
+	record BinaryGeometryDoubleToBooleanProvider(BinaryGeometryDoubleToBooleanCalculation calculation)
+			implements Provider {
 	}
 
 	@FunctionalInterface
