@@ -98,6 +98,7 @@ public interface GeoConstants {
     IRI GEOF_METRIC_AREA = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricArea");
     IRI GEOF_METRIC_DISTANCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricDistance");
     IRI GEOF_METRIC_WITHIN_DISTANCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricWithinDistance");
+    IRI GEOF_WITHIN_DISTANCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "withinDistance");
     IRI GEOF_METRIC_LENGTH = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricLength");
     IRI GEOF_METRIC_PERIMETER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricPerimeter");
     IRI GEOF_PERIMETER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "perimeter");
