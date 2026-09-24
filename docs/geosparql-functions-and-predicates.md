@@ -58,6 +58,7 @@ of the first source geometry literal. See
 | --- | --- |
 | `xsd:double geof:metricDistance(geomLiteral left, geomLiteral right)` | Returns the shortest distance in metres, calculated in the CRS of `left`. |
 | `xsd:boolean geof:metricWithinDistance(geomLiteral left, geomLiteral right, numeric distance)` | Returns whether the distance between the geometries is at most `distance` metres, calculated in the CRS of `left`. |
+| `xsd:boolean geof:withinDistance(geomLiteral left, geomLiteral right, numeric distance, uri unit)` | Returns whether the distance between the geometries is at most `distance` in the specified unit, calculated in the CRS of `left`. |
 | `xsd:double geof:distance(geomLiteral left, geomLiteral right, uri unit)` | Returns the shortest distance in the specified unit, calculated in the CRS of `left`. |
 | `xsd:double geof:metricArea(geomLiteral geometry)` | Returns area in square metres. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |
 | `xsd:double geof:area(geomLiteral geometry, uri unit)` | Returns area in the square of the specified linear unit. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |

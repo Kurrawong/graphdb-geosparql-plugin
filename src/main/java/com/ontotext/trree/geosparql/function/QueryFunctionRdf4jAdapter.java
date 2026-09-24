@@ -70,6 +70,12 @@ final class QueryFunctionRdf4jAdapter implements Function {
 						geometryArgument(args[0]), geometryArgument(args[1]), finiteNumeric(args[2], "distance"));
 				yield valueFactory.createLiteral(result);
 			}
+			case QueryFunctionManifest.BinaryGeometryDoubleUnitToBooleanProvider provider -> {
+				boolean result = provider.calculation().apply(
+						geometryArgument(args[0]), geometryArgument(args[1]),
+						finiteNumeric(args[2], "distance"), uriArgument(args[3], "unit"));
+				yield valueFactory.createLiteral(result);
+			}
 			case QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider provider -> {
 				double result = provider.calculation().apply(
 						geometryArgument(args[0]), geometryArgument(args[1]),

@@ -163,6 +163,8 @@ public class QueryFunctionProfileTest {
 					new Value[]{geometry, otherGeometry};
 			case QueryFunctionManifest.BinaryGeometryDoubleToBooleanProvider ignored ->
 					new Value[]{geometry, otherGeometry, VALUE_FACTORY.createLiteral(1)};
+			case QueryFunctionManifest.BinaryGeometryDoubleUnitToBooleanProvider ignored ->
+					new Value[]{geometry, otherGeometry, VALUE_FACTORY.createLiteral(1), unit};
 			case QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider ignored ->
 					new Value[]{geometry, otherGeometry, unit};
 			case QueryFunctionManifest.GeometryMemberProvider ignored ->
@@ -193,7 +195,8 @@ public class QueryFunctionProfileTest {
 		} else if (provider instanceof QueryFunctionManifest.UnaryGeometryAnyUriProvider) {
 			assertEquals(entry.uri(), XSD.ANYURI, literal.getDatatype());
 		} else if (provider instanceof QueryFunctionManifest.UnaryGeometryBooleanProvider
-				|| provider instanceof QueryFunctionManifest.BinaryGeometryDoubleToBooleanProvider) {
+				|| provider instanceof QueryFunctionManifest.BinaryGeometryDoubleToBooleanProvider
+				|| provider instanceof QueryFunctionManifest.BinaryGeometryDoubleUnitToBooleanProvider) {
 			assertEquals(entry.uri(), XSD.BOOLEAN, literal.getDatatype());
 		} else if (provider instanceof QueryFunctionManifest.UnaryGeometryIntegerProvider) {
 			assertEquals(entry.uri(), XSD.INTEGER, literal.getDatatype());
