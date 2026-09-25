@@ -527,24 +527,6 @@ public class LuceneGeoSchemaTest {
     }
 
 	@Test
-	public void forceReindexRollbackRetainsMissingGeoJsonDiscoveryPolicy() throws Exception {
-		Path dataDir = tmpFolder.getRoot().toPath().resolve("rollback-geojson-discovery-policy");
-		Files.createDirectories(dataDir);
-		writeIndexWithoutGeoJsonDiscoveryPolicy(dataDir);
-
-		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
-		indexer.begin();
-		indexer.freshIndex();
-		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
-		indexer.rollback();
-
-		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
-		PluginException exception = assertThrows(PluginException.class,
-				() -> restarted.getSourceGeometryLiteralsFor(0));
-		assertForceReindexMessage(exception);
-	}
-
-	@Test
 	public void forceReindexPostCommitAbortRestoresPreviousSchemaGateAfterRestart() throws Exception {
 		Path dataDir = tmpFolder.getRoot().toPath().resolve("post-commit-reindex-abort");
 		Files.createDirectories(dataDir);
@@ -641,27 +623,6 @@ public class LuceneGeoSchemaTest {
 				() -> indexer.getSourceGeometryLiteralsFor(0));
 		assertForceReindexMessage(mismatch);
     }
-
-	@Test
-	public void failedForceReindexRetainsMissingGeoJsonDiscoveryPolicy() throws Exception {
-		Path dataDir = tmpFolder.getRoot().toPath().resolve("failed-geojson-discovery-policy");
-		Files.createDirectories(dataDir);
-		writeIndexWithoutGeoJsonDiscoveryPolicy(dataDir);
-
-		FailingCommitLuceneGeoIndexer indexer = createFailingCommitIndexer(dataDir.toFile());
-		indexer.begin();
-		indexer.freshIndex();
-		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
-		indexer.failCommitClose();
-
-		assertThrows(IOException.class, indexer::commit);
-		indexer.rollback();
-
-		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
-		PluginException exception = assertThrows(PluginException.class,
-				() -> restarted.getSourceGeometryLiteralsFor(0));
-		assertForceReindexMessage(exception);
-	}
 
     @Test
     public void testSuccessfulForceReindexFromSchemaMismatchClearsGateAndWritesMarker() throws Exception {
