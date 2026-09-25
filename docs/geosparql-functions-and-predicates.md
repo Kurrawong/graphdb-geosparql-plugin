@@ -35,6 +35,22 @@ of the first source geometry literal. See
 [Geometry serialization and conversion](geosparql-geometry-serialization.md) for format-specific result rules and
 [GeoSPARQL CRS deployment](geosparql-crs-deployment.md) for runtime CRS requirements.
 
+## Unit IRIs
+
+For a `uri unit` argument, use an IRI such as `uom:metre` or a simple `xsd:anyURI` literal containing the full IRI.
+The `uom:` prefix above expands to `http://www.opengis.net/def/uom/OGC/1.0/`. These built-in OGC unit IRIs are
+recognized by the pinned Jena unit registry:
+
+| Unit kind | Accepted `uom:` names | Where they apply |
+| --- | --- | --- |
+| Linear | `metre`, `meter`, `kilometre`, `kilometer`, `centimetre`, `centimeter`, `millimetre`, `millimeter`, `foot`, `surveyFootUS`, `inch`, `mile`, `statuteMile`, `nauticalMile`, `yard` | `geof:withinDistance`, `geof:distance`, `geof:area`, `geof:length`, and `geof:perimeter`; also `geof:buffer` when the source CRS has linear units. |
+| Angular | `degree`, `radian`, `microRadian`, `minute`, `second`, `grad` | `geof:buffer` when the source CRS has angular units. Distance, within-distance, area, length, and perimeter require linear output units. |
+
+For example, `geof:withinDistance(?left, ?right, 0.5, uom:kilometre)` tests a half-kilometre threshold. Jena also
+recognizes certain EPSG unit URNs; its [unit registry](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java)
+is the complete list for the pinned version. A recognized unit can still produce an expression error when it is
+incompatible with the source CRS.
+
 ## Geometry operations
 
 | Function | Description |
@@ -57,6 +73,8 @@ of the first source geometry literal. See
 | Function | Description |
 | --- | --- |
 | `xsd:double geof:metricDistance(geomLiteral left, geomLiteral right)` | Returns the shortest distance in metres, calculated in the CRS of `left`. |
+| `xsd:boolean geof:metricWithinDistance(geomLiteral left, geomLiteral right, numeric distance)` | Returns whether the distance between the geometries is at most `distance` metres, calculated in the CRS of `left`. |
+| `xsd:boolean geof:withinDistance(geomLiteral left, geomLiteral right, numeric distance, uri unit)` | Returns whether the distance between the geometries is at most `distance` in the specified unit, calculated in the CRS of `left`. |
 | `xsd:double geof:distance(geomLiteral left, geomLiteral right, uri unit)` | Returns the shortest distance in the specified unit, calculated in the CRS of `left`. |
 | `xsd:double geof:metricArea(geomLiteral geometry)` | Returns area in square metres. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |
 | `xsd:double geof:area(geomLiteral geometry, uri unit)` | Returns area in the square of the specified linear unit. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |
@@ -64,18 +82,6 @@ of the first source geometry literal. See
 | `xsd:double geof:length(geomLiteral geometry, uri unit)` | Returns length in the specified linear unit. |
 | `xsd:double geof:perimeter(geomLiteral geometry, uri unit)` | Returns perimeter in the specified linear unit. Non-polygon inputs and collection members contribute their length. |
 | `xsd:double geof:metricPerimeter(geomLiteral geometry)` | Returns perimeter in metres. Non-polygon inputs and collection members contribute their length. |
-
-### Known dependency behaviour
-
-Functions with a `unit` argument, including measurement functions and `geof:buffer`, use the pinned Apache Jena 6.2.0
-unit registry for supported-unit recognition and conversion. That Jena version has an
-[incorrect conversion factor](https://github.com/apache/jena/blob/d0676a2c402ead68a133596f4ac5977be64dd251/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java#L41)
-for the OGC `yard` unit (`uom:yard`). Measurements requested in `uom:yard`, and buffers whose radius is expressed in
-`uom:yard`, therefore inherit that behaviour and should not be relied on for correct yard conversion.
-
-Other units remain governed by the pinned Jena dependency; the plugin does not independently define or validate each
-conversion factor. It intentionally does not override the yard conversion locally, so behaviour stays aligned with
-Jena 6.2.0 and can inherit an upstream correction through a future dependency upgrade.
 
 ## Geometry information
 

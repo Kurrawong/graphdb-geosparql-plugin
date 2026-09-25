@@ -151,6 +151,31 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
+	@Test public void metricWithinDistanceFiltersGeometryArguments() throws RDF4JException {
+		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"),
+				vf().createLiteral("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(500000 4600000)",
+						GeoConstants.GEO_WKT_LITERAL));
+		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"),
+				vf().createLiteral("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(500003 4600004)",
+						GeoConstants.GEO_WKT_LITERAL));
+		String query = "SELECT ?left ?right WHERE { <u:1> <u:1> ?left . <u:1> <u:2> ?right . "
+				+ "FILTER(<" + GeoConstants.GEOF_METRIC_WITHIN_DISTANCE + ">(?left, ?right, 5)) }";
+		assertEquals(1, count(conn().prepareTupleQuery(QueryLanguage.SPARQL, query).evaluate()));
+	}
+
+	@Test public void withinDistanceFiltersGeometryArgumentsInRequestedUnits() throws RDF4JException {
+		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"),
+				vf().createLiteral("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(500000 4600000)",
+						GeoConstants.GEO_WKT_LITERAL));
+		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"),
+				vf().createLiteral("<http://www.opengis.net/def/crs/EPSG/0/32634> POINT(500003 4600004)",
+						GeoConstants.GEO_WKT_LITERAL));
+		String query = "SELECT ?left ?right WHERE { <u:1> <u:1> ?left . <u:1> <u:2> ?right . "
+				+ "FILTER(<" + GeoConstants.GEOF_WITHIN_DISTANCE + ">(?left, ?right, 0.005, "
+				+ "<http://www.opengis.net/def/uom/OGC/1.0/kilometre>)) }";
+		assertEquals(1, count(conn().prepareTupleQuery(QueryLanguage.SPARQL, query).evaluate()));
+	}
+
 	@Test public void relationFunctionTypeErrorsOnExtraArgument() throws RDF4JException {
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:1"), vf().createLiteral("POLYGON((1 1, 1 4, 4 4, 4 1, 1 1))", GeoConstants.XMLSCHEMA_OGC_WKT));
 		conn().add(vf().createIRI("u:1"), vf().createIRI("u:2"), vf().createLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))", GeoConstants.XMLSCHEMA_OGC_WKT));
