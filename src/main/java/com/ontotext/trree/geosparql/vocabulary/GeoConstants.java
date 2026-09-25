@@ -125,6 +125,7 @@ public interface GeoConstants {
     IRI GEOF_DIFFERENCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "difference");
     IRI GEOF_SYM_DIFFERENCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "symDifference");
     IRI GEOF_TRANSFORM = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "transform");
+    IRI GEOF_SIMPLIFY = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "simplify");
     IRI GEOF_ENVELOPE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "envelope");
     IRI GEOF_BOUNDARY = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "boundary");
     IRI GEOF_COORDINATE_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "coordinateDimension");

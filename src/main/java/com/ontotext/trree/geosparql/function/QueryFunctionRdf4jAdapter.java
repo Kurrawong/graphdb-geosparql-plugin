@@ -110,7 +110,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 			case QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
 				GeometryWrapper result = provider.calculation().apply(
-						source.asGeometryWrapper(), finiteNumeric(args[1], "radius"));
+						source.asGeometryWrapper(), finiteNumeric(args[1], provider.numericRole()));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
 						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
 			}

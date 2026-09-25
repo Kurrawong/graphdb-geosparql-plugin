@@ -66,6 +66,7 @@ incompatible with the source CRS.
 | `geomLiteral geof:envelope(geomLiteral geometry)` | Returns the axis-aligned bounding rectangle of `geometry`. |
 | `geomLiteral geof:intersection(geomLiteral left, geomLiteral right)` | Returns the point-set intersection of `left` and `right` in the CRS of `left`. |
 | `geomLiteral geof:symDifference(geomLiteral left, geomLiteral right)` | Returns the points that occur in either input but not in both, in the CRS of `left`. |
+| `geomLiteral geof:simplify(geomLiteral geometry, numeric tolerance)` | Simplifies `geometry` using Douglas-Peucker with a finite, nonnegative `tolerance` in source CRS coordinate units. The result retains the source CRS and literal datatype; topology is not guaranteed to be preserved. |
 | `geomLiteral geof:union(geomLiteral left, geomLiteral right)` | Returns the point-set union of `left` and `right` in the CRS of `left`. |
 
 ## Measurements

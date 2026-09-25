@@ -11,6 +11,7 @@ import com.ontotext.trree.geosparql.jena.query.DirectionalPointCoordinates;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
+import com.ontotext.trree.geosparql.jena.query.GeometrySimplify;
 import com.ontotext.trree.geosparql.jena.query.MetricBuffer;
 import com.ontotext.trree.geosparql.jena.query.MetricWithinDistance;
 import com.ontotext.trree.geosparql.jena.query.PointCoordinates;
@@ -65,7 +66,7 @@ final class QueryFunctionManifest {
 					new UnaryGeometryToDoubleProvider(GeometryArea::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_BUFFER.stringValue(), 2,
 					new UnaryGeometryDoubleToGeometryProvider(MetricBuffer::calculate,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							GeoJsonResultDimensionPolicy.XY_ONLY, "radius")),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
 					new BinaryGeometryToDoubleProvider(GeometryWrapper::distance)),
 			new Entry(GeoConstants.GEOF_METRIC_WITHIN_DISTANCE.stringValue(), 3,
@@ -126,6 +127,9 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_SYM_DIFFERENCE.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::symDifference,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
+			new Entry(GeoConstants.GEOF_SIMPLIFY.stringValue(), 2,
+					new UnaryGeometryDoubleToGeometryProvider(GeometrySimplify::calculate,
+							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z, "tolerance")),
 			new Entry(GeoConstants.GEOF_TRANSFORM.stringValue(), 2,
 					new GeometryTargetSrsProvider(GeometryWrapper::transform,
 							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
@@ -204,7 +208,7 @@ final class QueryFunctionManifest {
 	}
 
 	record UnaryGeometryDoubleToGeometryProvider(UnaryGeometryDoubleToGeometryCalculation calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
+			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy, String numericRole)
 			implements Provider {
 	}
 
