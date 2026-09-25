@@ -121,7 +121,8 @@ geometry literal and its coordinate reference system.
 ## Upgrading an existing repository
 
 After upgrading from a plugin version that did not index `geo:asGeoJSON` or `geo:hasSerialization` statements, force a
-reindex of each enabled repository so existing WKT, GML, and GeoJSON geometry data is included:
+reindex of each enabled repository so existing WKT, GML, and GeoJSON geometry data is included. The plugin rejects an
+index built under the older serialization-discovery policy until the reindex completes:
 
 ```sparql
 PREFIX plugin: <http://www.ontotext.com/plugins/geosparql#>
