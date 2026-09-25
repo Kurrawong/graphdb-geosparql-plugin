@@ -108,6 +108,10 @@ public interface GeoConstants {
     IRI GEOF_MIN_X = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minX");
     IRI GEOF_MIN_Y = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minY");
     IRI GEOF_MIN_Z = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minZ");
+    IRI GEOF_X = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "X");
+    IRI GEOF_Y = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "Y");
+    IRI GEOF_Z = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "Z");
+    IRI GEOF_M = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "M");
     IRI GEOF_BOUNDING_CIRCLE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "boundingCircle");
     IRI GEOF_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "buffer");
     IRI GEOF_METRIC_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricBuffer");

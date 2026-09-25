@@ -67,6 +67,9 @@ public class QueryFunctionProfileTest {
 			.collect(Collectors.toUnmodifiableSet());
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String METRE = "http://www.opengis.net/def/uom/OGC/1.0/metre";
+	private static final Set<String> POINT_COORDINATE_FUNCTIONS = Set.of(
+			GeoConstants.GEOF_X.stringValue(), GeoConstants.GEOF_Y.stringValue(),
+			GeoConstants.GEOF_Z.stringValue(), GeoConstants.GEOF_M.stringValue());
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 	private static final ValueFactoryTripleSource TRIPLE_SOURCE =
 			new ValueFactoryTripleSource(VALUE_FACTORY);
@@ -145,7 +148,9 @@ public class QueryFunctionProfileTest {
 	}
 
 	private Value[] validArguments(QueryFunctionManifest.Entry entry) {
-		Literal geometry = entry.provider() instanceof QueryFunctionManifest.UnaryGeometryToDoubleProvider
+		Literal geometry = POINT_COORDINATE_FUNCTIONS.contains(entry.uri())
+				? wkt("<" + EPSG_32634 + "> POINT ZM (500000 4600000 10 20)")
+				: entry.provider() instanceof QueryFunctionManifest.UnaryGeometryToDoubleProvider
 				? wkt("<" + EPSG_32634 + "> POLYGON Z (("
 						+ "500000 4600000 10,500010 4600000 20,500010 4600010 30,"
 						+ "500000 4600010 40,500000 4600000 10))")
