@@ -101,6 +101,10 @@ incompatible with the source CRS.
 | `xsd:double geof:minX(geomLiteral geometry)` | Returns the smallest first ordinate in source SRS coordinate order. |
 | `xsd:double geof:minY(geomLiteral geometry)` | Returns the smallest second ordinate in source SRS coordinate order. |
 | `xsd:double geof:minZ(geomLiteral geometry)` | Returns the smallest finite Z ordinate. An XY or XYM geometry produces an error. |
+| `xsd:double geof:X(geomLiteral point)` | Returns a Point's first ordinate in source SRS coordinate order. |
+| `xsd:double geof:Y(geomLiteral point)` | Returns a Point's second ordinate in source SRS coordinate order. |
+| `xsd:double geof:Z(geomLiteral point)` | Returns a Point's Z ordinate. A missing or non-finite Z produces an error. |
+| `xsd:double geof:M(geomLiteral point)` | Returns a Point's M ordinate. A missing or non-finite M produces an error. |
 | `xsd:integer geof:numGeometries(geomLiteral geometry)` | Returns the number of direct structural geometry members. An atomic geometry counts as one. |
 | `xsd:integer geof:spatialDimension(geomLiteral geometry)` | Returns the number of spatial coordinate dimensions. |
 

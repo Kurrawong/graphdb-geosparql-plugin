@@ -12,6 +12,7 @@ import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
 import com.ontotext.trree.geosparql.jena.query.MetricBuffer;
 import com.ontotext.trree.geosparql.jena.query.MetricWithinDistance;
+import com.ontotext.trree.geosparql.jena.query.PointCoordinates;
 import com.ontotext.trree.geosparql.jena.query.TopologicalDimension;
 import com.ontotext.trree.geosparql.jena.query.WithinDistance;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -88,6 +89,14 @@ final class QueryFunctionManifest {
 					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::minY)),
 			new Entry(GeoConstants.GEOF_MIN_Z.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::minZ)),
+			new Entry(GeoConstants.GEOF_X.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::x)),
+			new Entry(GeoConstants.GEOF_Y.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::y)),
+			new Entry(GeoConstants.GEOF_Z.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::z)),
+			new Entry(GeoConstants.GEOF_M.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::m)),
 			new Entry(GeoConstants.GEOF_COORDINATE_DIMENSION.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(GeometryWrapper::getCoordinateDimension)),
 			new Entry(GeoConstants.GEOF_DIMENSION.stringValue(), 1,
