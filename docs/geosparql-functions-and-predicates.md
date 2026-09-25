@@ -89,11 +89,11 @@ Jena 6.2.0 and can inherit an upstream correction through a future dependency up
 | `xsd:boolean geof:isEmpty(geomLiteral geometry)` | Returns `true` when `geometry` contains no coordinates. |
 | `xsd:boolean geof:isMeasured(geomLiteral geometry)` | Returns `true` when the coordinate layout contains an M ordinate. |
 | `xsd:boolean geof:isSimple(geomLiteral geometry)` | Returns `true` when `geometry` is simple under the Simple Features rules. |
-| `xsd:double geof:maxX(geomLiteral geometry)` | Returns the largest X coordinate according to the source SRS axes. |
-| `xsd:double geof:maxY(geomLiteral geometry)` | Returns the largest Y coordinate according to the source SRS axes. |
+| `xsd:double geof:maxX(geomLiteral geometry)` | Returns the largest first ordinate in source SRS coordinate order. |
+| `xsd:double geof:maxY(geomLiteral geometry)` | Returns the largest second ordinate in source SRS coordinate order. |
 | `xsd:double geof:maxZ(geomLiteral geometry)` | Returns the largest finite Z ordinate. An XY or XYM geometry produces an error. |
-| `xsd:double geof:minX(geomLiteral geometry)` | Returns the smallest X coordinate according to the source SRS axes. |
-| `xsd:double geof:minY(geomLiteral geometry)` | Returns the smallest Y coordinate according to the source SRS axes. |
+| `xsd:double geof:minX(geomLiteral geometry)` | Returns the smallest first ordinate in source SRS coordinate order. |
+| `xsd:double geof:minY(geomLiteral geometry)` | Returns the smallest second ordinate in source SRS coordinate order. |
 | `xsd:double geof:minZ(geomLiteral geometry)` | Returns the smallest finite Z ordinate. An XY or XYM geometry produces an error. |
 | `xsd:integer geof:numGeometries(geomLiteral geometry)` | Returns the number of direct structural geometry members. An atomic geometry counts as one. |
 | `xsd:integer geof:spatialDimension(geomLiteral geometry)` | Returns the number of spatial coordinate dimensions. |
