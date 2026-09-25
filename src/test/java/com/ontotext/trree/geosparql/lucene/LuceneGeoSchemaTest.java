@@ -137,6 +137,44 @@ public class LuceneGeoSchemaTest {
 	}
 
 	@Test
+	public void indexWithoutHasSerializationDiscoveryPolicyRequiresReindex() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("missing-generic-serialization-discovery-policy");
+		Files.createDirectories(dataDir);
+		writeIndexWithoutHasSerializationDiscoveryPolicy(dataDir);
+
+		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+		PluginException readFailure = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(readFailure);
+
+		indexer.begin();
+		try {
+			PluginException writeFailure = assertThrows(PluginException.class,
+					() -> indexer.indexGeometryList(2L, subject -> "Subject " + subject,
+							List.of(sampleGeometry)));
+			assertForceReindexMessage(writeFailure);
+		} finally {
+			indexer.rollback();
+		}
+
+		LuceneGeoIndexer rebuilder = createIndexer(dataDir.toFile());
+		rebuilder.begin();
+		rebuilder.freshIndex();
+		rebuilder.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		rebuilder.commit();
+		rebuilder.complete();
+
+		LuceneGeoIndexer reopened = createIndexer(dataDir.toFile());
+		try (CloseableIterator<SourceGeometryLiteral> geometries = reopened.getSourceGeometryLiteralsFor(1L)) {
+			assertTrue(geometries.hasNext());
+		}
+		try (FSDirectory dir = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(dataDir));
+				IndexReader reader = DirectoryReader.open(dir)) {
+			assertCurrentSchemaCommitData(reader);
+		}
+	}
+
+	@Test
 	public void forceReindexAdoptsCurrentCrsEnvironment() throws Exception {
 		Path dataDir = tmpFolder.getRoot().toPath().resolve("reindexed-crs-environment");
 		Files.createDirectories(dataDir);
@@ -705,7 +743,7 @@ public class LuceneGeoSchemaTest {
         assertEquals(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_VALUE,
                 ((DirectoryReader) reader).getIndexCommit().getUserData()
                         .get(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY));
-		assertEquals("wkt-gml-geojson",
+		assertEquals("wkt-gml-geojson-has-serialization",
 				((DirectoryReader) reader).getIndexCommit().getUserData()
 						.get("geosparql.serializationDiscovery"));
     }
@@ -768,6 +806,25 @@ public class LuceneGeoSchemaTest {
 					LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
 			commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
 					LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_VALUE);
+			commitData.put(LuceneGeoDocumentSchema.COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY,
+					"test-crs-environment");
+			writer.setLiveCommitData(commitData.entrySet());
+		}
+	}
+
+	private void writeIndexWithoutHasSerializationDiscoveryPolicy(Path dataDir) throws Exception {
+		Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
+		Files.createDirectories(indexDir);
+		try (FSDirectory dir = FSDirectory.open(indexDir);
+				IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+			writer.addDocument(currentSchemaDocument(1L, sampleGeometry));
+			Map<String, String> commitData = new HashMap<>();
+			commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_KEY,
+					LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
+			commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
+					LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_VALUE);
+			commitData.put(LuceneGeoDocumentSchema.COMMIT_SERIALIZATION_DISCOVERY_KEY,
+					"wkt-gml-geojson");
 			commitData.put(LuceneGeoDocumentSchema.COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY,
 					"test-crs-environment");
 			writer.setLiveCommitData(commitData.entrySet());
