@@ -195,9 +195,10 @@ matches and the plugin verifies the spatial relationship. When both sides have v
 directly without searching the index.
 
 The subject and object may be `geo:Feature` or `geo:Geometry` resources. For a Feature, the plugin uses the Geometry
-resources linked through `geo:hasDefaultGeometry`. For a Geometry, it uses the geometry literals supplied through
-`geo:asWKT`, `geo:asGML`, or `geo:asGeoJSON`. A `geo:wktLiteral`, `geo:gmlLiteral`, or `geo:geoJSONLiteral` may also
-be supplied as a bound value on either side. This bound-literal form is a GraphDB query convenience. GeoSPARQL defines
+resources linked through `geo:hasDefaultGeometry`. For a Geometry, it uses geometry literals supplied through
+`geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, or `geo:hasSerialization` when the latter carries a `geo:wktLiteral`,
+`geo:gmlLiteral`, or `geo:geoJSONLiteral`. These literals may also be supplied as bound values on either side. This
+bound-literal form is a GraphDB query convenience. GeoSPARQL defines
 relation properties between `geo:SpatialObject` resources, so queries intended to be portable should use Feature or
 Geometry resources as predicate operands and use `geof:` functions to compare geometry literals.
 

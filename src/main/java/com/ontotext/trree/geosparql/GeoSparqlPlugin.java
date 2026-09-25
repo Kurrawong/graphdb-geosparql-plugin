@@ -70,6 +70,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 	long asWKT;
 	long asGML;
 	long asGeoJSON;
+	long hasSerialization;
 	long hasDefaultGeometry;
 
 	GeoSparqlIndexer indexer;
@@ -227,17 +228,25 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 	}
 
 	/**
-	 * Returns one index geometry for a repository source literal, or {@code null} when the object is not a literal or
-	 * {@code ignoreErrors} deliberately skips an invalid repository geometry.
+	 * Returns one index geometry for a repository source literal, or {@code null} when the object is not a literal,
+	 * a {@code geo:hasSerialization} literal has an unsupported datatype, or {@code ignoreErrors} deliberately skips
+	 * an invalid repository geometry.
 	 */
 	IndexGeometry getIndexGeometryFromLiteralId(long geometryResourceId, long literalId, long predicateId,
 			Entities entities) {
 		Value value = entities.get(literalId);
-		if (!(value instanceof Literal)) {
+		if (!(value instanceof Literal literal)) {
 			return null;
 		}
 		IRI datatype;
-		if (predicateId == asGML) {
+		if (predicateId == hasSerialization) {
+			datatype = literal.getDatatype();
+			if (!GeoConstants.GEO_WKT_LITERAL.equals(datatype)
+					&& !GeoConstants.GEO_GML_LITERAL.equals(datatype)
+					&& !GeoConstants.GEO_JSON_LITERAL.equals(datatype)) {
+				return null;
+			}
+		} else if (predicateId == asGML) {
 			datatype = GeoConstants.GEO_GML_LITERAL;
 		} else if (predicateId == asGeoJSON) {
 			datatype = GeoConstants.GEO_JSON_LITERAL;
@@ -245,10 +254,10 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 			datatype = GeoConstants.GEO_WKT_LITERAL;
 		}
 		try {
-			return getIndexGeometryFromLiteral((Literal) value, datatype);
+			return getIndexGeometryFromLiteral(literal, datatype);
 		} catch (JenaGeoSparqlException e) {
 			String subjectText = entities.get(geometryResourceId).stringValue();
-			String failureContext = indexingFailureContext((Literal) value, datatype, e);
+			String failureContext = indexingFailureContext(literal, datatype, e);
 			if (config.isIgnoreErrors()) {
 				getLogger().warn("Skipping GeoSPARQL geometry for subject {} because it cannot be indexed. {}",
 						subjectText, failureContext);
@@ -344,6 +353,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         asWKT = entities.put(GeoConstants.GEO_AS_WKT, Entities.Scope.DEFAULT);
         asGML = entities.put(GeoConstants.GEO_AS_GML, Entities.Scope.DEFAULT);
         asGeoJSON = entities.put(GeoConstants.GEO_AS_GEO_JSON, Entities.Scope.DEFAULT);
+        hasSerialization = entities.put(GeoConstants.GEO_HAS_SERIALIZATION, Entities.Scope.DEFAULT);
         hasDefaultGeometry = entities.put(GeoConstants.GEO_HAS_DEFAULT_GEOMETRY, Entities.Scope.DEFAULT);
     }
 
