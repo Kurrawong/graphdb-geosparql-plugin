@@ -177,6 +177,8 @@ public class QueryFunctionProfileTest {
 					new Value[]{geometry, VALUE_FACTORY.createLiteral(1)};
 			case QueryFunctionManifest.GeometryTargetSrsProvider ignored ->
 					new Value[]{geometry, VALUE_FACTORY.createIRI(EPSG_32634)};
+			case QueryFunctionManifest.GeometryFixedTargetSrsProvider ignored ->
+					new Value[]{geometry};
 			case QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider ignored ->
 					new Value[]{geometry, VALUE_FACTORY.createLiteral(1)};
 			case QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider ignored ->
@@ -194,6 +196,7 @@ public class QueryFunctionProfileTest {
 		if (provider instanceof QueryFunctionManifest.BinaryGeometryProvider
 				|| provider instanceof QueryFunctionManifest.GeometryMemberProvider
 				|| provider instanceof QueryFunctionManifest.GeometryTargetSrsProvider
+				|| provider instanceof QueryFunctionManifest.GeometryFixedTargetSrsProvider
 				|| provider instanceof QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider
 				|| provider instanceof QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider
 				|| provider instanceof QueryFunctionManifest.UnaryGeometryProvider) {

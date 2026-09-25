@@ -19,6 +19,7 @@ import com.ontotext.trree.geosparql.jena.query.TopologicalDimension;
 import com.ontotext.trree.geosparql.jena.query.WithinDistance;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 
 import java.util.List;
 import java.util.function.BiFunction;
@@ -133,6 +134,10 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_TRANSFORM.stringValue(), 2,
 					new GeometryTargetSrsProvider(GeometryWrapper::transform,
 							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
+			new Entry(GeoConstants.GEOF_TRANSFORM_CRS84.stringValue(), 1,
+					new GeometryFixedTargetSrsProvider(GeometryWrapper::transform,
+							SRS_URI.DEFAULT_WKT_CRS84,
+							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_UNION.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::union,
 							GeoJsonResultDimensionPolicy.XY_ONLY)));
@@ -151,7 +156,8 @@ final class QueryFunctionManifest {
 			BinaryGeometryDoubleToBooleanProvider,
 			BinaryGeometryDoubleUnitToBooleanProvider,
 			BinaryGeometryUnitToDoubleProvider,
-			GeometryMemberProvider, GeometryTargetSrsProvider, UnaryGeometryAnyUriProvider,
+			GeometryFixedTargetSrsProvider, GeometryMemberProvider, GeometryTargetSrsProvider,
+			UnaryGeometryAnyUriProvider,
 			UnaryGeometryBooleanProvider,
 			UnaryGeometryDoubleToGeometryProvider, UnaryGeometryDoubleUnitToGeometryProvider,
 			UnaryGeometryIntegerProvider, UnaryGeometryProvider, UnaryGeometryToDoubleProvider,
@@ -251,6 +257,11 @@ final class QueryFunctionManifest {
 
 	record GeometryTargetSrsProvider(GeometryTargetSrsCalculation calculation,
 			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) implements Provider {
+	}
+
+	record GeometryFixedTargetSrsProvider(GeometryTargetSrsCalculation calculation,
+			String targetSrsUri, GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
+			implements Provider {
 	}
 
 	record UnaryGeometryAnyUriProvider(Function<GeometryWrapper, String> calculation) implements Provider {

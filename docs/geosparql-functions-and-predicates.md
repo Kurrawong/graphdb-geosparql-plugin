@@ -116,6 +116,7 @@ incompatible with the source CRS.
 | Function | Description |
 | --- | --- |
 | `geomLiteral geof:transform(geomLiteral geometry, uri targetSrs)` | Transforms the geometry coordinates to `targetSrs`. |
+| `geomLiteral geof:transformCRS84(geomLiteral geometry)` | Transforms the geometry coordinates to CRS84, retaining the input geometry literal datatype. |
 | `xsd:anyURI geof:getSRID(geomLiteral geometry)` | Returns the source geometry literal's CRS URI. |
 
 ## Spatial relationships
