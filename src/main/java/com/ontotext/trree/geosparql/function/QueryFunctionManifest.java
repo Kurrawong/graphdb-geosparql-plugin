@@ -7,6 +7,7 @@ import com.ontotext.trree.geosparql.jena.query.GeometryCentroid;
 import com.ontotext.trree.geosparql.jena.query.GeometryConcaveHull;
 import com.ontotext.trree.geosparql.jena.query.GeometryCount;
 import com.ontotext.trree.geosparql.jena.query.GeometryCoordinateExtrema;
+import com.ontotext.trree.geosparql.jena.query.DirectionalPointCoordinates;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
@@ -97,6 +98,10 @@ final class QueryFunctionManifest {
 					new UnaryGeometryToDoubleProvider(PointCoordinates::z)),
 			new Entry(GeoConstants.GEOF_M.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(PointCoordinates::m)),
+			new Entry(GeoConstants.GEOF_EASTING.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(DirectionalPointCoordinates::easting)),
+			new Entry(GeoConstants.GEOF_NORTHING.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(DirectionalPointCoordinates::northing)),
 			new Entry(GeoConstants.GEOF_COORDINATE_DIMENSION.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(GeometryWrapper::getCoordinateDimension)),
 			new Entry(GeoConstants.GEOF_DIMENSION.stringValue(), 1,

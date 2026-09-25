@@ -105,6 +105,8 @@ incompatible with the source CRS.
 | `xsd:double geof:Y(geomLiteral point)` | Returns a Point's second ordinate in source SRS coordinate order. |
 | `xsd:double geof:Z(geomLiteral point)` | Returns a Point's Z ordinate. A missing or non-finite Z produces an error. |
 | `xsd:double geof:M(geomLiteral point)` | Returns a Point's M ordinate. A missing or non-finite M produces an error. |
+| `xsd:double geof:easting(geomLiteral point)` | Returns the ordinate on the Point CRS's eastward axis, in that axis's unit. A CRS without an eastward axis produces an error. |
+| `xsd:double geof:northing(geomLiteral point)` | Returns the ordinate on the Point CRS's northward axis, in that axis's unit. A CRS without a northward axis produces an error. |
 | `xsd:integer geof:numGeometries(geomLiteral geometry)` | Returns the number of direct structural geometry members. An atomic geometry counts as one. |
 | `xsd:integer geof:spatialDimension(geomLiteral geometry)` | Returns the number of spatial coordinate dimensions. |
 
