@@ -69,7 +69,8 @@ public class QueryFunctionProfileTest {
 	private static final String METRE = "http://www.opengis.net/def/uom/OGC/1.0/metre";
 	private static final Set<String> POINT_COORDINATE_FUNCTIONS = Set.of(
 			GeoConstants.GEOF_X.stringValue(), GeoConstants.GEOF_Y.stringValue(),
-			GeoConstants.GEOF_Z.stringValue(), GeoConstants.GEOF_M.stringValue());
+			GeoConstants.GEOF_Z.stringValue(), GeoConstants.GEOF_M.stringValue(),
+			GeoConstants.GEOF_EASTING.stringValue(), GeoConstants.GEOF_NORTHING.stringValue());
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 	private static final ValueFactoryTripleSource TRIPLE_SOURCE =
 			new ValueFactoryTripleSource(VALUE_FACTORY);
