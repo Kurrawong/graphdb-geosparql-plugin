@@ -7,15 +7,19 @@ import com.ontotext.trree.geosparql.jena.query.GeometryCentroid;
 import com.ontotext.trree.geosparql.jena.query.GeometryConcaveHull;
 import com.ontotext.trree.geosparql.jena.query.GeometryCount;
 import com.ontotext.trree.geosparql.jena.query.GeometryCoordinateExtrema;
+import com.ontotext.trree.geosparql.jena.query.DirectionalPointCoordinates;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
+import com.ontotext.trree.geosparql.jena.query.GeometrySimplify;
 import com.ontotext.trree.geosparql.jena.query.MetricBuffer;
 import com.ontotext.trree.geosparql.jena.query.MetricWithinDistance;
+import com.ontotext.trree.geosparql.jena.query.PointCoordinates;
 import com.ontotext.trree.geosparql.jena.query.TopologicalDimension;
 import com.ontotext.trree.geosparql.jena.query.WithinDistance;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 
 import java.util.List;
 import java.util.function.BiFunction;
@@ -63,7 +67,7 @@ final class QueryFunctionManifest {
 					new UnaryGeometryToDoubleProvider(GeometryArea::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_BUFFER.stringValue(), 2,
 					new UnaryGeometryDoubleToGeometryProvider(MetricBuffer::calculate,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							GeoJsonResultDimensionPolicy.XY_ONLY, "radius")),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
 					new BinaryGeometryToDoubleProvider(GeometryWrapper::distance)),
 			new Entry(GeoConstants.GEOF_METRIC_WITHIN_DISTANCE.stringValue(), 3,
@@ -88,6 +92,18 @@ final class QueryFunctionManifest {
 					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::minY)),
 			new Entry(GeoConstants.GEOF_MIN_Z.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(GeometryCoordinateExtrema::minZ)),
+			new Entry(GeoConstants.GEOF_X.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::x)),
+			new Entry(GeoConstants.GEOF_Y.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::y)),
+			new Entry(GeoConstants.GEOF_Z.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::z)),
+			new Entry(GeoConstants.GEOF_M.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(PointCoordinates::m)),
+			new Entry(GeoConstants.GEOF_EASTING.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(DirectionalPointCoordinates::easting)),
+			new Entry(GeoConstants.GEOF_NORTHING.stringValue(), 1,
+					new UnaryGeometryToDoubleProvider(DirectionalPointCoordinates::northing)),
 			new Entry(GeoConstants.GEOF_COORDINATE_DIMENSION.stringValue(), 1,
 					new UnaryGeometryIntegerProvider(GeometryWrapper::getCoordinateDimension)),
 			new Entry(GeoConstants.GEOF_DIMENSION.stringValue(), 1,
@@ -112,8 +128,15 @@ final class QueryFunctionManifest {
 			new Entry(GeoConstants.GEOF_SYM_DIFFERENCE.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::symDifference,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
+			new Entry(GeoConstants.GEOF_SIMPLIFY.stringValue(), 2,
+					new UnaryGeometryDoubleToGeometryProvider(GeometrySimplify::calculate,
+							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z, "tolerance")),
 			new Entry(GeoConstants.GEOF_TRANSFORM.stringValue(), 2,
 					new GeometryTargetSrsProvider(GeometryWrapper::transform,
+							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
+			new Entry(GeoConstants.GEOF_TRANSFORM_CRS84.stringValue(), 1,
+					new GeometryFixedTargetSrsProvider(GeometryWrapper::transform,
+							SRS_URI.DEFAULT_WKT_CRS84,
 							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_UNION.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::union,
@@ -133,7 +156,8 @@ final class QueryFunctionManifest {
 			BinaryGeometryDoubleToBooleanProvider,
 			BinaryGeometryDoubleUnitToBooleanProvider,
 			BinaryGeometryUnitToDoubleProvider,
-			GeometryMemberProvider, GeometryTargetSrsProvider, UnaryGeometryAnyUriProvider,
+			GeometryFixedTargetSrsProvider, GeometryMemberProvider, GeometryTargetSrsProvider,
+			UnaryGeometryAnyUriProvider,
 			UnaryGeometryBooleanProvider,
 			UnaryGeometryDoubleToGeometryProvider, UnaryGeometryDoubleUnitToGeometryProvider,
 			UnaryGeometryIntegerProvider, UnaryGeometryProvider, UnaryGeometryToDoubleProvider,
@@ -190,7 +214,7 @@ final class QueryFunctionManifest {
 	}
 
 	record UnaryGeometryDoubleToGeometryProvider(UnaryGeometryDoubleToGeometryCalculation calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
+			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy, String numericRole)
 			implements Provider {
 	}
 
@@ -233,6 +257,11 @@ final class QueryFunctionManifest {
 
 	record GeometryTargetSrsProvider(GeometryTargetSrsCalculation calculation,
 			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) implements Provider {
+	}
+
+	record GeometryFixedTargetSrsProvider(GeometryTargetSrsCalculation calculation,
+			String targetSrsUri, GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
+			implements Provider {
 	}
 
 	record UnaryGeometryAnyUriProvider(Function<GeometryWrapper, String> calculation) implements Provider {
