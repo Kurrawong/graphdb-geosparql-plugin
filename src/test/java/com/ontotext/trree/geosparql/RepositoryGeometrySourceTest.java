@@ -36,6 +36,7 @@ public class RepositoryGeometrySourceTest {
 	private static final long AS_GML = 11L;
 	private static final long AS_GEO_JSON = 13L;
 	private static final long HAS_DEFAULT_GEOMETRY = 12L;
+	private static final long HAS_SERIALIZATION = 14L;
 	private static final long GEOMETRY_RESOURCE = 100L;
 	private static final long FEATURE_1 = 200L;
 	private static final long FEATURE_2 = 201L;
@@ -176,11 +177,65 @@ public class RepositoryGeometrySourceTest {
 				+ GeoConstants.GEO_JSON_LITERAL));
 	}
 
+	@Test
+	public void genericSerializationUsesOnlySupportedLiteralDatatypes() {
+		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
+				.createIRI("http://example.com/geometry"));
+		entities.add(LITERAL, SimpleValueFactory.getInstance()
+				.createLiteral("POINT(1 1)", GeoConstants.GEO_WKT_LITERAL));
+		entities.add(301L, SimpleValueFactory.getInstance().createLiteral(
+				"<gml:Point xmlns:gml='http://www.opengis.net/gml/3.2' "
+						+ "srsName='http://www.opengis.net/def/crs/OGC/1.3/CRS84'>"
+						+ "<gml:pos>2 2</gml:pos></gml:Point>", GeoConstants.GEO_GML_LITERAL));
+		entities.add(302L, SimpleValueFactory.getInstance().createLiteral(
+				"{\"type\":\"Point\",\"coordinates\":[3,3]}", GeoConstants.GEO_JSON_LITERAL));
+		entities.add(303L, SimpleValueFactory.getInstance().createLiteral("POINT(4 4)"));
+		entities.add(304L, SimpleValueFactory.getInstance().createIRI("http://example.com/distribution"));
+		FakeStatements statements = new FakeStatements();
+		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, LITERAL);
+		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 301L);
+		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 302L);
+		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 303L);
+		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 304L);
+		statements.add(FEATURE_1, HAS_DEFAULT_GEOMETRY, GEOMETRY_RESOURCE);
+
+		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
+				new FakePluginConnection(entities, statements));
+		List<IndexGeometry> geometries = source.geometriesForGeometryResource(GEOMETRY_RESOURCE);
+		assertEquals(List.of(GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_GML_LITERAL,
+				GeoConstants.GEO_JSON_LITERAL), geometries.stream()
+					.map(geometry -> geometry.sourceGeometryLiteral().datatype()).toList());
+		assertEquals(3, source.geometriesForFeature(FEATURE_1).size());
+	}
+
+	@Test
+	public void malformedSupportedGenericSerializationReportsIndexingFailure() {
+		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
+				.createIRI("http://example.com/geometry"));
+		entities.add(LITERAL, SimpleValueFactory.getInstance().createLiteral(
+				"{\"type\":\"Point\",\"coordinates\":[1]}", GeoConstants.GEO_JSON_LITERAL));
+		FakeStatements statements = new FakeStatements();
+		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, LITERAL);
+
+		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
+				new FakePluginConnection(entities, statements));
+		PluginException failure = assertThrows(PluginException.class,
+				() -> source.geometriesForGeometryResource(GEOMETRY_RESOURCE));
+
+		assertTrue(failure.getMessage().contains("Could not index GeoSPARQL geometry"));
+		assertTrue(failure.getMessage().contains(GeoConstants.GEO_JSON_LITERAL.stringValue()));
+	}
+
 	private static CountingGeoSparqlPlugin newPlugin(boolean ignoreErrors) {
 		CountingGeoSparqlPlugin plugin = new CountingGeoSparqlPlugin();
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		GeoSparqlConfig config = new GeoSparqlConfig();
 		config.setIgnoreErrors(ignoreErrors);
@@ -194,6 +249,7 @@ public class RepositoryGeometrySourceTest {
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		GeoSparqlConfig config = new GeoSparqlConfig();
 		config.setIgnoreErrors(ignoreErrors);
