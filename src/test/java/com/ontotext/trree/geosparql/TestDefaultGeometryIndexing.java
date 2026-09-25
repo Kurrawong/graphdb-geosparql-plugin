@@ -52,6 +52,35 @@ public class TestDefaultGeometryIndexing extends AbstractGeoSparqlPluginTest {
 	}
 
 	@Test
+	public void featureRelationsSupportSimpleFeaturesEgenhoferAndRcc8() {
+		executeSparqlUpdateQuery(PREFIXES
+				+ "INSERT DATA {\n"
+				+ "  ex:outer a geo:Feature ; geo:hasDefaultGeometry ex:outerGeom .\n"
+				+ "  ex:outerGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((0 0,0 4,4 4,4 0,0 0))\"^^geo:wktLiteral .\n"
+				+ "  ex:inner a geo:Feature ; geo:hasDefaultGeometry ex:innerGeom .\n"
+				+ "  ex:innerGeom a geo:Geometry ;\n"
+				+ "    geo:asWKT \"POLYGON((1 1,1 2,2 2,2 1,1 1))\"^^geo:wktLiteral .\n"
+				+ "}");
+		enablePlugin();
+
+		assertTrue(ask("ex:inner geo:sfWithin ex:outer"));
+		assertTrue(ask("ex:inner geo:ehInside ex:outer"));
+		assertTrue(ask("ex:inner geo:rcc8ntpp ex:outer"));
+	}
+
+	@Test
+	public void boundGeometryLiteralsWorkOnEitherSideOfPropertyRelation() {
+		insertContainerAndFeature("POINT(1 1)");
+		enablePlugin();
+
+		assertTrue(ask("VALUES ?leftGeometry { \"POINT(1 1)\"^^geo:wktLiteral }\n"
+				+ "?leftGeometry geo:sfWithin ex:container"));
+		assertTrue(ask("ex:thingGeom geo:sfWithin "
+				+ "\"POLYGON((0 0,0 4,4 4,4 0,0 0))\"^^geo:wktLiteral"));
+	}
+
+	@Test
 	public void collectionEnvelopeCandidatesUseCompleteSourceForExactEvaluation() throws Exception {
 		executeSparqlUpdateQuery(PREFIXES
 				+ "INSERT DATA {\n"

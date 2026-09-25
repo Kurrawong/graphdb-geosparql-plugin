@@ -1,10 +1,20 @@
 package com.ontotext.trree.geosparql.jena;
 
-import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.GeoSparqlPropertyRelation;
+import com.ontotext.trree.geosparql.TestIndexGeometries;
+import com.ontotext.trree.geosparql.jena.query.GeometryMember;
+import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.configuration.GeoSPARQLConfig;
+import org.apache.jena.geosparql.implementation.DimensionInfo;
+import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
+import org.apache.jena.geosparql.implementation.datatype.WKTDatatype;
+import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
+import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
+import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
+import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -13,8 +23,14 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.junit.Before;
 import org.junit.Test;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Dimension;
 import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryCollection;
+import org.locationtech.jts.geom.GeometryFactory;
+
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -126,6 +142,149 @@ public class JenaGeometryAdapterTest {
 						source.asGeometryWrapper(), unsupported));
 
 		assertTrue(exception.getMessage().contains("Unsupported GeoSPARQL geometry datatype"));
+	}
+
+	@Test
+	public void queryGeometryResultRejectsCoordinatesOutsideTheCrsDomain() {
+		GeometryWrapper outsideCrs84 = GeometryWrapperFactory.createPoint(
+				new Coordinate(181, 0), CRS84, GeoConstants.GEO_WKT_LITERAL.stringValue());
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
+						VALUE_FACTORY, outsideCrs84, outsideCrs84, GeoConstants.GEO_WKT_LITERAL,
+						GeoJsonResultDimensionPolicy.XY_ONLY));
+
+		assertTrue(exception.getMessage().contains("outside the CRS domain"));
+	}
+
+	@Test
+	public void queryGeometryResultRepresentsLinearRingAsLineString() {
+		GeometryWrapper linearRing = GeometryWrapperFactory.createGeometry(
+				CustomGeometryFactory.theInstance().createLinearRing(new Coordinate[]{
+						new Coordinate(0, 0),
+						new Coordinate(1, 0),
+						new Coordinate(0, 0)
+				}), CRS84, GeoConstants.GEO_WKT_LITERAL.stringValue());
+
+		for (IRI datatype : List.of(
+				GeoConstants.GEO_WKT_LITERAL,
+				GeoConstants.GEO_GML_LITERAL,
+				GeoConstants.GEO_JSON_LITERAL)) {
+			Literal result = JenaGeometryAdapter.toQueryGeometryLiteral(
+					VALUE_FACTORY, linearRing, linearRing, datatype,
+					GeoJsonResultDimensionPolicy.XY_ONLY);
+
+			assertEquals(datatype, result.getDatatype());
+			assertEquals("LineString", SourceGeometryLiteral.fromLiteral(result)
+					.asGeometryWrapper().getGeometryType());
+		}
+	}
+
+	@Test
+	public void queryGeometryResultRequiresCrs84ForGeoJson() {
+		GeometryWrapper projected = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT)
+				.asGeometryWrapper();
+
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class,
+				() -> JenaGeometryAdapter.toQueryGeometryLiteral(
+						VALUE_FACTORY, projected, projected, GeoConstants.GEO_JSON_LITERAL,
+						GeoJsonResultDimensionPolicy.XY_ONLY));
+
+		assertTrue(exception.getMessage().contains("GeoJSON output requires CRS84"));
+	}
+
+	@Test
+	public void queryWktResultPreservesStructuredEmptyDescendantsInNonEmptyCollections() {
+		GeometryFactory factory = CustomGeometryFactory.theInstance();
+		GeometryCollection emptyChild = factory.createGeometryCollection(new Geometry[]{
+				factory.createPoint(new CustomCoordinateSequence(CoordinateSequenceDimensions.XY))
+		});
+		GeometryCollection resultGeometry = factory.createGeometryCollection(new Geometry[]{
+				emptyChild,
+				factory.createPoint(new CustomCoordinateSequence(
+						CoordinateSequenceDimensions.XY, "3 4"))
+		});
+		GeometryWrapper result = new GeometryWrapper(resultGeometry, CRS84, WKTDatatype.URI,
+				new DimensionInfo(CoordinateSequenceDimensions.XY, resultGeometry.getDimension()));
+
+		Literal literal = JenaGeometryAdapter.toQueryGeometryLiteral(VALUE_FACTORY, result, result,
+				GeoConstants.GEO_WKT_LITERAL, GeoJsonResultDimensionPolicy.XY_ONLY);
+		Geometry reparsed = SourceGeometryLiteral.fromLiteral(literal).asGeometryWrapper()
+				.getParsingGeometry();
+
+		assertEquals(2, reparsed.getNumGeometries());
+		assertEquals("GeometryCollection", reparsed.getGeometryN(0).getGeometryType());
+		assertEquals(1, reparsed.getGeometryN(0).getNumGeometries());
+		assertEquals("Point", reparsed.getGeometryN(0).getGeometryN(0).getGeometryType());
+		assertTrue(reparsed.getGeometryN(0).getGeometryN(0).isEmpty());
+		assertEquals(new Coordinate(3, 4), reparsed.getGeometryN(1).getCoordinate());
+	}
+
+	@Test
+	public void queryWktResultPreservesRecoverableLayoutsOfStructuredEmptyMembers() {
+		for (CoordinateSequenceDimensions dimensions : List.of(
+				CoordinateSequenceDimensions.XYZ,
+				CoordinateSequenceDimensions.XYM,
+				CoordinateSequenceDimensions.XYZM)) {
+			GeometryFactory factory = CustomGeometryFactory.theInstance();
+			GeometryCollection resultGeometry = factory.createGeometryCollection(new Geometry[]{
+					factory.createPoint(new CustomCoordinateSequence(dimensions))
+			});
+			GeometryWrapper result = new GeometryWrapper(resultGeometry, CRS84, WKTDatatype.URI,
+					new DimensionInfo(dimensions, resultGeometry.getDimension()));
+
+			Literal literal = JenaGeometryAdapter.toQueryGeometryLiteral(VALUE_FACTORY, result, result,
+					GeoConstants.GEO_WKT_LITERAL, GeoJsonResultDimensionPolicy.XY_ONLY);
+			GeometryWrapper reparsed = SourceGeometryLiteral.fromLiteral(literal).asGeometryWrapper();
+			GeometryWrapper selected = GeometryMember.calculate(reparsed, 1);
+			DimensionInfo expectedDimensions = new DimensionInfo(dimensions, 0);
+
+			String marker = CoordinateSequenceDimensions.convertDimensions(dimensions);
+			assertEquals("GEOMETRYCOLLECTION" + marker + "(POINT" + marker + " EMPTY)",
+					literal.stringValue());
+			assertEquals(dimensions, selected.getCoordinateSequenceDimensions());
+			assertEquals(expectedDimensions.getCoordinate(),
+					selected.getDimensionInfo().getCoordinate());
+			assertEquals(expectedDimensions.getSpatial(),
+					selected.getDimensionInfo().getSpatial());
+			assertEquals(dimensions == CoordinateSequenceDimensions.XYZ
+					|| dimensions == CoordinateSequenceDimensions.XYZM,
+					GeometryMetadata.is3D(selected));
+			assertEquals(dimensions == CoordinateSequenceDimensions.XYM
+					|| dimensions == CoordinateSequenceDimensions.XYZM,
+					GeometryMetadata.isMeasured(selected));
+		}
+	}
+
+	@Test
+	public void xyOnlyGeoJsonPolicyDoesNotSerializeStaleXyzMetadata() {
+		Literal literal = VALUE_FACTORY.createLiteral(
+				"{\"type\":\"LineString\",\"coordinates\":[[0,0,5],[2,2,6]]}",
+				GeoConstants.GEO_JSON_LITERAL);
+		GeometryWrapper source = JenaGeometryAdapter.toSourceGeometryLiteral(literal)
+				.asGeometryWrapper();
+		GeometryWrapper envelope = source.envelope();
+
+		assertEquals(3, envelope.getCoordinateDimension());
+		assertTrue(Double.isNaN(envelope.getParsingGeometry().getCoordinate().getZ()));
+
+		Literal result = JenaGeometryAdapter.toQueryGeometryLiteral(VALUE_FACTORY, source,
+				envelope, GeoConstants.GEO_JSON_LITERAL, GeoJsonResultDimensionPolicy.XY_ONLY);
+
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(result)
+				.asGeometryWrapper().getCoordinateDimension());
+	}
+
+	@Test
+	public void queryGeometryResultRejectsLayoutsThatGmlCannotRepresent() {
+		for (String wkt : new String[]{"POINT Z(1 2 3)", "POINT M(1 2 3)"}) {
+			GeometryWrapper result = SourceGeometryLiteral.fromWkt(wkt).asGeometryWrapper();
+
+			assertThrows(wkt, JenaGeoSparqlException.class,
+					() -> JenaGeometryAdapter.toQueryGeometryLiteral(
+							VALUE_FACTORY, result, result, GeoConstants.GEO_GML_LITERAL,
+							GeoJsonResultDimensionPolicy.XY_ONLY));
+		}
 	}
 
 	@Test
@@ -535,11 +694,11 @@ public class JenaGeometryAdapterTest {
 				GeoConstants.GEO_WKT_LITERAL);
 		Literal projectedPoint = VALUE_FACTORY.createLiteral(PROJECTED_POINT_WKT, GeoConstants.GEO_WKT_LITERAL);
 
-		Value result = JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_DISTANCE.stringValue(),
-				crs84Point, projectedPoint, GeoSparqlUnits.URI_METRE);
+		GeometryWrapper left = JenaGeometryAdapter.toSourceGeometryLiteral(crs84Point).asGeometryWrapper();
+		GeometryWrapper right = JenaGeometryAdapter.toSourceGeometryLiteral(projectedPoint).asGeometryWrapper();
+		double result = left.distance(right, Unit_URI.METRE_URL);
 
-		assertTrue(result instanceof Literal);
-		assertEquals(0d, ((Literal) result).doubleValue(), 0.2d);
+		assertEquals(0d, result, 0.2d);
 	}
 
 	@Test
