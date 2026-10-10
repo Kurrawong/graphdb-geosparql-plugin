@@ -8,7 +8,9 @@ predicates. Each function signature shows the result type before the function na
 For repository setup, index configuration, and a first query, see
 [Using the GeoSPARQL plugin](geosparql-usage.md).
 
-Use these prefixes with the examples and signatures below:
+Use these prefixes with the examples and signatures below. `geo:` names GeoSPARQL classes, datatypes, and properties;
+`geof:` names GeoSPARQL functions. `geoext:` names GraphDB extension functions in the USeekM namespace, `uom:` names
+OGC units of measurement, and `xsd:` names XML Schema datatypes:
 
 ```sparql
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>
@@ -38,18 +40,57 @@ of the first source geometry literal. See
 ## Unit IRIs
 
 For a `uri unit` argument, use an IRI such as `uom:metre` or a simple `xsd:anyURI` literal containing the full IRI.
-The `uom:` prefix above expands to `http://www.opengis.net/def/uom/OGC/1.0/`. These built-in OGC unit IRIs are
-recognized by the pinned Jena unit registry:
+The `uom:` prefix expands to `http://www.opengis.net/def/uom/OGC/1.0/`, so `uom:metre` means
+`http://www.opengis.net/def/uom/OGC/1.0/metre`.
 
-| Unit kind | Accepted `uom:` names | Where they apply |
+The following tables list all built-in unit IRIs registered by the pinned Apache Jena 6.2.0 dependency. The EPSG
+column gives the full URN, which can be used directly as an IRI, for example `<urn:ogc:def:uom:EPSG::9001>`.
+A dash means that Jena does not register an EPSG URN for that unit.
+
+### Linear units
+
+These units apply to `geof:withinDistance`, `geof:distance`, `geof:area`, `geof:length`, and `geof:perimeter`, and to
+`geof:buffer` when the source CRS has linear units. `geof:area` returns the square of the selected linear unit.
+
+| Unit | Accepted OGC names | Accepted EPSG URN |
 | --- | --- | --- |
-| Linear | `metre`, `meter`, `kilometre`, `kilometer`, `centimetre`, `centimeter`, `millimetre`, `millimeter`, `foot`, `surveyFootUS`, `inch`, `mile`, `statuteMile`, `nauticalMile`, `yard` | `geof:withinDistance`, `geof:distance`, `geof:area`, `geof:length`, and `geof:perimeter`; also `geof:buffer` when the source CRS has linear units. |
-| Angular | `degree`, `radian`, `microRadian`, `minute`, `second`, `grad` | `geof:buffer` when the source CRS has angular units. Distance, within-distance, area, length, and perimeter require linear output units. |
+| Metre | `uom:metre`, `uom:meter` | `urn:ogc:def:uom:EPSG::9001` |
+| Kilometre | `uom:kilometre`, `uom:kilometer` | `urn:ogc:def:uom:EPSG::9036` |
+| Centimetre | `uom:centimetre`, `uom:centimeter` | `urn:ogc:def:uom:EPSG::1033` |
+| Millimetre | `uom:millimetre`, `uom:millimeter` | — |
+| Foot | `uom:foot` | `urn:ogc:def:uom:EPSG::9002` |
+| US survey foot | `uom:surveyFootUS` | `urn:ogc:def:uom:EPSG::9003` |
+| Inch | `uom:inch` | — |
+| Statute mile | `uom:mile`, `uom:statuteMile` | `urn:ogc:def:uom:EPSG::9093` |
+| Nautical mile | `uom:nauticalMile` | `urn:ogc:def:uom:EPSG::9030` |
+| Yard | `uom:yard` | `urn:ogc:def:uom:EPSG::9096` |
 
-For example, `geof:withinDistance(?left, ?right, 0.5, uom:kilometre)` tests a half-kilometre threshold. Jena also
-recognizes certain EPSG unit URNs; its [unit registry](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java)
-is the complete list for the pinned version. A recognized unit can still produce an expression error when it is
-incompatible with the source CRS.
+### Angular units
+
+These units apply to `geof:buffer` when the source CRS has angular units. Distance, within-distance, area, length,
+and perimeter require linear output units.
+
+| Unit | Accepted OGC name | Accepted EPSG URN |
+| --- | --- | --- |
+| Degree | `uom:degree` | `urn:ogc:def:uom:EPSG::9102` |
+| Radian | `uom:radian` | `urn:ogc:def:uom:EPSG::9101` |
+| Microradian | `uom:microRadian` | `urn:ogc:def:uom:EPSG::9109` |
+| Arc-minute | `uom:minute` | `urn:ogc:def:uom:EPSG::9103` |
+| Arc-second | `uom:second` | `urn:ogc:def:uom:EPSG::9104` |
+| Grad | `uom:grad` | `urn:ogc:def:uom:EPSG::9105` |
+
+For example, `geof:withinDistance(?left, ?right, 0.5, uom:kilometre)` tests a half-kilometre threshold.
+`geof:distance(?left, ?right, <urn:ogc:def:uom:EPSG::9001>)` returns metres, as does the same call with `uom:metre`.
+A recognized unit can still produce an expression error when it is incompatible with the source CRS.
+
+The accepted identifiers come from Jena 6.2.0's
+[unit registry](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java)
+and [unit vocabulary](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/vocabulary/Unit_URI.java).
+For unit definitions, see the
+[Apache SIS Units reference](https://sis.apache.org/apidocs/org.apache.sis.util/org/apache/sis/measure/Units.html).
+The [EPSG.io units catalogue](https://epsg.io/?q=+kind%3AUNIT) uses the `kind:UNIT` search filter and lists a broader
+set of EPSG units. Presence in that catalogue does not imply plugin support: for example, the millimetre URN
+`urn:ogc:def:uom:EPSG::1025` is not registered by Jena 6.2.0; use `uom:millimetre` or `uom:millimeter` instead.
 
 ## Geometry operations
 
@@ -179,12 +220,15 @@ FILTER(geof:sfWithin(?leftGeometry, ?rightGeometry))
 
 Use a `geof:` function when the query already has two geometry literals to compare. Functions evaluate the relation
 directly, do not use the GeoSPARQL index, and remain available when the plugin is not enabled. Use the corresponding
-`geo:` predicate to find Features or Geometries that have a spatial relationship. Predicate queries use the GeoSPARQL
-index and require the plugin to be enabled.
+`geo:` predicate to find Features or Geometries that have a spatial relationship. Predicate queries require the
+plugin to be enabled.
 
-At least one side of a predicate query must already have a value. When one side is unknown, the index finds possible
-matches and the plugin verifies the spatial relationship. When both sides have values, the plugin evaluates the pair
-directly without searching the index.
+At least one side of a predicate query must already have a value. When one side is unbound, the index filters possible
+matches using geometry search bounds, and the plugin performs exact evaluation on candidates that require it. This
+can reduce the number of geometry comparisons substantially compared with applying a boolean function to every pair
+of geometries. The benefit depends on query selectivity and the relation; broad candidate sets or full-scan fallbacks
+can still require many comparisons. When both sides have values, the plugin evaluates the pair directly without
+searching the index, so there is no candidate-filtering speedup for that pair.
 
 The subject and object may be `geo:Feature` or `geo:Geometry` resources. For a Feature, the plugin uses the Geometry
 resources linked through `geo:hasDefaultGeometry`. For a Geometry, it uses the geometry literals supplied through
