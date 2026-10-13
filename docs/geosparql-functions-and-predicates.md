@@ -10,7 +10,7 @@ For repository setup, index configuration, and a first query, see
 
 Use these prefixes with the examples and signatures below. `geo:` names GeoSPARQL classes, datatypes, and properties;
 `geof:` names GeoSPARQL functions. `geoext:` names GraphDB extension functions in the USeekM namespace, `uom:` names
-OGC units of measurement, and `xsd:` names XML Schema datatypes:
+OGC units of measurement, `length:` names USeekM length units, and `xsd:` names XML Schema datatypes:
 
 ```sparql
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>
@@ -41,12 +41,18 @@ of the first source geometry literal. See
 ## Unit IRIs
 
 For a `uri unit` argument, use an IRI such as `uom:metre` or a simple `xsd:anyURI` literal containing the full IRI.
-The `uom:` prefix expands to `http://www.opengis.net/def/uom/OGC/1.0/`, so `uom:metre` means
-`http://www.opengis.net/def/uom/OGC/1.0/metre`.
+The unit determines the returned measurement or the units of an input radius or distance threshold.
+For example, `geof:distance(?left, ?right, uom:kilometre)` returns a distance in kilometres, while
+`geof:withinDistance(?left, ?right, 0.5, uom:kilometre)` tests a half-kilometre threshold.
 
-The following tables list all built-in unit IRIs registered by the pinned Apache Jena 6.2.0 dependency. The EPSG
-column gives the full URN, which can be used directly as an IRI, for example `<urn:ogc:def:uom:EPSG::9001>`.
-A dash means that Jena does not register an EPSG URN for that unit.
+Units must be compatible with the calculation and its source CRS. For buffers, use a linear radius unit
+with linear source coordinates, or an angular unit such as `uom:degree` with geographic coordinates.
+To buffer geographic data in metres or kilometres, first transform it to a suitable projected CRS.
+An incompatible unit produces a SPARQL expression error, including for an empty result or a zero radius.
+
+The following tables list all built-in linear and angular unit identifiers supported by the plugin's
+Apache Jena 6.2.0 dependency. Use an OGC name or a listed EPSG URN as the `unit` argument.
+Additional GraphDB length-unit identifiers are listed separately below.
 
 ### Linear units
 
@@ -66,10 +72,14 @@ These units apply to `geof:withinDistance`, `geof:distance`, `geof:area`, `geof:
 | Nautical mile | `uom:nauticalMile` | `urn:ogc:def:uom:EPSG::9030` |
 | Yard | `uom:yard` | `urn:ogc:def:uom:EPSG::9096` |
 
+For example, `geof:distance(?left, ?right, <urn:ogc:def:uom:EPSG::9001>)` returns metres,
+as does the same call with `uom:metre`.
+
 ### Angular units
 
-These units apply to `geof:buffer` when the source CRS has angular units. Within-distance, area, length,
-and perimeter require linear units. The distance output extensions below also support degrees and radians.
+These units apply to `geof:buffer` when the source CRS has angular units. `geof:withinDistance`,
+`geof:area`, `geof:length`, and `geof:perimeter` require linear units. `geof:distance` also supports the
+degree and radian output extensions described below.
 
 | Unit | Accepted OGC name | Accepted EPSG URN |
 | --- | --- | --- |
@@ -80,15 +90,10 @@ and perimeter require linear units. The distance output extensions below also su
 | Arc-second | `uom:second` | `urn:ogc:def:uom:EPSG::9104` |
 | Grad | `uom:grad` | `urn:ogc:def:uom:EPSG::9105` |
 
-For example, `geof:withinDistance(?left, ?right, 0.5, uom:kilometre)` tests a half-kilometre threshold.
-`geof:distance(?left, ?right, <urn:ogc:def:uom:EPSG::9001>)` returns metres, as does the same call with `uom:metre`.
-A recognized unit can still produce an expression error when it is incompatible with the source CRS.
-
 ### Additional linear unit IRIs
 
-The plugin supports the units recognized by Apache Jena 6.2.0, subject to the function's unit and CRS
-requirements. It also accepts the following length-unit IRIs wherever a compatible linear unit is
-required, using the `length:` prefix above:
+The plugin also accepts the following length-unit IRIs wherever a compatible linear unit is required,
+using the `length:` prefix above:
 
 | Unit IRI | Unit |
 | --- | --- |
@@ -103,13 +108,9 @@ required, using the `length:` prefix above:
 | `length:yd` | Yard; see the conversion limitation below |
 | `length:ly` | Light-year, using 9.460528405 × 10¹⁵ metres per light-year |
 
-For example, `length:km` requests lengths and perimeters in kilometres, or areas in square kilometres.
+For example, `length:km` requests results in kilometres from `geof:length` and `geof:perimeter`,
+or square kilometres from `geof:area`.
 A radius of `1` with `length:km` requests a one-kilometre buffer in a projected CRS with linear coordinates.
-
-Units must be compatible with the calculation and its source CRS. For buffers, use a linear radius unit
-with linear source coordinates, or an angular unit such as `uom:degree` with geographic coordinates.
-To buffer geographic data in metres or kilometres, first transform it to a suitable projected CRS.
-An incompatible unit produces a SPARQL expression error, including for an empty result or a zero radius.
 
 ### Distance output extensions
 
@@ -117,11 +118,11 @@ Angular and raw-coordinate units have operation-specific meanings:
 
 | Unit IRI | Meaning |
 | --- | --- |
-| `uom:degree`, `uom:radian` | Angular units for compatible geographic buffer radii. For distance output, these express the distance in metres divided by the mean Earth radius, converted to degrees or radians. They are not linear length or area units. |
-| `uom:GridSpacing`, `uom:unity` | Distance output in the left geometry's coordinate units, after transforming the right geometry to that CRS. For geographic coordinates, this is a planar coordinate distance rather than a great-circle measurement. These options do not define length, area, or buffer units. |
+| `uom:degree`, `uom:radian` | `geof:buffer` uses these as angular radii with compatible geographic CRSs. For `geof:distance`, they express the distance in metres divided by the mean Earth radius, converted to degrees or radians. They are not linear length or area units. |
+| `uom:GridSpacing`, `uom:unity` | Distance output in the left geometry's coordinate units, after transforming the right geometry to that CRS. For geographic coordinates, this is a planar coordinate distance rather than a great-circle measurement. These output options apply only to `geof:distance`. |
 
 For instance, the geographic points `POINT(0 0)` and `POINT(1 0)` are one degree apart along the equator;
-a distance measurement with `uom:degree` returns `1.0`.
+`geof:distance` with `uom:degree` returns `1.0`.
 
 ### Known yard conversion limitation
 
@@ -130,15 +131,6 @@ The plugin's Apache Jena 6.2.0 dependency has an
 Avoid `uom:yard`, `urn:ogc:def:uom:EPSG::9096`, and `length:yd` for measurements, buffer radii, or
 `geof:withinDistance` thresholds that require accurate yard conversion. For example, points one metre apart
 can incorrectly satisfy a one-yard threshold. Use another supported unit, such as metres or feet, instead.
-
-The built-in identifiers come from Jena 6.2.0's
-[unit registry](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java)
-and [unit vocabulary](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/vocabulary/Unit_URI.java).
-For unit definitions, see the
-[Apache SIS Units reference](https://sis.apache.org/apidocs/org.apache.sis.util/org/apache/sis/measure/Units.html).
-The [EPSG.io units catalogue](https://epsg.io/?q=+kind%3AUNIT) uses the `kind:UNIT` search filter and lists a broader
-set of EPSG units. Presence in that catalogue does not imply plugin support: for example, the millimetre URN
-`urn:ogc:def:uom:EPSG::1025` is not registered by Jena 6.2.0; use `uom:millimetre` or `uom:millimeter` instead.
 
 ## Geometry operations
 
@@ -273,8 +265,8 @@ plugin to be enabled.
 
 At least one side of a predicate query must already have a value. When one side is unbound, the index filters possible
 matches using geometry search bounds, and the plugin performs exact evaluation on candidates that require it. This
-can reduce the number of geometry comparisons substantially compared with applying a boolean function to every pair
-of geometries. The benefit depends on query selectivity and the relation; broad candidate sets or full-scan fallbacks
+can be much faster than applying a boolean function to every pair of geometries because the index reduces the number
+of comparisons. The benefit depends on query selectivity and the relation; broad candidate sets or full-scan fallbacks
 can still require many comparisons. When both sides have values, the plugin evaluates the pair directly without
 searching the index, so there is no candidate-filtering speedup for that pair.
 
