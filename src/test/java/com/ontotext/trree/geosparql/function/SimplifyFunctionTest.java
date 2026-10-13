@@ -13,9 +13,12 @@ import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
 import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.Polygon;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class SimplifyFunctionTest {
 	private static final String URI = GeoConstants.NS_GEOF + "simplify";
@@ -65,6 +68,103 @@ public class SimplifyFunctionTest {
 		assertEquals(2, simplified.getNumPoints());
 		assertEquals(5.0, simplified.getCoordinateN(0).getZ(), 0.0);
 		assertEquals(7.0, simplified.getCoordinateN(1).getZ(), 0.0);
+	}
+
+	@Test
+	public void zeroToleranceRetainsMeasuredPointLiteral() throws Exception {
+		Literal result = (Literal) evaluate(wkt("POINT M(1 2 7)"), VALUE_FACTORY.createLiteral(0));
+		GeometryWrapper geometry = GeometryWrapper.extract(result.stringValue(), WKTDatatype.URI);
+		Point point = (Point) geometry.getParsingGeometry();
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		assertEquals(3, geometry.getCoordinateDimension());
+		assertEquals(1, point.getCoordinateSequence().getMeasures());
+		assertEquals(7.0, point.getCoordinateSequence().getM(0), 0.0);
+	}
+
+	@Test
+	public void survivingWktVerticesRetainAltitudeAndMeasureInSourceAxisOrder() throws Exception {
+		for (String crs : new String[]{"", "<" + EPSG_4326 + "> "}) {
+			Literal source = wkt(crs + "LINESTRING ZM(10 20 3 7,10.1 21 4 8,10 22 5 9)");
+			for (double tolerance : new double[]{0, 0.2}) {
+				Literal result = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(tolerance));
+				GeometryWrapper geometry = GeometryWrapper.extract(result.stringValue(), WKTDatatype.URI);
+				LineString line = (LineString) geometry.getParsingGeometry();
+
+				assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+				assertEquals(GeometryWrapper.extract(source.stringValue(), WKTDatatype.URI).getSrsURI(),
+						geometry.getSrsURI());
+				assertEquals(4, geometry.getCoordinateDimension());
+				assertEquals(1, line.getCoordinateSequence().getMeasures());
+				assertEquals(tolerance == 0 ? 3 : 2, line.getNumPoints());
+				for (int index = 0; index < line.getNumPoints(); index++) {
+					int sourceIndex = tolerance == 0 ? index : index * 2;
+					assertEquals(sourceIndex == 1 ? 10.1 : 10.0,
+							line.getCoordinateSequence().getX(index), 0.0);
+					assertEquals(20.0 + sourceIndex, line.getCoordinateSequence().getY(index), 0.0);
+					assertEquals(3.0 + sourceIndex, line.getCoordinateSequence().getZ(index), 0.0);
+					assertEquals(7.0 + sourceIndex, line.getCoordinateSequence().getM(index), 0.0);
+				}
+			}
+		}
+	}
+
+	@Test
+	public void authorityAxisPointLiteralRetainsAltitudeAtZeroTolerance() throws Exception {
+		Literal result = (Literal) evaluate(wkt("<" + EPSG_4326 + "> POINT Z(10 100 3)"),
+				VALUE_FACTORY.createLiteral(0));
+		GeometryWrapper geometry = GeometryWrapper.extract(result.stringValue(), WKTDatatype.URI);
+		Point point = (Point) geometry.getParsingGeometry();
+
+		assertEquals(EPSG_4326, geometry.getSrsURI());
+		assertEquals(3, geometry.getCoordinateDimension());
+		assertEquals(10.0, point.getX(), 0.0);
+		assertEquals(100.0, point.getY(), 0.0);
+		assertEquals(3.0, point.getCoordinateSequence().getZ(0), 0.0);
+	}
+
+	@Test
+	public void polygonRepairWithUndefinedOrdinatesProducesExpressionError() {
+		Literal source = wkt("POLYGON ZM((0 0 1 10,2 2 2 20,0 2 3 30,2 0 4 40,0 0 1 10))");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(source, VALUE_FACTORY.createLiteral(0)));
+	}
+
+	@Test
+	public void measuredPolygonLiteralRetainsSurvivingVertexOrdinates() throws Exception {
+		Literal source = wkt("POLYGON ZM((0 0 1 10,1 0.1 2 20,2 0 3 30,2 2 4 40,0 2 5 50,0 0 1 10))");
+
+		Literal result = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(0.2));
+		GeometryWrapper geometry = GeometryWrapper.extract(result.stringValue(), WKTDatatype.URI);
+		var coordinates = ((Polygon) geometry.getParsingGeometry()).getExteriorRing().getCoordinateSequence();
+
+		assertEquals(4, geometry.getCoordinateDimension());
+		assertEquals(5, coordinates.size());
+		double[] expectedZ = {1, 3, 4, 5, 1};
+		for (int i = 0; i < coordinates.size(); i++) {
+			assertEquals(expectedZ[i], coordinates.getZ(i), 0.0);
+			assertEquals(expectedZ[i] * 10, coordinates.getM(i), 0.0);
+		}
+	}
+
+	@Test
+	public void planarPolygonRepairReturnsAValidXyLiteral() throws Exception {
+		Literal result = (Literal) evaluate(wkt("POLYGON((0 0,2 2,0 2,2 0,0 0))"),
+				VALUE_FACTORY.createLiteral(0));
+		GeometryWrapper geometry = GeometryWrapper.extract(result.stringValue(), WKTDatatype.URI);
+
+		assertTrue(geometry.getParsingGeometry().isValid());
+		assertEquals(1.0, geometry.getParsingGeometry().getArea(), 0.0);
+		assertEquals(2, geometry.getCoordinateDimension());
+	}
+
+	@Test
+	public void ambiguousSurvivingMeasuresProduceExpressionError() {
+		Literal source = wkt("LINESTRING M(0 0 1,1 0.1 2,0 0 3)");
+
+		assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(source, VALUE_FACTORY.createLiteral(0)));
 	}
 
 	private Value evaluate(Value... args) throws ValueExprEvaluationException {
