@@ -9,6 +9,7 @@ import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 

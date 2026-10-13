@@ -7,6 +7,7 @@ import com.ontotext.trree.geosparql.jena.query.GeometryCentroid;
 import com.ontotext.trree.geosparql.jena.query.GeometryConcaveHull;
 import com.ontotext.trree.geosparql.jena.query.GeometryCount;
 import com.ontotext.trree.geosparql.jena.query.GeometryCoordinateExtrema;
+import com.ontotext.trree.geosparql.jena.query.GeometryDistance;
 import com.ontotext.trree.geosparql.jena.query.GeometryLength;
 import com.ontotext.trree.geosparql.jena.query.GeometryMember;
 import com.ontotext.trree.geosparql.jena.query.GeometryMetadata;
@@ -25,7 +26,7 @@ import java.util.function.ToIntFunction;
 final class QueryFunctionManifest {
 	private static final List<Entry> ENTRIES = List.of(
 			new Entry(GeoConstants.GEOF_AREA.stringValue(), 2,
-					new UnaryGeometryUnitToDoubleProvider(GeometryArea::calculate)),
+					new UnaryGeometryUnitToDoubleProvider(GeometryArea::calculate, 2)),
 			new Entry(GeoConstants.GEOF_BOUNDARY.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::boundary,
 							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
@@ -48,7 +49,7 @@ final class QueryFunctionManifest {
 					new BinaryGeometryProvider(GeometryWrapper::difference,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_DISTANCE.stringValue(), 3,
-					new BinaryGeometryUnitToDoubleProvider(GeometryWrapper::distance)),
+					new BinaryGeometryUnitToDoubleProvider(GeometryDistance::calculate)),
 			new Entry(GeoConstants.GEOF_ENVELOPE.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::envelope,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
@@ -191,7 +192,17 @@ final class QueryFunctionManifest {
 		double apply(GeometryWrapper geometry, String unitUri) throws Exception;
 	}
 
-	record UnaryGeometryUnitToDoubleProvider(UnaryGeometryUnitToDoubleCalculation calculation) implements Provider {
+	record UnaryGeometryUnitToDoubleProvider(UnaryGeometryUnitToDoubleCalculation calculation,
+			int unitPower) implements Provider {
+		UnaryGeometryUnitToDoubleProvider(UnaryGeometryUnitToDoubleCalculation calculation) {
+			this(calculation, 1);
+		}
+
+		UnaryGeometryUnitToDoubleProvider {
+			if (unitPower != 1 && unitPower != 2) {
+				throw new IllegalArgumentException("Measurement output must use linear or squared units.");
+			}
+		}
 	}
 
 	record GeometryMemberProvider(BiFunction<GeometryWrapper, Integer, GeometryWrapper> calculation,
