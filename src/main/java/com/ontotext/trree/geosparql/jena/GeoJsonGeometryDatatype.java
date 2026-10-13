@@ -21,7 +21,6 @@ import org.locationtech.jts.geom.MultiPoint;
 import org.locationtech.jts.geom.MultiPolygon;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
-import org.locationtech.jts.io.geojson.GeoJsonReader;
 import org.locationtech.jts.io.geojson.GeoJsonWriter;
 
 import java.util.ArrayList;
@@ -49,10 +48,7 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 					? new ParsedGeometry(GEOMETRY_FACTORY.createPoint(emptySequence()), 2)
 					: parseGeometry(rootObject(new JSONParser().parse(geometryLiteral)));
 			int coordinateDimension = validated.coordinateDimension() == 0 ? 2 : validated.coordinateDimension();
-			Geometry geometry = geometryLiteral.isEmpty()
-					? validated.geometry()
-					: normalizeCoordinateSequences(
-							new GeoJsonReader(GEOMETRY_FACTORY).read(geometryLiteral), coordinateDimension);
+			Geometry geometry = normalizeCoordinateSequences(validated.geometry(), coordinateDimension);
 			return new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84, getURI(),
 					new DimensionInfo(coordinateDimension, coordinateDimension,
 							geometry.getDimension()), geometryLiteral);
