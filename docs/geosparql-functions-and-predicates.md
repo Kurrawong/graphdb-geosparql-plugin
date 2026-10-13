@@ -17,6 +17,7 @@ PREFIX geo: <http://www.opengis.net/ont/geosparql#>
 PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
 PREFIX geoext: <http://rdf.useekm.com/ext#>
 PREFIX uom: <http://www.opengis.net/def/uom/OGC/1.0/>
+PREFIX length: <http://rdf.useekm.com/uom/length/>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 ```
 
@@ -67,8 +68,8 @@ These units apply to `geof:withinDistance`, `geof:distance`, `geof:area`, `geof:
 
 ### Angular units
 
-These units apply to `geof:buffer` when the source CRS has angular units. Distance, within-distance, area, length,
-and perimeter require linear output units.
+These units apply to `geof:buffer` when the source CRS has angular units. Within-distance, area, length,
+and perimeter require linear units. The distance output extensions below also support degrees and radians.
 
 | Unit | Accepted OGC name | Accepted EPSG URN |
 | --- | --- | --- |
@@ -83,7 +84,53 @@ For example, `geof:withinDistance(?left, ?right, 0.5, uom:kilometre)` tests a ha
 `geof:distance(?left, ?right, <urn:ogc:def:uom:EPSG::9001>)` returns metres, as does the same call with `uom:metre`.
 A recognized unit can still produce an expression error when it is incompatible with the source CRS.
 
-The accepted identifiers come from Jena 6.2.0's
+### Additional linear unit IRIs
+
+The plugin supports the units recognized by Apache Jena 6.2.0, subject to the function's unit and CRS
+requirements. It also accepts the following length-unit IRIs wherever a compatible linear unit is
+required, using the `length:` prefix above:
+
+| Unit IRI | Unit |
+| --- | --- |
+| `length:cm` | Centimetre |
+| `length:km` | Kilometre |
+| `length:mm` | Millimetre |
+| `length:ft` | Foot |
+| `length:US_survey_ft` | US survey foot |
+| `length:inch` | Inch |
+| `length:mile` | Statute mile |
+| `length:NM` | Nautical mile |
+| `length:yd` | Yard; see the conversion limitation below |
+| `length:ly` | Light-year, using 9.460528405 × 10¹⁵ metres per light-year |
+
+For example, `length:km` requests lengths and perimeters in kilometres, or areas in square kilometres.
+A radius of `1` with `length:km` requests a one-kilometre buffer in a projected CRS with linear coordinates.
+
+Units must be compatible with the calculation and its source CRS. For buffers, use a linear radius unit
+with linear source coordinates, or an angular unit such as `uom:degree` with geographic coordinates.
+To buffer geographic data in metres or kilometres, first transform it to a suitable projected CRS.
+An incompatible unit produces a SPARQL expression error, including for an empty result or a zero radius.
+
+### Distance output extensions
+
+Angular and raw-coordinate units have operation-specific meanings:
+
+| Unit IRI | Meaning |
+| --- | --- |
+| `uom:degree`, `uom:radian` | Angular units for compatible geographic buffer radii. For distance output, these express the distance in metres divided by the mean Earth radius, converted to degrees or radians. They are not linear length or area units. |
+| `uom:GridSpacing`, `uom:unity` | Distance output in the left geometry's coordinate units, after transforming the right geometry to that CRS. For geographic coordinates, this is a planar coordinate distance rather than a great-circle measurement. These options do not define length, area, or buffer units. |
+
+For instance, the geographic points `POINT(0 0)` and `POINT(1 0)` are one degree apart along the equator;
+a distance measurement with `uom:degree` returns `1.0`.
+
+### Known yard conversion limitation
+
+The plugin's Apache Jena 6.2.0 dependency has an
+[incorrect yard conversion factor](https://github.com/apache/jena/blob/d0676a2c402ead68a133596f4ac5977be64dd251/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java#L41).
+Avoid `uom:yard` and `length:yd` for measurements and buffer radii that require accurate yard conversion.
+Use another supported unit, such as metres or feet, instead.
+
+The built-in identifiers come from Jena 6.2.0's
 [unit registry](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java)
 and [unit vocabulary](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/vocabulary/Unit_URI.java).
 For unit definitions, see the
@@ -136,11 +183,11 @@ set of EPSG units. Presence in that catalogue does not imply plugin support: for
 | `xsd:boolean geof:isEmpty(geomLiteral geometry)` | Returns `true` when `geometry` contains no coordinates. |
 | `xsd:boolean geof:isMeasured(geomLiteral geometry)` | Returns `true` when the coordinate layout contains an M ordinate. |
 | `xsd:boolean geof:isSimple(geomLiteral geometry)` | Returns `true` when `geometry` is simple under the Simple Features rules. |
-| `xsd:double geof:maxX(geomLiteral geometry)` | Returns the largest X coordinate according to the source SRS axes. |
-| `xsd:double geof:maxY(geomLiteral geometry)` | Returns the largest Y coordinate according to the source SRS axes. |
+| `xsd:double geof:maxX(geomLiteral geometry)` | Returns the largest first ordinate in source SRS coordinate order. |
+| `xsd:double geof:maxY(geomLiteral geometry)` | Returns the largest second ordinate in source SRS coordinate order. |
 | `xsd:double geof:maxZ(geomLiteral geometry)` | Returns the largest finite Z ordinate. An XY or XYM geometry produces an error. |
-| `xsd:double geof:minX(geomLiteral geometry)` | Returns the smallest X coordinate according to the source SRS axes. |
-| `xsd:double geof:minY(geomLiteral geometry)` | Returns the smallest Y coordinate according to the source SRS axes. |
+| `xsd:double geof:minX(geomLiteral geometry)` | Returns the smallest first ordinate in source SRS coordinate order. |
+| `xsd:double geof:minY(geomLiteral geometry)` | Returns the smallest second ordinate in source SRS coordinate order. |
 | `xsd:double geof:minZ(geomLiteral geometry)` | Returns the smallest finite Z ordinate. An XY or XYM geometry produces an error. |
 | `xsd:integer geof:numGeometries(geomLiteral geometry)` | Returns the number of direct structural geometry members. An atomic geometry counts as one. |
 | `xsd:integer geof:spatialDimension(geomLiteral geometry)` | Returns the number of spatial coordinate dimensions. |

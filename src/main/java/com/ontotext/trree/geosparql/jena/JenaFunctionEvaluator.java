@@ -7,7 +7,6 @@ import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
 import org.apache.jena.geosparql.implementation.intersection_patterns.EgenhoferIntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.RCC8IntersectionPattern;
 import org.apache.jena.geosparql.implementation.intersection_patterns.SimpleFeaturesIntersectionPattern;
-import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -419,11 +418,10 @@ public final class JenaFunctionEvaluator {
 		requireArgs(functionUri, args, 1);
 		SourceGeometryLiteral source = sourceLiteral(args[0]);
 		GeometryWrapper sourceGeometry = source.asGeometryWrapper();
-		GeometryWrapper crs84 = sourceGeometry.transform(SRS_URI.DEFAULT_WKT_CRS84);
 		int coordinateDimension = GeoConstants.GEO_JSON_LITERAL.equals(source.jenaDatatype())
 				? sourceGeometry.getCoordinateDimension()
 				: 2;
-		return JenaGeometryAdapter.toGeoJsonLiteral(valueFactory, crs84, coordinateDimension);
+		return JenaGeometryAdapter.toGeoJsonLiteral(valueFactory, sourceGeometry, coordinateDimension);
 	}
 
 	private static Literal asWkt(ValueFactory valueFactory, String functionUri, Value... args)

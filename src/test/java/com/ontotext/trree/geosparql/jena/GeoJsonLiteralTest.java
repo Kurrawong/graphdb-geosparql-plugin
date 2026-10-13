@@ -242,6 +242,26 @@ public class GeoJsonLiteralTest {
 		}
 	}
 
+	@Test
+	public void emptyMultiLineStringMembersAreDimensionNeutral() {
+		for (String positions : List.of("[1,2],[3,4]", "[1,2,10],[3,4,20]")) {
+			GeometryWrapper wrapper = source("{\"type\":\"MultiLineString\",\"coordinates\":[[],["
+					+ positions + "],[]]}").asGeometryWrapper();
+
+			assertEquals(3, wrapper.getParsingGeometry().getNumGeometries());
+			assertTrue(wrapper.getParsingGeometry().getGeometryN(0).isEmpty());
+			assertTrue(wrapper.getParsingGeometry().getGeometryN(2).isEmpty());
+			assertEquals(2, wrapper.getParsingGeometry().getGeometryN(1).getNumPoints());
+			assertEquals(1.0, wrapper.getParsingGeometry().getGeometryN(1).getCoordinate().x, 0.0);
+			assertEquals(2.0, wrapper.getParsingGeometry().getGeometryN(1).getCoordinate().y, 0.0);
+			assertEquals(positions.contains("10") ? 3 : 2, wrapper.getCoordinateDimension());
+			if (wrapper.getCoordinateDimension() == 3) {
+				assertEquals(10.0, wrapper.getParsingGeometry().getGeometryN(1).getCoordinates()[0].z, 0.0);
+				assertEquals(20.0, wrapper.getParsingGeometry().getGeometryN(1).getCoordinates()[1].z, 0.0);
+			}
+		}
+	}
+
 	private static Literal serialize(SourceGeometryLiteral source, IRI datatype) {
 		return JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY, source.asGeometryWrapper(), datatype);
 	}
