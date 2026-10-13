@@ -182,7 +182,7 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 | `xsd:integer geof:coordinateDimension(geomLiteral geometry)` | Returns the number of ordinates in the coordinate layout: 2, 3, or 4. |
 | `xsd:integer geof:dimension(geomLiteral geometry)` | Returns the topological dimension. A heterogeneous collection returns its largest member dimension. |
 | `geomLiteral geof:geometryN(geomLiteral geometry, numeric index)` | Returns the direct geometry member at the one-based integral `index`. |
-| `xsd:anyURI geof:geometryType(geomLiteral geometry)` | Returns the Simple Features class IRI for the geometry type. |
+| `xsd:anyURI geof:geometryType(geomLiteral geometry)` | Returns the class IRI for the geometry type. |
 | `xsd:boolean geof:is3D(geomLiteral geometry)` | Returns `true` when the coordinate layout contains a Z ordinate. |
 | `xsd:boolean geof:isEmpty(geomLiteral geometry)` | Returns `true` when `geometry` contains no coordinates. |
 | `xsd:boolean geof:isMeasured(geomLiteral geometry)` | Returns `true` when the coordinate layout contains an M ordinate. |
@@ -398,9 +398,9 @@ For example, `geo:dimension(?geometryLiteral)` calculates a geometry literal's t
 | --- | --- |
 | `xsd:double geof:distance(geomLiteral left, geomLiteral right)` | Returns planar XY distance in the coordinate units of `left`, after CRS alignment. |
 | `geomLiteral geof:buffer(geomLiteral geometry, doubleLiteral radius)` | Returns a buffer whose radius uses the source CRS coordinate unit. |
-| `xsd:integer geo:coordinateDimension(geomLiteral geometry)` | Compatibility alias for coordinate dimension. |
-| `xsd:integer geo:dimension(geomLiteral geometry)` | Compatibility alias for topological dimension. |
-| `xsd:integer geo:spatialDimension(geomLiteral geometry)` | Compatibility alias for spatial dimension. |
+| `xsd:int geo:coordinateDimension(geomLiteral geometry)` | Compatibility alias for coordinate dimension. |
+| `xsd:int geo:dimension(geomLiteral geometry)` | Compatibility alias for topological dimension. |
+| `xsd:int geo:spatialDimension(geomLiteral geometry)` | Compatibility alias for spatial dimension. |
 | `xsd:boolean geo:isEmpty(geomLiteral geometry)` | Compatibility alias for the empty-geometry test. |
 | `xsd:boolean geo:isSimple(geomLiteral geometry)` | Compatibility alias for the Simple Features simplicity test. |
 
