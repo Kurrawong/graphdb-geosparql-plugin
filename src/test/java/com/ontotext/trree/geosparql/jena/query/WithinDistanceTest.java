@@ -59,6 +59,16 @@ public class WithinDistanceTest {
 	}
 
 	@Test
+	public void negativeThresholdRemainsNegativeWhenUnitConversionUnderflows() throws Exception {
+		GeometryWrapper point = geometry("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		String millimetre = "http://www.opengis.net/def/uom/OGC/1.0/millimetre";
+
+		assertFalse(WithinDistance.calculate(point, point, -Double.MIN_VALUE, millimetre));
+		assertTrue(WithinDistance.calculate(point, point, 0.0, millimetre));
+		assertTrue(WithinDistance.calculate(point, point, -0.0, millimetre));
+	}
+
+	@Test
 	public void metreThresholdDoesNotRoundDistancesInNonMetreCoordinates() throws Exception {
 		String crs = "<" + EPSG_2227 + "> ";
 		GeometryWrapper left = geometry(crs + "POINT(6300000 2000000)");

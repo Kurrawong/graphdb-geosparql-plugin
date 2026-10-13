@@ -220,6 +220,25 @@ public class DistanceAndBufferFunctionsTest {
 	}
 
 	@Test
+	public void withinDistanceRejectsNegativeThresholdsThatUnderflowDuringConversion() throws Exception {
+		Literal point = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		IRI millimetre = VALUE_FACTORY.createIRI(Unit_URI.MILLIMETRE_URL);
+		Literal threshold = VALUE_FACTORY.createLiteral(-Double.MIN_VALUE);
+
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, point, point, threshold, millimetre)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				point, point, VALUE_FACTORY.createLiteral(0.0), millimetre)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				point, point, VALUE_FACTORY.createLiteral(-0.0), millimetre)).booleanValue());
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+				point, point, threshold, VALUE_FACTORY.createIRI("http://example.com/unit/unknown")));
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+				wkt("<http://example.com/crs/unknown> POINT(0 0)"), point, threshold, millimetre));
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+				wkt("POINT EMPTY"), wkt("POINT(0 0)"), threshold, millimetre));
+	}
+
+	@Test
 	public void withinDistanceAcceptsLengthAliasesAndScalesLightYearThresholds() throws Exception {
 		Literal left = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
 		Literal right = wkt("<" + EPSG_32634 + "> POINT(500003 4600004)");
