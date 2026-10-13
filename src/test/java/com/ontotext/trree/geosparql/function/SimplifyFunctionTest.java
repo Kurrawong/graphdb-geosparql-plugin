@@ -12,6 +12,7 @@ import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
+import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
@@ -160,11 +161,98 @@ public class SimplifyFunctionTest {
 	}
 
 	@Test
-	public void ambiguousSurvivingMeasuresProduceExpressionError() {
+	public void coincidentSurvivingVerticesRetainTheirOwnMeasures() throws Exception {
 		Literal source = wkt("LINESTRING M(0 0 1,1 0.1 2,0 0 3)");
 
-		assertThrows(ValueExprEvaluationException.class,
-				() -> evaluate(source, VALUE_FACTORY.createLiteral(0)));
+		for (double tolerance : new double[]{0, 0.2}) {
+			Literal literal = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(tolerance));
+			LineString line = (LineString) SourceGeometryLiteral.fromLiteral(literal)
+					.asGeometryWrapper().getParsingGeometry();
+			assertEquals(3, line.getNumPoints());
+			assertEquals(1.0, line.getCoordinateSequence().getM(0), 0.0);
+			assertEquals(2.0, line.getCoordinateSequence().getM(1), 0.0);
+			assertEquals(3.0, line.getCoordinateSequence().getM(2), 0.0);
+		}
+	}
+
+	@Test
+	public void coincidentEndpointMeasuresSurviveRemovalOfOtherVertices() throws Exception {
+		Literal source = wkt("LINESTRING M(0 0 1,1 0.1 2,2 0 3,1 1 4,0 0 5)");
+
+		Literal literal = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(0.2));
+		LineString line = (LineString) SourceGeometryLiteral.fromLiteral(literal)
+				.asGeometryWrapper().getParsingGeometry();
+
+		assertEquals(4, line.getNumPoints());
+		double[] expected = {1, 3, 4, 5};
+		for (int i = 0; i < expected.length; i++) {
+			assertEquals(expected[i], line.getCoordinateSequence().getM(i), 0.0);
+		}
+	}
+
+	@Test
+	public void coincidentCollectionMembersRetainTheirOwnMeasures() throws Exception {
+		Literal source = wkt("GEOMETRYCOLLECTION M(POINT M(0 0 1),POINT M(0 0 2),"
+				+ "MULTILINESTRING M((0 0 3,1 0.1 4,2 0 5),(0 0 6,1 -0.1 7,2 0 8)))");
+
+		Literal literal = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(0.2));
+		GeometryCollection result = (GeometryCollection) SourceGeometryLiteral.fromLiteral(literal)
+				.asGeometryWrapper().getParsingGeometry();
+
+		assertEquals(3, result.getNumGeometries());
+		assertEquals(1.0, ((Point) result.getGeometryN(0)).getCoordinateSequence().getM(0), 0.0);
+		assertEquals(2.0, ((Point) result.getGeometryN(1)).getCoordinateSequence().getM(0), 0.0);
+		GeometryCollection lines = (GeometryCollection) result.getGeometryN(2);
+		for (int i = 0; i < 2; i++) {
+			var coordinates = ((LineString) lines.getGeometryN(i)).getCoordinateSequence();
+			assertEquals(2, coordinates.size());
+			assertEquals(3.0 + i * 3, coordinates.getM(0), 0.0);
+			assertEquals(5.0 + i * 3, coordinates.getM(1), 0.0);
+		}
+	}
+
+	@Test
+	public void measuredCollectionMemberDoesNotRestrictPlanarPolygonRepair() throws Exception {
+		Literal source = wkt("GEOMETRYCOLLECTION(POINT M(10 20 7),POLYGON((0 0,2 2,0 2,2 0,0 0)))");
+
+		Literal literal = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(0));
+		GeometryCollection result = (GeometryCollection) SourceGeometryLiteral.fromLiteral(literal)
+				.asGeometryWrapper().getParsingGeometry();
+
+		assertEquals(7.0, ((Point) result.getGeometryN(0)).getCoordinateSequence().getM(0), 0.0);
+		assertTrue(result.getGeometryN(1).isValid());
+		assertEquals(1.0, result.getGeometryN(1).getArea(), 0.0);
+	}
+
+	@Test
+	public void polygonRepairRetainsMeasuresWhenNoNewVerticesAreNeeded() throws Exception {
+		Literal source = wkt("POLYGON M((0 0 1,4 0 5,4 4 9,0 4 5,0 0 1),"
+				+ "(5 5 11,6 5 12,6 6 13,5 6 12,5 5 11))");
+
+		Literal literal = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(0));
+		Polygon polygon = (Polygon) SourceGeometryLiteral.fromLiteral(literal).asGeometryWrapper().getParsingGeometry();
+
+		assertTrue(polygon.isValid());
+		assertEquals(0, polygon.getNumInteriorRing());
+		assertEquals(16.0, polygon.getArea(), 0.0);
+		var coordinates = polygon.getExteriorRing().getCoordinateSequence();
+		assertEquals(1, coordinates.getMeasures());
+		for (int i = 0; i < coordinates.size(); i++) {
+			assertEquals(coordinates.getX(i) + coordinates.getY(i) + 1, coordinates.getM(i), 0.0);
+		}
+	}
+
+	@Test
+	public void collapsedMeasuredPolygonRetainsTypedEmptyLiteral() throws Exception {
+		Literal source = wkt("POLYGON M((0 0 1,2 0 2,2 2 3,0 2 4,0 0 1))");
+
+		Literal result = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(100));
+		GeometryWrapper geometry = SourceGeometryLiteral.fromLiteral(result).asGeometryWrapper();
+
+		assertTrue(geometry.isEmpty());
+		assertEquals("Polygon", geometry.getGeometryType());
+		assertEquals(2, geometry.getTopologicalDimension());
+		assertEquals(3, geometry.getCoordinateDimension());
 	}
 
 	private Value evaluate(Value... args) throws ValueExprEvaluationException {
