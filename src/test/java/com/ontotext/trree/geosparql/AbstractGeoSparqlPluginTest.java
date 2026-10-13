@@ -154,4 +154,13 @@ public abstract class AbstractGeoSparqlPluginTest {
 		uq.execute();
 		connection.commit();
 	}
+
+	protected static void assertCauseChainContains(Throwable throwable, String expectedText) {
+		for (Throwable cause = throwable; cause != null; cause = cause.getCause()) {
+			if (cause.getMessage() != null && cause.getMessage().contains(expectedText)) {
+				return;
+			}
+		}
+		throw new AssertionError("Expected exception cause containing: " + expectedText, throwable);
+	}
 }

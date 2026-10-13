@@ -56,12 +56,4 @@ public class TestPluginIgnoreErrors extends AbstractGeoSparqlPluginTest {
 		assertTrue(connection.hasStatement(INVALID_GML, GeoConstants.GEO_AS_GML, null, false));
 	}
 
-	private static void assertCauseChainContains(Throwable throwable, String expectedText) {
-		for (Throwable cause = throwable; cause != null; cause = cause.getCause()) {
-			if (cause.getMessage() != null && cause.getMessage().contains(expectedText)) {
-				return;
-			}
-		}
-		throw new AssertionError("Expected exception chain to contain: " + expectedText, throwable);
-	}
 }

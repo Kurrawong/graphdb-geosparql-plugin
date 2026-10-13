@@ -16,9 +16,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Regression coverage for <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/4">#4</a>.
- *
- * <p>{@code geof:sfEquals} and {@code geof:ehEquals} must use the GeoSPARQL DE-9IM equality pattern
+ * {@code geof:sfEquals} and {@code geof:ehEquals} must use the GeoSPARQL DE-9IM equality pattern
  * {@code TFFFTFFFT}, including for generic {@code GeometryCollection} literals. Point, closed-line, and empty
  * collections have empty boundaries, so that pattern does not hold even when the collections are identical.
  */

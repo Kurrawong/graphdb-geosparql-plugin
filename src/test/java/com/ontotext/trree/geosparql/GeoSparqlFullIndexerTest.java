@@ -30,7 +30,8 @@ import static org.junit.Assert.assertEquals;
 public class GeoSparqlFullIndexerTest {
 	private static final long AS_WKT = 10L;
 	private static final long AS_GML = 11L;
-	private static final long HAS_DEFAULT_GEOMETRY = 12L;
+	private static final long AS_GEO_JSON = 12L;
+	private static final long HAS_DEFAULT_GEOMETRY = 13L;
 	private static final long GEOMETRY_1 = 100L;
 	private static final long GEOMETRY_2 = 101L;
 	private static final long LITERAL_1 = 200L;
@@ -101,10 +102,33 @@ public class GeoSparqlFullIndexerTest {
 		assertEquals(1, plugin.conversionCount);
 	}
 
+	@Test
+	public void fullIndexDiscoversGeoJsonForGeometryAndDefaultGeometryFeature() throws Exception {
+		CountingGeoSparqlPlugin plugin = newPlugin();
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_1, SimpleValueFactory.getInstance().createIRI("http://example.com/geometry/1"));
+		entities.add(LITERAL_1, SimpleValueFactory.getInstance()
+				.createLiteral("{\"type\":\"Point\",\"coordinates\":[1,2]}"));
+
+		FakeStatements statements = new FakeStatements((Runnable) null);
+		statements.add(GEOMETRY_1, AS_GEO_JSON, LITERAL_1);
+		statements.add(FEATURE_1, HAS_DEFAULT_GEOMETRY, GEOMETRY_1);
+
+		RecordingIndexer indexer = new RecordingIndexer();
+		new GeoSparqlFullIndexer(indexer, plugin).reindex(new FakePluginConnection(entities, statements));
+
+		assertEquals(List.of(GEOMETRY_1, FEATURE_1), indexer.indexedSubjects);
+		assertEquals(List.of(GeoConstants.GEO_JSON_LITERAL, GeoConstants.GEO_JSON_LITERAL),
+				plugin.fallbackDatatypes);
+		assertEquals(List.of(GeoConstants.GEO_JSON_LITERAL, GeoConstants.GEO_JSON_LITERAL),
+				indexer.sourceDatatypes);
+	}
+
 	private static CountingGeoSparqlPlugin newPlugin() {
 		CountingGeoSparqlPlugin plugin = new CountingGeoSparqlPlugin();
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
+		plugin.asGeoJSON = AS_GEO_JSON;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		plugin.setConfig(new GeoSparqlConfig());
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlFullIndexerTest.class));
@@ -113,21 +137,25 @@ public class GeoSparqlFullIndexerTest {
 
 	private static final class CountingGeoSparqlPlugin extends GeoSparqlPlugin {
 		private int conversionCount;
+		private final List<IRI> fallbackDatatypes = new ArrayList<>();
 
 		@Override
 		IndexGeometry getIndexGeometryFromLiteral(Literal literal, IRI fallbackDatatype) {
 			conversionCount++;
+			fallbackDatatypes.add(fallbackDatatype);
 			return JenaGeometryAdapter.toIndexGeometry(
-					SourceGeometryLiteral.fromWkt(literal.stringValue()));
+					JenaGeometryAdapter.toSourceGeometryLiteral(literal, fallbackDatatype));
 		}
 	}
 
 	private static final class RecordingIndexer implements GeoSparqlIndexer {
 		private final List<Long> indexedSubjects = new ArrayList<>();
+		private final List<IRI> sourceDatatypes = new ArrayList<>();
 
 		@Override
 		public void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
 			indexedSubjects.add(subject);
+			sourceDatatypes.add(geometry.sourceGeometryLiteral().datatype());
 		}
 
 		@Override

@@ -23,8 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Verifies that GraphDB transactions activate durable GeoSPARQL state only when they mutate configuration or index
- * data, while retaining crash-safe ordering for mutations. Regression provenance:
- * https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/2.
+ * data, while retaining crash-safe ordering for mutations.
  */
 public class TestPluginEnableTransactionLifecycle extends AbstractGeoSparqlPluginTest {
 	private static final String PREFIXES = ""

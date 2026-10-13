@@ -64,6 +64,33 @@ The update runs synchronously and may take significant time for a large reposito
 finishes. If the rebuild fails, resolve the reported geometry, CRS-data, storage, or configuration problem and run the
 update again.
 
+## Geometry serialization and conversion
+
+The plugin supports reusable WKT, GML, and GeoJSON geometry literals and the `geof:asWKT`, `geof:asGML`, and
+`geof:asGeoJSON` conversion functions. See
+[Geometry serialization and conversion](docs/geosparql-geometry-serialization.md) for the supported formats,
+round-trip guarantees, dimension and metadata loss, indexing behavior, and upgrade steps.
+
+## GML conversion
+
+`geof:asGML(geometry, profile)` converts a supported WKT, GML, or GeoJSON geometry literal to a reusable
+`geo:gmlLiteral` without changing the source CRS or its axis semantics. The profile argument must be a simple or
+`xsd:string` literal with exactly this value:
+
+```text
+http://www.opengis.net/def/profile/ogc/2.0/gml-sf0
+```
+
+Non-empty results use Apache Jena's GML 3.2 geometry writer. The supported geometry-fragment subset consists of
+Point, LineString, Polygon, MultiPoint, MultiCurve, MultiSurface, and MultiGeometry output. These fragments follow
+the corresponding GML 3.2.1 geometry content models; they are not complete GML Simple Features application
+documents, and document-level requirements such as `gml:id` remain the responsibility of an application that embeds
+the fragment.
+
+XY output is supported. XYZ output requires both an XYZ geometry and a genuinely three-dimensional source CRS.
+XYZ geometry under a two-dimensional CRS and measured XYM or XYZM layouts produce a SPARQL expression error. Every
+empty input produces the GeoSPARQL zero-length `geo:gmlLiteral` form.
+
 ## CRS data
 
 The plugin works out of the box for CRS84/default GeoSPARQL geometry data. The default plugin package does not bundle
