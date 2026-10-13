@@ -13,6 +13,8 @@ import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.WKTWriter;
+import org.opengis.referencing.operation.TransformException;
+import org.opengis.util.FactoryException;
 
 /**
  * Central RDF4J-to-Jena conversion entry point for geometry values.
@@ -74,8 +76,15 @@ public final class JenaGeometryAdapter {
 
 	static Literal toGeoJsonLiteral(ValueFactory valueFactory, GeometryWrapper wrapper,
 			int coordinateDimension) {
+		GeometryWrapper crs84;
+		try {
+			crs84 = wrapper.transform(SRS_URI.DEFAULT_WKT_CRS84);
+		} catch (FactoryException | TransformException e) {
+			throw new JenaGeoSparqlException("Cannot transform " + wrapper.getSrsURI()
+					+ " to CRS84 for GeoJSON output", e);
+		}
 		Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(
-				wrapper.getParsingGeometry(), coordinateDimension);
+				crs84.getParsingGeometry(), coordinateDimension);
 		GeometryWrapper output = new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84,
 				GeoConstants.GEO_JSON_LITERAL.stringValue(),
 				new DimensionInfo(coordinateDimension, coordinateDimension, geometry.getDimension()));
