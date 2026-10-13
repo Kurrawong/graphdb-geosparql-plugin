@@ -132,6 +132,10 @@ Avoid `uom:yard`, `urn:ogc:def:uom:EPSG::9096`, and `length:yd` for measurements
 `geof:withinDistance` thresholds that require accurate yard conversion. For example, points one metre apart
 can incorrectly satisfy a one-yard threshold. Use another supported unit, such as metres or feet, instead.
 
+For further unit definitions and EPSG codes, see the
+[Apache SIS Units reference](https://sis.apache.org/apidocs/org.apache.sis.util/org/apache/sis/measure/Units.html)
+and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
+
 ## Geometry operations
 
 | Function | Description |
