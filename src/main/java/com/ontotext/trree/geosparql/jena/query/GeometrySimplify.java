@@ -59,7 +59,7 @@ public final class GeometrySimplify {
 			return DouglasPeuckerSimplifier.simplify(source, tolerance);
 		}
 
-		List<Coordinate> occurrences = new ArrayList<>();
+		List<SourceOccurrence> occurrences = new ArrayList<>();
 		// JTS copies Z but discards M. Private Z identifiers retain source occurrences through its 2D algorithm.
 		Geometry identified = new GeometryEditor(source.getFactory()).edit(source,
 				new GeometryEditor.CoordinateSequenceOperation() {
@@ -67,11 +67,12 @@ public final class GeometrySimplify {
 					public CoordinateSequence edit(CoordinateSequence coordinates, Geometry geometry) {
 						CustomCoordinateSequence result = new CustomCoordinateSequence(
 								coordinates.size(), CoordinateSequenceDimensions.XYZ);
+						CoordinateSequenceDimensions dimensions = coordinateDimensions(coordinates);
 						for (int i = 0; i < coordinates.size(); i++) {
 							result.setOrdinate(i, CoordinateSequence.X, coordinates.getX(i));
 							result.setOrdinate(i, CoordinateSequence.Y, coordinates.getY(i));
 							result.setOrdinate(i, CoordinateSequence.Z, occurrences.size());
-							occurrences.add(coordinates.getCoordinateCopy(i));
+							occurrences.add(new SourceOccurrence(coordinates.getCoordinateCopy(i), dimensions));
 						}
 						return result;
 					}
@@ -91,8 +92,9 @@ public final class GeometrySimplify {
 			if (index != identifier || index < 0 || index >= occurrences.size()) {
 				throw new IllegalArgumentException("Simplification cannot preserve source Z/M ordinates");
 			}
-			Coordinate original = occurrences.get(index);
-			if (original.getX() != coordinate.getX() || original.getY() != coordinate.getY()) {
+			SourceOccurrence original = occurrences.get(index);
+			if (original.coordinate().getX() != coordinate.getX()
+					|| original.coordinate().getY() != coordinate.getY()) {
 				throw new IllegalArgumentException("Simplification cannot preserve source Z/M ordinates");
 			}
 			return original;
@@ -112,18 +114,28 @@ public final class GeometrySimplify {
 	}
 
 	private static Geometry restoreRepairOrdinates(Geometry source, Geometry simplified) {
-		Map<Vertex, Coordinate> originals = new HashMap<>();
+		Map<Vertex, SourceOccurrence> originals = new HashMap<>();
 		Set<Vertex> ambiguous = new HashSet<>();
-		for (Coordinate coordinate : source.getCoordinates()) {
-			Vertex vertex = new Vertex(coordinate.getX(), coordinate.getY(), coordinate.getZ());
-			Coordinate previous = originals.putIfAbsent(vertex, coordinate);
-			if (previous != null && Double.compare(previous.getM(), coordinate.getM()) != 0) {
-				ambiguous.add(vertex);
+		source.apply((GeometryComponentFilter) component -> {
+			CoordinateSequence coordinates = component instanceof Point point ? point.getCoordinateSequence()
+					: component instanceof LineString line ? line.getCoordinateSequence() : null;
+			if (coordinates == null) {
+				return;
 			}
-		}
+			CoordinateSequenceDimensions dimensions = coordinateDimensions(coordinates);
+			for (int i = 0; i < coordinates.size(); i++) {
+				Coordinate coordinate = coordinates.getCoordinateCopy(i);
+				Vertex vertex = new Vertex(coordinate.getX(), coordinate.getY(), coordinate.getZ());
+				SourceOccurrence previous = originals.putIfAbsent(vertex, new SourceOccurrence(coordinate, dimensions));
+				if (previous != null && (Double.compare(previous.coordinate().getM(), coordinate.getM()) != 0
+						|| previous.dimensions() != dimensions)) {
+					ambiguous.add(vertex);
+				}
+			}
+		});
 		return restoreCoordinates(simplified, coordinate -> {
 			Vertex vertex = new Vertex(coordinate.getX(), coordinate.getY(), coordinate.getZ());
-			Coordinate original = originals.get(vertex);
+			SourceOccurrence original = originals.get(vertex);
 			if (original == null || ambiguous.contains(vertex)) {
 				throw new IllegalArgumentException("Simplification cannot preserve source Z/M ordinates");
 			}
@@ -131,7 +143,7 @@ public final class GeometrySimplify {
 		});
 	}
 
-	private static Geometry restoreCoordinates(Geometry simplified, Function<Coordinate, Coordinate> lookup) {
+	private static Geometry restoreCoordinates(Geometry simplified, Function<Coordinate, SourceOccurrence> lookup) {
 		return new GeometryEditor(simplified.getFactory()).edit(simplified,
 				new GeometryEditor.CoordinateSequenceOperation() {
 					@Override
@@ -139,20 +151,30 @@ public final class GeometrySimplify {
 						if (coordinates.size() == 0) {
 							return coordinates.copy();
 						}
-						double[] x = new double[coordinates.size()];
-						double[] y = new double[coordinates.size()];
-						double[] z = new double[coordinates.size()];
-						double[] m = new double[coordinates.size()];
+						SourceOccurrence first = lookup.apply(coordinates.getCoordinateCopy(0));
+						// Undefined Z/M values do not remove their declared axes.
+						CustomCoordinateSequence result = new CustomCoordinateSequence(coordinates.size(), first.dimensions());
 						for (int i = 0; i < coordinates.size(); i++) {
-							Coordinate original = lookup.apply(coordinates.getCoordinateCopy(i));
-							x[i] = original.getX();
-							y[i] = original.getY();
-							z[i] = original.getZ();
-							m[i] = original.getM();
+							SourceOccurrence original = i == 0 ? first : lookup.apply(coordinates.getCoordinateCopy(i));
+							if (original.dimensions() != first.dimensions()) {
+								throw new IllegalArgumentException("Simplification cannot preserve source coordinate layout");
+							}
+							result.setOrdinate(i, CoordinateSequence.X, original.coordinate().getX());
+							result.setOrdinate(i, CoordinateSequence.Y, original.coordinate().getY());
+							result.setOrdinate(i, CoordinateSequence.Z, original.coordinate().getZ());
+							result.setOrdinate(i, CoordinateSequence.M, original.coordinate().getM());
 						}
-						return new CustomCoordinateSequence(x, y, z, m);
+						return result;
 					}
 				});
+	}
+
+	private static CoordinateSequenceDimensions coordinateDimensions(CoordinateSequence coordinates) {
+		return CustomCoordinateSequence.findCoordinateSequenceDimensions(
+				coordinates.getDimension(), coordinates.getDimension() - coordinates.getMeasures());
+	}
+
+	private record SourceOccurrence(Coordinate coordinate, CoordinateSequenceDimensions dimensions) {
 	}
 
 	private record Vertex(double x, double y, double z) {

@@ -1,8 +1,13 @@
 package com.ontotext.trree.geosparql.jena.query;
 
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
+import org.apache.jena.geosparql.implementation.DimensionInfo;
+import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
+import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
+import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
 import org.apache.jena.geosparql.implementation.datatype.WKTDatatype;
 import org.junit.Test;
+import org.locationtech.jts.geom.CoordinateSequence;
 import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Point;
@@ -189,6 +194,43 @@ public class GeometrySimplifyTest {
 		assertEquals(1, coordinates.getMeasures());
 		for (int i = 0; i < coordinates.size(); i++) {
 			assertEquals(coordinates.getX(i) + coordinates.getY(i) + 1, coordinates.getM(i), 0.0);
+		}
+	}
+
+	@Test
+	public void undefinedOrdinatesDoNotChangeDeclaredCoordinateLayout() {
+		for (CoordinateSequenceDimensions layout : new CoordinateSequenceDimensions[]{
+				CoordinateSequenceDimensions.XYZ, CoordinateSequenceDimensions.XYM, CoordinateSequenceDimensions.XYZM}) {
+			for (boolean definedTail : new boolean[]{true, false}) {
+				CustomCoordinateSequence coordinates = new CustomCoordinateSequence(2, layout);
+				for (int i = 0; i < 2; i++) {
+					coordinates.setOrdinate(i, CoordinateSequence.X, i);
+					coordinates.setOrdinate(i, CoordinateSequence.Y, i);
+				}
+				if (definedTail && coordinates.hasZ()) {
+					coordinates.setOrdinate(1, CoordinateSequence.Z, 5);
+				}
+				if (definedTail && coordinates.hasM()) {
+					coordinates.setOrdinate(1, CoordinateSequence.M, 7);
+				}
+				GeometryWrapper source = new GeometryWrapper(
+						CustomGeometryFactory.theInstance().createLineString(coordinates),
+						"http://www.opengis.net/def/crs/OGC/1.3/CRS84", WKTDatatype.URI,
+						new DimensionInfo(layout, 1));
+
+				GeometryWrapper result = GeometrySimplify.calculate(source, 0);
+				var actual = ((LineString) result.getParsingGeometry()).getCoordinateSequence();
+
+				assertEquals(source.getCoordinateDimension(), result.getCoordinateDimension());
+				assertEquals(coordinates.getDimension(), actual.getDimension());
+				assertEquals(coordinates.getMeasures(), actual.getMeasures());
+				assertEquals(coordinates.hasZ(), actual.hasZ());
+				assertEquals(coordinates.hasM(), actual.hasM());
+				assertTrue(Double.isNaN(actual.getZ(0)));
+				assertTrue(Double.isNaN(actual.getM(0)));
+				assertEquals(definedTail && coordinates.hasZ() ? 5 : Double.NaN, actual.getZ(1), 0.0);
+				assertEquals(definedTail && coordinates.hasM() ? 7 : Double.NaN, actual.getM(1), 0.0);
+			}
 		}
 	}
 

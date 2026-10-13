@@ -243,6 +243,30 @@ public class SimplifyFunctionTest {
 	}
 
 	@Test
+	public void gmlSimplificationRetainsDeclaredXyzLayoutWithUndefinedAltitude() throws Exception {
+		for (String tailAltitude : new String[]{"5", "NaN"}) {
+			Literal source = VALUE_FACTORY.createLiteral(
+					"<g:LineString xmlns:g=\"http://www.opengis.net/gml/3.2\" "
+							+ "srsName=\"http://www.opengis.net/def/crs/EPSG/0/4979\" srsDimension=\"3\">"
+							+ "<g:posList>0 0 NaN 1 0.1 4 2 0 " + tailAltitude + "</g:posList></g:LineString>",
+					GeoConstants.GEO_GML_LITERAL);
+
+			Literal result = (Literal) evaluate(source, VALUE_FACTORY.createLiteral(0.2));
+			GeometryWrapper geometry = SourceGeometryLiteral.fromLiteral(result).asGeometryWrapper();
+			var coordinates = ((LineString) geometry.getParsingGeometry()).getCoordinateSequence();
+
+			assertEquals(GeoConstants.GEO_GML_LITERAL, result.getDatatype());
+			assertEquals("http://www.opengis.net/def/crs/EPSG/0/4979", geometry.getSrsURI());
+			assertEquals(3, geometry.getCoordinateDimension());
+			assertEquals(3, coordinates.getDimension());
+			assertEquals(0, coordinates.getMeasures());
+			assertEquals(2, coordinates.size());
+			assertTrue(Double.isNaN(coordinates.getZ(0)));
+			assertEquals(Double.parseDouble(tailAltitude), coordinates.getZ(1), 0.0);
+		}
+	}
+
+	@Test
 	public void collapsedMeasuredPolygonRetainsTypedEmptyLiteral() throws Exception {
 		Literal source = wkt("POLYGON M((0 0 1,2 0 2,2 2 3,0 2 4,0 0 1))");
 
