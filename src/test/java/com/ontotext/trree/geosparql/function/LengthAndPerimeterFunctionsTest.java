@@ -1,6 +1,8 @@
 package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
+import org.apache.jena.geosparql.implementation.UnitsOfMeasure;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -43,6 +45,20 @@ public class LengthAndPerimeterFunctionsTest {
 		assertTrue(result instanceof Literal);
 		assertEquals(5.0, ((Literal) result).doubleValue(), 0.0);
 		assertEquals(XSD.DOUBLE, ((Literal) result).getDatatype());
+	}
+
+	@Test
+	public void linearMeasurementsAcceptLengthAliasesAndSmallLightYearResults() throws Exception {
+		Literal line = wkt("<" + EPSG_32634 + "> LINESTRING(500000 4600000,500003 4600004)");
+
+		for (String functionUri : List.of(GEOF_LENGTH_URI, GEOF_PERIMETER_URI)) {
+			assertDouble(0.005, evaluate(functionUri, line, GeoSparqlUnits.URI_KILOMETRE), 0.0);
+			assertDouble(16.404199, evaluate(functionUri, line, GeoSparqlUnits.URI_FOOT), 0.0);
+			assertDouble(5.285117052613511e-16, evaluate(functionUri, line,
+					VALUE_FACTORY.createLiteral(GeoSparqlUnits.URI_LIGHT_YEAR.stringValue(), XSD.ANYURI)), 1e-30);
+			assertDouble(0.0, evaluate(functionUri, wkt("LINESTRING EMPTY"),
+					GeoSparqlUnits.URI_LIGHT_YEAR), 0.0);
+		}
 	}
 
 	@Test
@@ -124,6 +140,32 @@ public class LengthAndPerimeterFunctionsTest {
 				evaluate(GEOF_METRIC_LENGTH_URI, line), 1e-6);
 		assertDouble(111195.07973436874,
 				evaluate(GEOF_METRIC_PERIMETER_URI, line), 1e-6);
+	}
+
+	@Test
+	public void geographicMeasurementsInterpretTheSourceAngularUnits() throws Exception {
+		Literal line = wkt("<http://www.opengis.net/def/crs/EPSG/0/4807> LINESTRING(49 0,50 0)");
+
+		for (String functionUri : List.of(GEOF_LENGTH_URI, GEOF_PERIMETER_URI)) {
+			assertDouble(100075.57176093172,
+					evaluate(functionUri, line, VALUE_FACTORY.createIRI(METRE)), 1e-6);
+		}
+		for (String functionUri : List.of(GEOF_METRIC_LENGTH_URI, GEOF_METRIC_PERIMETER_URI)) {
+			assertDouble(100075.57176093172, evaluate(functionUri, line), 1e-6);
+		}
+	}
+
+	@Test
+	public void antipodalMeasurementsReturnFiniteSphericalDistances() throws Exception {
+		Literal line = wkt("LINESTRING(0 -12,180 12)");
+		double expected = Math.PI * UnitsOfMeasure.EARTH_MEAN_RADIUS;
+
+		for (String functionUri : List.of(GEOF_LENGTH_URI, GEOF_PERIMETER_URI)) {
+			assertDouble(expected, evaluate(functionUri, line, VALUE_FACTORY.createIRI(METRE)), 1e-6);
+		}
+		for (String functionUri : List.of(GEOF_METRIC_LENGTH_URI, GEOF_METRIC_PERIMETER_URI)) {
+			assertDouble(expected, evaluate(functionUri, line), 1e-6);
+		}
 	}
 
 	@Test

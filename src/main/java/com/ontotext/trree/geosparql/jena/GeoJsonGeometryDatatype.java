@@ -21,7 +21,6 @@ import org.locationtech.jts.geom.MultiPoint;
 import org.locationtech.jts.geom.MultiPolygon;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
-import org.locationtech.jts.io.geojson.GeoJsonReader;
 import org.locationtech.jts.io.geojson.GeoJsonWriter;
 
 import java.util.ArrayList;
@@ -49,10 +48,7 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 					? new ParsedGeometry(GEOMETRY_FACTORY.createPoint(emptySequence()), 2)
 					: parseGeometry(rootObject(new JSONParser().parse(geometryLiteral)));
 			int coordinateDimension = validated.coordinateDimension() == 0 ? 2 : validated.coordinateDimension();
-			Geometry geometry = geometryLiteral.isEmpty()
-					? validated.geometry()
-					: normalizeCoordinateSequences(
-							new GeoJsonReader(GEOMETRY_FACTORY).read(geometryLiteral), coordinateDimension);
+			Geometry geometry = normalizeCoordinateSequences(validated.geometry(), coordinateDimension);
 			return new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84, getURI(),
 					new DimensionInfo(coordinateDimension, coordinateDimension,
 							geometry.getDimension()), geometryLiteral);
@@ -71,9 +67,42 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 		GeoJsonWriter writer = new GeoJsonWriter();
 		writer.setEncodeCRS(false);
 		writer.setForceCCW(true);
-		String lexicalForm = writer.write(wrapper.getParsingGeometry());
+		String lexicalForm = writer.write(withoutEmptyMultipartMembers(wrapper.getParsingGeometry()));
 		read(lexicalForm);
 		return lexicalForm;
+	}
+
+	private static Geometry withoutEmptyMultipartMembers(Geometry geometry) {
+		if (!(geometry instanceof GeometryCollection collection)) {
+			return geometry;
+		}
+		boolean multipart = collection instanceof MultiPoint || collection instanceof MultiLineString
+				|| collection instanceof MultiPolygon;
+		List<Geometry> members = new ArrayList<>();
+		boolean changed = false;
+		for (int index = 0; index < collection.getNumGeometries(); index++) {
+			Geometry member = collection.getGeometryN(index);
+			if (multipart && member.isEmpty()) {
+				changed = true;
+				continue;
+			}
+			Geometry outputMember = withoutEmptyMultipartMembers(member);
+			members.add(outputMember);
+			changed |= outputMember != member;
+		}
+		if (!changed) {
+			return geometry;
+		}
+		if (collection instanceof MultiPoint) {
+			return GEOMETRY_FACTORY.createMultiPoint(members.toArray(new Point[0]));
+		}
+		if (collection instanceof MultiLineString) {
+			return GEOMETRY_FACTORY.createMultiLineString(members.toArray(new LineString[0]));
+		}
+		if (collection instanceof MultiPolygon) {
+			return GEOMETRY_FACTORY.createMultiPolygon(members.toArray(new Polygon[0]));
+		}
+		return GEOMETRY_FACTORY.createGeometryCollection(members.toArray(new Geometry[0]));
 	}
 
 	private static ParsedGeometry parseGeometry(Map<?, ?> object) {
@@ -155,7 +184,7 @@ final class GeoJsonGeometryDatatype extends GeometryDatatype {
 		for (Object value : lines) {
 			List<?> positions = array(value, "MultiLineString member");
 			lineStrings.add(GEOMETRY_FACTORY.createLineString(
-					positionsSequence(positions, dimensions, 2, false)));
+					positionsSequence(positions, dimensions, 2, true)));
 		}
 		return new ParsedGeometry(GEOMETRY_FACTORY.createMultiLineString(
 				lineStrings.toArray(new LineString[0])), dimensions.value());
