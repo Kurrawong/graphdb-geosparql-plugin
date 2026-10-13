@@ -4,11 +4,11 @@ import com.ontotext.graphdb.Config;
 import com.ontotext.test.TemporaryLocalFolder;
 import com.ontotext.test.functional.base.SingleRepositoryFunctionalTest;
 import com.ontotext.test.utils.StandardUtils;
-import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
-import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
+import com.ontotext.trree.geosparql.function.GeoSparqlFunctionRegistration;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.commons.lang.Validate;
+import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.eclipse.rdf4j.common.exception.RDF4JException;
 import org.eclipse.rdf4j.common.iteration.CloseableIteration;
 import org.eclipse.rdf4j.model.IRI;
@@ -20,6 +20,8 @@ import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
+import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
+import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.config.RepositoryConfig;
@@ -81,6 +83,47 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 			statements.close();
 		}
 		return result;
+	}
+
+	@Test
+	public void queryFunctionProfileBindsScalarAndGeometryResultsThroughSparql() {
+		String polygon = "POLYGON((0 0,0 2,2 2,2 0,0 0))";
+		Literal scalar = singleLiteralResult("SELECT ?result WHERE { BIND(<"
+				+ GeoConstants.GEOF_DIMENSION + ">(\"" + polygon + "\"^^<"
+				+ GeoConstants.GEO_WKT_LITERAL + ">) AS ?result) }");
+		Literal geometry = singleLiteralResult("SELECT ?result WHERE { BIND(<"
+				+ GeoConstants.GEOF_CENTROID + ">(\"" + polygon + "\"^^<"
+				+ GeoConstants.GEO_WKT_LITERAL + ">) AS ?result) }");
+
+		assertEquals(2, scalar.intValue());
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, geometry.getDatatype());
+		assertEquals("Point", JenaGeometryAdapter.toSourceGeometryLiteral(geometry)
+				.asGeometryWrapper().getXYGeometry().getGeometryType());
+		assertEquals(1.0, JenaGeometryAdapter.toSourceGeometryLiteral(geometry)
+				.asGeometryWrapper().getXYGeometry().getCoordinate().x, 0.0);
+		assertEquals(1.0, JenaGeometryAdapter.toSourceGeometryLiteral(geometry)
+				.asGeometryWrapper().getXYGeometry().getCoordinate().y, 0.0);
+	}
+
+	@Test
+	public void queryFunctionProfileMandatoryArityFailureLeavesBindUnbound() {
+		boolean bound = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<" + GeoConstants.GEOF_METRIC_AREA + ">("
+						+ "\"POLYGON((0 0,0 2,2 2,2 0,0 0))\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL + ">, 1) AS ?result) "
+						+ "FILTER(BOUND(?result)) }").evaluate();
+
+		assertFalse(bound);
+	}
+
+	@Test
+	public void queryFunctionProfileGeometryErrorLeavesBindUnbound() {
+		String query = "ASK WHERE { BIND(<" + GeoConstants.GEOF_DIMENSION
+				+ ">(\"not geometry\"^^<" + GeoConstants.GEO_WKT_LITERAL
+				+ ">) AS ?result) FILTER(BOUND(?result)) }";
+		boolean bound = conn().prepareBooleanQuery(QueryLanguage.SPARQL, query).evaluate();
+
+		assertFalse(bound);
 	}
 
 	@Test public void areaFunctionReturnsResultForOneGeometryArgument() throws RDF4JException {
@@ -148,9 +191,9 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	@Test public void distance() throws RDF4JException {
 		assertEquals(1.0611006, ((Literal)evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"))).doubleValue(), 0.00001);
 		assertEquals(73322, (int)((Literal)evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
-				GeoSparqlUnits.URI_METRE)).doubleValue());
+				vf().createIRI(Unit_URI.METRE_URL))).doubleValue());
 		assertEquals(73.322403, ((Literal)evaluate(GeoConstants.GEOF_DISTANCE, asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
-				GeoSparqlUnits.URI_KILOMETRE)).doubleValue(), 0.00001);
+				vf().createIRI(Unit_URI.KILOMETRE_URL))).doubleValue(), 0.00001);
 	}
 
 	@Test public void distanceRejectsUnknownUnitOfMeasure() throws RDF4JException {
@@ -168,12 +211,13 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	@Test public void distanceRejectsFourthArgument() throws RDF4JException {
 		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_DISTANCE,
 				asLiteral("POINT(4.9186383 52.3563603)"), asLiteral("POINT(5.96957 52.20981)"),
-				GeoSparqlUnits.URI_METRE, vf().createLiteral("")));
+				vf().createIRI(Unit_URI.METRE_URL), vf().createLiteral("")));
 	}
 
 	@Test public void distanceRejectsCoordinatesOutsideCrsDomain() throws RDF4JException {
 		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GeoConstants.GEOF_DISTANCE,
-				asLiteral("POINT(200 200)"), asLiteral("POINT(300 300)"), GeoSparqlUnits.URI_METRE));
+				asLiteral("POINT(200 200)"), asLiteral("POINT(300 300)"),
+				vf().createIRI(Unit_URI.METRE_URL)));
 	}
 
 	@Test public void distanceFunctionAcceptsUnitArgumentInFilter() throws RDF4JException {
@@ -421,7 +465,10 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	}
 
 	private Value evaluate(IRI functionUri, Value... args) throws ValueExprEvaluationException {
-		return JenaFunctionEvaluator.evaluate(vf(), functionUri.stringValue(), args);
+		GeoSparqlFunctionRegistration.registerAll();
+		Function function = FunctionRegistry.getInstance().get(functionUri.stringValue())
+				.orElseThrow(() -> new AssertionError("Function not registered: " + functionUri));
+		return function.evaluate(vf(), args);
 	}
 
 	private Literal singleLiteralResult(String query) {

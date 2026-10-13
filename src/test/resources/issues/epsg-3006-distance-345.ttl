@@ -9,3 +9,9 @@ data:obj3 geo:hasGeometry [
 data:obj4 geo:hasGeometry [
     geo:asWKT "<http://www.opengis.net/def/crs/EPSG/0/3006> POINT Z (522003.0 6704004.0 100.)"^^geo:wktLiteral
 ] .
+
+# Extend the supplied points with the right-angle corner at (522003, 6704000), retaining Z=100.
+# The closed 3–4–5 triangle has area 6 square metres and perimeter 12 metres in EPSG:3006.
+data:triangle geo:hasGeometry [
+    geo:asWKT "<http://www.opengis.net/def/crs/EPSG/0/3006> POLYGON Z ((522000.0 6704000.0 100., 522003.0 6704000.0 100., 522003.0 6704004.0 100., 522000.0 6704000.0 100.))"^^geo:wktLiteral
+] .
