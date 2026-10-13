@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -43,6 +44,20 @@ public class LengthAndPerimeterFunctionsTest {
 		assertTrue(result instanceof Literal);
 		assertEquals(5.0, ((Literal) result).doubleValue(), 0.0);
 		assertEquals(XSD.DOUBLE, ((Literal) result).getDatatype());
+	}
+
+	@Test
+	public void linearMeasurementsAcceptLengthAliasesAndSmallLightYearResults() throws Exception {
+		Literal line = wkt("<" + EPSG_32634 + "> LINESTRING(500000 4600000,500003 4600004)");
+
+		for (String functionUri : List.of(GEOF_LENGTH_URI, GEOF_PERIMETER_URI)) {
+			assertDouble(0.005, evaluate(functionUri, line, GeoSparqlUnits.URI_KILOMETRE), 0.0);
+			assertDouble(16.404199, evaluate(functionUri, line, GeoSparqlUnits.URI_FOOT), 0.0);
+			assertDouble(5.285117052613511e-16, evaluate(functionUri, line,
+					VALUE_FACTORY.createLiteral(GeoSparqlUnits.URI_LIGHT_YEAR.stringValue(), XSD.ANYURI)), 1e-30);
+			assertDouble(0.0, evaluate(functionUri, wkt("LINESTRING EMPTY"),
+					GeoSparqlUnits.URI_LIGHT_YEAR), 0.0);
+		}
 	}
 
 	@Test
