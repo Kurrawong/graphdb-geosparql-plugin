@@ -227,6 +227,41 @@ public class DistanceAndBufferFunctionsTest {
 	}
 
 	@Test
+	public void registeredDistancesConvertGeographicGradsToDegrees() throws Exception {
+		String crs = "<http://www.opengis.net/def/crs/EPSG/0/4807> ";
+		Literal left = wkt(crs + "POINT(49 0)");
+		Literal right = wkt(crs + "POINT(50 0)");
+		Literal metric = (Literal) evaluate(GEOF_METRIC_DISTANCE_URI, left, right);
+		Literal distance = (Literal) evaluate(GEOF_DISTANCE_URI, left, right, GeoSparqlUnits.URI_METRE);
+
+		assertEquals(XSD.DOUBLE, metric.getDatatype());
+		assertEquals(XSD.DOUBLE, distance.getDatatype());
+		assertEquals(100075.57176093172, metric.doubleValue(), 1e-6);
+		assertEquals(metric.doubleValue(), distance.doubleValue(), 0.0);
+		assertEquals(100.075572, ((Literal) evaluate(GEOF_DISTANCE_URI,
+				left, right, GeoSparqlUnits.URI_KILOMETRE)).doubleValue(), 0.0);
+		assertEquals(0.9, ((Literal) evaluate(GEOF_DISTANCE_URI,
+				left, right, GeoSparqlUnits.URI_DEGREE)).doubleValue(), 1e-12);
+	}
+
+	@Test
+	public void registeredDistancesReturnFiniteAntipodalMeasurements() throws Exception {
+		Literal left = wkt("POINT(166.933727 79.175770)");
+		Literal right = wkt("POINT(-13.066273 -79.175770)");
+		Literal metric = (Literal) evaluate(GEOF_METRIC_DISTANCE_URI, left, right);
+		Literal distance = (Literal) evaluate(GEOF_DISTANCE_URI, left, right, GeoSparqlUnits.URI_METRE);
+
+		assertEquals(XSD.DOUBLE, metric.getDatatype());
+		assertEquals(XSD.DOUBLE, distance.getDatatype());
+		assertTrue(Double.isFinite(metric.doubleValue()));
+		assertTrue(Double.isFinite(distance.doubleValue()));
+		assertEquals(20015114.352186374, metric.doubleValue(), 1.0);
+		assertEquals(metric.doubleValue(), distance.doubleValue(), 0.0);
+		assertEquals(20015.114352, ((Literal) evaluate(GEOF_DISTANCE_URI,
+				left, right, GeoSparqlUnits.URI_KILOMETRE)).doubleValue(), 0.000001);
+	}
+
+	@Test
 	public void distanceAcceptsSimpleAnyUriUnit() throws Exception {
 		Literal left = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
 		Literal right = wkt("<" + EPSG_32634 + "> POINT(500003 4600004)");
