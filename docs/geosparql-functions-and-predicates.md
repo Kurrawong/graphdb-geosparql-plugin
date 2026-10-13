@@ -127,8 +127,9 @@ a distance measurement with `uom:degree` returns `1.0`.
 
 The plugin's Apache Jena 6.2.0 dependency has an
 [incorrect yard conversion factor](https://github.com/apache/jena/blob/d0676a2c402ead68a133596f4ac5977be64dd251/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java#L41).
-Avoid `uom:yard` and `length:yd` for measurements and buffer radii that require accurate yard conversion.
-Use another supported unit, such as metres or feet, instead.
+Avoid `uom:yard`, `urn:ogc:def:uom:EPSG::9096`, and `length:yd` for measurements, buffer radii, or
+`geof:withinDistance` thresholds that require accurate yard conversion. For example, points one metre apart
+can incorrectly satisfy a one-yard threshold. Use another supported unit, such as metres or feet, instead.
 
 The built-in identifiers come from Jena 6.2.0's
 [unit registry](https://github.com/apache/jena/blob/jena-6.2.0/jena-geosparql/src/main/java/org/apache/jena/geosparql/implementation/registry/UnitsRegistry.java)
