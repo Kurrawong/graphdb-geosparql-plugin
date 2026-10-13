@@ -139,7 +139,7 @@ can incorrectly satisfy a one-yard threshold. Use another supported unit, such a
 | `geomLiteral geof:boundary(geomLiteral geometry)` | Returns the topological boundary of `geometry`. |
 | `geomLiteral geof:boundingCircle(geomLiteral geometry)` | Returns a conservative polygonal representation of the planar minimum bounding circle. |
 | `geomLiteral geof:metricBuffer(geomLiteral geometry, numeric radius)` | Returns a buffer whose radius is measured in metres. The input geometry must use a CRS with linear units; geographic CRSs are not supported. |
-| `geomLiteral geof:buffer(geomLiteral geometry, numeric radius, uri unit)` | Returns a buffer using `radius` in the specified unit. |
+| `geomLiteral geof:buffer(geomLiteral geometry, numeric radius, uri unit)` | Returns a buffer using `radius` in the specified unit. Accepts linear radius units when the source CRS has linear coordinates, or angular radius units for geographic coordinates. |
 | `geomLiteral geof:centroid(geomLiteral geometry)` | Returns the centroid of `geometry`. |
 | `geomLiteral geof:convexHull(geomLiteral geometry)` | Returns the convex hull of `geometry`. |
 | `geomLiteral geof:concaveHull(geomLiteral geometry)` | Returns the planar concave hull of the complete input vertex set, without holes. |
@@ -155,8 +155,8 @@ can incorrectly satisfy a one-yard threshold. Use another supported unit, such a
 | --- | --- |
 | `xsd:double geof:metricDistance(geomLiteral left, geomLiteral right)` | Returns the shortest distance in metres, calculated in the CRS of `left`. |
 | `xsd:boolean geof:metricWithinDistance(geomLiteral left, geomLiteral right, numeric distance)` | Returns whether the distance between the geometries is at most `distance` metres, calculated in the CRS of `left`. |
-| `xsd:boolean geof:withinDistance(geomLiteral left, geomLiteral right, numeric distance, uri unit)` | Returns whether the distance between the geometries is at most `distance` in the specified unit, calculated in the CRS of `left`. |
-| `xsd:double geof:distance(geomLiteral left, geomLiteral right, uri unit)` | Returns the shortest distance in the specified unit, calculated in the CRS of `left`. |
+| `xsd:boolean geof:withinDistance(geomLiteral left, geomLiteral right, numeric distance, uri unit)` | Returns whether the distance between the geometries is at most `distance` in the specified linear unit, calculated in the CRS of `left`. |
+| `xsd:double geof:distance(geomLiteral left, geomLiteral right, uri unit)` | Returns the shortest distance in the specified unit, calculated in the CRS of `left`. Accepts linear output units and the [angular and raw-coordinate output extensions](#distance-output-extensions). |
 | `xsd:double geof:metricArea(geomLiteral geometry)` | Returns area in square metres. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |
 | `xsd:double geof:area(geomLiteral geometry, uri unit)` | Returns area in the square of the specified linear unit. Geographic CRSs are not supported; transform geographic data to a suitable projected CRS first. |
 | `xsd:double geof:metricLength(geomLiteral geometry)` | Returns length in metres. |
