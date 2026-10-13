@@ -1,9 +1,8 @@
 package com.ontotext.trree.geosparql.jena.query;
 
+import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
-import org.apache.jena.geosparql.implementation.datatype.GeometryDatatype;
 import org.apache.jena.geosparql.implementation.datatype.WKTDatatype;
-import org.apache.jena.geosparql.implementation.registry.SRSRegistry;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -16,8 +15,7 @@ public class MetricWithinDistanceTest {
 
 	@BeforeClass
 	public static void initializeJena() {
-		SRSRegistry.setupDefaultSRS();
-		GeometryDatatype.registerDatatypes();
+		JenaGeometryAdapter.initialize();
 	}
 
 	@Test
@@ -36,6 +34,16 @@ public class MetricWithinDistanceTest {
 
 		assertTrue(MetricWithinDistance.calculate(left, right, 2.0));
 		assertFalse(MetricWithinDistance.calculate(left, right, 1.0));
+	}
+
+	@Test
+	public void metricThresholdDoesNotRoundDistancesInNonMetreCoordinates() throws Exception {
+		String crs = "<" + EPSG_2227 + "> ";
+		GeometryWrapper left = geometry(crs + "POINT(6300000 2000000)");
+		GeometryWrapper right = geometry(crs + "POINT(6300005 2000000)");
+
+		assertFalse(MetricWithinDistance.calculate(left, right, 1.524003));
+		assertTrue(MetricWithinDistance.calculate(left, right, 1.524004));
 	}
 
 	private GeometryWrapper geometry(String wkt) {

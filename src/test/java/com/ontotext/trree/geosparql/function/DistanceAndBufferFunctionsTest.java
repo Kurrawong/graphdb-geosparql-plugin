@@ -141,6 +141,34 @@ public class DistanceAndBufferFunctionsTest {
 	}
 
 	@Test
+	public void withinDistanceKeepsSubMillimetreSeparationAtKilometreThresholds() throws Exception {
+		String crs = "<" + EPSG_32634 + "> ";
+		Literal left = wkt(crs + "POINT(500000 4600000)");
+		IRI kilometre = VALUE_FACTORY.createIRI(KILOMETRE);
+
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left,
+				wkt(crs + "POINT(500005 4600000)"), VALUE_FACTORY.createLiteral(0.005), kilometre)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left,
+				wkt(crs + "POINT(500005.0004 4600000)"), VALUE_FACTORY.createLiteral(0.005), kilometre)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left,
+				wkt(crs + "POINT(500000.0004 4600000)"), VALUE_FACTORY.createLiteral(0), kilometre)).booleanValue());
+	}
+
+	@Test
+	public void registeredWithinDistancesDoNotRoundNonMetreCoordinates() throws Exception {
+		String crs = "<http://www.opengis.net/def/crs/EPSG/0/2227> ";
+		Literal left = wkt(crs + "POINT(6300000 2000000)");
+		Literal right = wkt(crs + "POINT(6300005 2000000)");
+
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(1.524003))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(1.524003), GeoSparqlUnits.URI_METRE)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(1.524004))).booleanValue());
+	}
+
+	@Test
 	public void withinDistanceAcceptsLengthAliasesAndScalesLightYearThresholds() throws Exception {
 		Literal left = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
 		Literal right = wkt("<" + EPSG_32634 + "> POINT(500003 4600004)");
