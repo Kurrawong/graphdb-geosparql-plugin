@@ -40,6 +40,22 @@ public class GeometryLengthTest {
 	}
 
 	@Test
+	public void geographicLatitudeLengthConvertsGradsToDegrees() {
+		GeometryWrapper line = geometry("<http://www.opengis.net/def/crs/EPSG/0/4807> "
+				+ "LINESTRING(49 0,50 0)");
+
+		assertEquals(100075.57176093172, GeometryLength.calculateMetric(line), 1e-6);
+	}
+
+	@Test
+	public void geographicLongitudeLengthConvertsGradsToDegrees() {
+		GeometryWrapper line = geometry("<http://www.opengis.net/def/crs/EPSG/0/4807> "
+				+ "LINESTRING(49 0,49 1)");
+
+		assertEquals(71866.54201916947, GeometryLength.calculateMetric(line), 1e-6);
+	}
+
+	@Test
 	public void metricLengthReturnsMetres() throws Exception {
 		GeometryWrapper line = geometry("<" + EPSG_32634
 				+ "> LINESTRING(500000 4600000,500003 4600004)");

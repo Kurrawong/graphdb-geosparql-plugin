@@ -142,6 +142,19 @@ public class LengthAndPerimeterFunctionsTest {
 	}
 
 	@Test
+	public void geographicMeasurementsInterpretTheSourceAngularUnits() throws Exception {
+		Literal line = wkt("<http://www.opengis.net/def/crs/EPSG/0/4807> LINESTRING(49 0,50 0)");
+
+		for (String functionUri : List.of(GEOF_LENGTH_URI, GEOF_PERIMETER_URI)) {
+			assertDouble(100075.57176093172,
+					evaluate(functionUri, line, VALUE_FACTORY.createIRI(METRE)), 1e-6);
+		}
+		for (String functionUri : List.of(GEOF_METRIC_LENGTH_URI, GEOF_METRIC_PERIMETER_URI)) {
+			assertDouble(100075.57176093172, evaluate(functionUri, line), 1e-6);
+		}
+	}
+
+	@Test
 	public void emptyGeometriesReturnZeroAfterArgumentAndUnitValidation() throws Exception {
 		Literal empty = wkt("<" + EPSG_32634 + "> GEOMETRYCOLLECTION("
 				+ "POINT EMPTY,LINESTRING EMPTY,POLYGON EMPTY)");
