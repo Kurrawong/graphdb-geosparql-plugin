@@ -8,6 +8,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertThrows;
 
 public class WithinDistanceTest {
 	private static final String EPSG_2227 = "http://www.opengis.net/def/crs/EPSG/0/2227";
@@ -65,6 +66,35 @@ public class WithinDistanceTest {
 
 		assertFalse(WithinDistance.calculate(left, right, 1.524003, METRE));
 		assertTrue(WithinDistance.calculate(left, right, 1.524004, METRE));
+	}
+
+	@Test
+	public void geographicThresholdsConvertGradCoordinatesToDegrees() throws Exception {
+		String crs = "<http://www.opengis.net/def/crs/EPSG/0/4807> ";
+		GeometryWrapper left = geometry(crs + "POINT(49 0)");
+		GeometryWrapper right = geometry(crs + "POINT(50 0)");
+
+		assertTrue(WithinDistance.calculate(left, right, 100.076, KILOMETRE));
+		assertFalse(WithinDistance.calculate(left, right, 100.075, KILOMETRE));
+	}
+
+	@Test
+	public void antipodalDistancesCanSatisfyLargeLinearThresholds() throws Exception {
+		GeometryWrapper left = geometry("POINT(166.933727 79.175770)");
+		GeometryWrapper right = geometry("POINT(-13.066273 -79.175770)");
+
+		assertTrue(WithinDistance.calculate(left, right, 21000.0, KILOMETRE));
+		assertFalse(WithinDistance.calculate(left, right, 19000.0, KILOMETRE));
+		assertTrue(WithinDistance.calculate(left, right, 21000000.0, METRE));
+	}
+
+	@Test
+	public void nonFiniteMeasurementsRaiseArithmeticErrors() {
+		String crs = "<" + EPSG_32634 + "> ";
+		GeometryWrapper left = geometry(crs + "POINT(-1e308 0)");
+		GeometryWrapper right = geometry(crs + "POINT(1e308 0)");
+
+		assertThrows(ArithmeticException.class, () -> WithinDistance.calculate(left, right, 1.0, METRE));
 	}
 
 	private GeometryWrapper geometry(String wkt) {

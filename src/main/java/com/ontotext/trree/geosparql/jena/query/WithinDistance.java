@@ -14,10 +14,15 @@ public final class WithinDistance {
 		if (!requestedUnits.isLinearUnits()) {
 			throw new UnitsConversionException("Distance thresholds require linear units.");
 		}
-		UnitsOfMeasure calculationUnits = left.getSrsInfo().isGeographic()
+		boolean geographic = left.getSrsInfo().isGeographic();
+		UnitsOfMeasure calculationUnits = geographic
 				? UnitsOfMeasure.METRE_UNITS : left.getUnitsOfMeasure();
 		double threshold = requestedUnits.getUnit().getConverterTo(calculationUnits.getUnit()).convert(distance);
-		double measuredDistance = left.distance(right, calculationUnits.getUnitURI());
+		double measuredDistance = geographic ? GeometryDistance.calculateMetric(left, right)
+				: left.distance(right, calculationUnits.getUnitURI());
+		if (!Double.isFinite(measuredDistance)) {
+			throw new ArithmeticException("Distance calculation produced a non-finite result.");
+		}
 		return measuredDistance <= threshold;
 	}
 }
