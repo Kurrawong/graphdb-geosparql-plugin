@@ -4,14 +4,17 @@ import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.UnitsConversionException;
+import org.apache.jena.geosparql.implementation.UnitsOfMeasure;
 import org.apache.jena.geosparql.implementation.registry.UnitsURIException;
 import org.apache.jena.geosparql.implementation.vocabulary.Unit_URI;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class GeometryLengthTest {
 	private static final String EPSG_2227 = "http://www.opengis.net/def/crs/EPSG/0/2227";
@@ -69,6 +72,22 @@ public class GeometryLengthTest {
 
 		assertEquals(13343409.56812425,
 				GeometryLength.calculateMetric(line), 1e-6);
+	}
+
+	@Test
+	public void antipodalAndNearAntipodalSegmentsHaveFiniteSphericalLengths() {
+		for (String wkt : List.of("LINESTRING(0 -12,180 12)",
+				"LINESTRING(0 0,180 0)", "LINESTRING(0 -12,179.999999 12)")) {
+			double length = GeometryLength.calculateMetric(geometry(wkt));
+
+			assertTrue(wkt, Double.isFinite(length));
+			assertEquals(wkt, Math.PI * UnitsOfMeasure.EARTH_MEAN_RADIUS, length, 1.0);
+		}
+	}
+
+	@Test
+	public void coincidentGeographicCoordinatesHaveZeroLength() {
+		assertEquals(0.0, GeometryLength.calculateMetric(geometry("LINESTRING(10 50,10 50)")), 0.0);
 	}
 
 	@Test
