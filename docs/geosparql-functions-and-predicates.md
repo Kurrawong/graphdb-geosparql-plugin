@@ -58,8 +58,8 @@ To buffer geographic data in metres or kilometres, first transform it to a suita
 An incompatible unit produces a SPARQL expression error, including for an empty result or a zero radius.
 
 The following tables list all built-in linear and angular unit identifiers supported by the plugin's
-Apache Jena 6.2.0 dependency. Use an OGC name or a listed EPSG URN as the `unit` argument.
-Additional GraphDB length-unit identifiers are listed separately below.
+Apache Jena 6.2.0 dependency. Use an OGC name or a listed EPSG URN as the `unit` argument,
+subject to the function-specific rules below. Additional GraphDB length-unit identifiers are listed separately below.
 
 ### Linear units
 
@@ -84,9 +84,10 @@ as does the same call with `uom:metre`.
 
 ### Angular units
 
-These units apply to `geof:buffer` when the source CRS has angular units. `geof:withinDistance`,
-`geof:area`, `geof:length`, and `geof:perimeter` require linear units. `geof:distance` also supports the
-degree and radian output extensions described below.
+These OGC IRIs and EPSG URNs apply to `geof:buffer` when the source CRS has angular units. `geof:withinDistance`,
+`geof:area`, `geof:length`, and `geof:perimeter` require linear units. The angular output extensions for
+`geof:distance` accept only `uom:degree` and `uom:radian`, not their EPSG URN equivalents.
+See [Distance output extensions](#distance-output-extensions) for their meaning.
 
 | Unit | Accepted OGC name | Accepted EPSG URN |
 | --- | --- | --- |
