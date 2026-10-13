@@ -3,6 +3,8 @@ package com.ontotext.trree.geosparql.jena;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.jena.geosparql.geof.nontopological.filter_functions.AsGeoJSONFF;
 import org.apache.jena.sparql.expr.NodeValue;
+import org.apache.jena.atlas.json.JSON;
+import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.sis.referencing.CRS;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -12,6 +14,7 @@ import org.junit.Test;
 import org.locationtech.jts.algorithm.Orientation;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.Polygon;
+import org.locationtech.jts.io.WKTReader;
 import org.opengis.referencing.operation.OperationNotFoundException;
 
 import java.util.LinkedHashMap;
@@ -239,6 +242,61 @@ public class AsGeoJsonFunctionTest {
 		assertEmptyResult("zero-length GeoJSON", "Point", evaluate(geoJson("")));
 		assertEmptyResult("zero-length GML", "Point", evaluate(
 				VALUE_FACTORY.createLiteral("", GeoConstants.GEO_GML_LITERAL)));
+	}
+
+	@Test
+	public void multipartOutputOmitsEmptyMembersAndRetainsGeometryType() throws Exception {
+		Map<String, String> cases = new LinkedHashMap<>();
+		cases.put("MultiPoint", "MULTIPOINT(EMPTY,(1 2),EMPTY)");
+		cases.put("MultiLineString", "MULTILINESTRING(EMPTY,(1 2,3 4),EMPTY)");
+		cases.put("MultiPolygon", "MULTIPOLYGON(EMPTY,((0 0,2 0,2 2,0 0)),EMPTY)");
+
+		JenaGeometryAdapter.initialize();
+		for (Map.Entry<String, String> entry : cases.entrySet()) {
+			Geometry original = new WKTReader().read(entry.getValue());
+			GeometryWrapper wrapper = new GeometryWrapper(original, CRS84,
+					GeoConstants.GEO_WKT_LITERAL.stringValue());
+			Literal result = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY, wrapper,
+					GeoConstants.GEO_JSON_LITERAL);
+
+			JSON.parse(result.stringValue());
+			Geometry parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result)
+					.asGeometryWrapper().getParsingGeometry();
+			assertEquals(entry.getKey(), parsed.getGeometryType());
+			assertEquals(1, parsed.getNumGeometries());
+			assertTrue(original.getGeometryN(1).equalsExact(parsed.getGeometryN(0)));
+
+			Geometry allEmpty = original.getFactory().buildGeometry(
+					List.of(original.getGeometryN(0), original.getGeometryN(2)));
+			Literal emptyResult = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+					new GeometryWrapper(allEmpty, CRS84, GeoConstants.GEO_WKT_LITERAL.stringValue()),
+					GeoConstants.GEO_JSON_LITERAL);
+			JSON.parse(emptyResult.stringValue());
+			Geometry emptyParsed = JenaGeometryAdapter.toSourceGeometryLiteral(emptyResult)
+					.asGeometryWrapper().getParsingGeometry();
+			assertEquals(entry.getKey(), emptyParsed.getGeometryType());
+			assertTrue(emptyParsed.isEmpty());
+			assertEquals(0, emptyParsed.getNumGeometries());
+		}
+	}
+
+	@Test
+	public void mixedEmptyMultiLineStringConvertsToReusableGeoJson() throws Exception {
+		Literal input = geoJson("{\"type\":\"GeometryCollection\",\"geometries\":["
+				+ "{\"type\":\"Point\",\"coordinates\":[]},"
+				+ "{\"type\":\"MultiLineString\",\"coordinates\":[[],[[1,2],[3,4]],[]]}]}");
+
+		Literal result = evaluate(input);
+
+		assertEquals("{\"type\":\"GeometryCollection\",\"geometries\":["
+				+ "{\"type\":\"Point\",\"coordinates\":[]},"
+				+ "{\"type\":\"MultiLineString\",\"coordinates\":[[[1,2],[3,4]]]}]}", result.stringValue());
+		Geometry parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result)
+				.asGeometryWrapper().getParsingGeometry();
+		assertEquals(2, parsed.getNumGeometries());
+		assertTrue(parsed.getGeometryN(0).isEmpty());
+		assertTrue(new WKTReader().read("MULTILINESTRING((1 2,3 4))")
+				.equalsExact(parsed.getGeometryN(1)));
 	}
 
 	private static Literal evaluate(Literal source) throws Exception {
