@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
+import org.apache.jena.geosparql.implementation.UnitsOfMeasure;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
@@ -151,6 +152,19 @@ public class LengthAndPerimeterFunctionsTest {
 		}
 		for (String functionUri : List.of(GEOF_METRIC_LENGTH_URI, GEOF_METRIC_PERIMETER_URI)) {
 			assertDouble(100075.57176093172, evaluate(functionUri, line), 1e-6);
+		}
+	}
+
+	@Test
+	public void antipodalMeasurementsReturnFiniteSphericalDistances() throws Exception {
+		Literal line = wkt("LINESTRING(0 -12,180 12)");
+		double expected = Math.PI * UnitsOfMeasure.EARTH_MEAN_RADIUS;
+
+		for (String functionUri : List.of(GEOF_LENGTH_URI, GEOF_PERIMETER_URI)) {
+			assertDouble(expected, evaluate(functionUri, line, VALUE_FACTORY.createIRI(METRE)), 1e-6);
+		}
+		for (String functionUri : List.of(GEOF_METRIC_LENGTH_URI, GEOF_METRIC_PERIMETER_URI)) {
+			assertDouble(expected, evaluate(functionUri, line), 1e-6);
 		}
 	}
 
