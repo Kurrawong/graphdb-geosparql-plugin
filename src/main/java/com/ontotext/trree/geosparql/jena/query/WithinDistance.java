@@ -23,6 +23,6 @@ public final class WithinDistance {
 		if (!Double.isFinite(measuredDistance)) {
 			throw new ArithmeticException("Distance calculation produced a non-finite result.");
 		}
-		return measuredDistance <= threshold;
+		return distance >= 0.0 && measuredDistance <= threshold;
 	}
 }
