@@ -141,6 +141,57 @@ public class DistanceAndBufferFunctionsTest {
 	}
 
 	@Test
+	public void registeredWithinDistancesInterpretGeographicGrads() throws Exception {
+		String crs = "<http://www.opengis.net/def/crs/EPSG/0/4807> ";
+		Literal left = wkt(crs + "POINT(49 0)");
+		Literal right = wkt(crs + "POINT(50 0)");
+
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(100076))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(100075))).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(100.076), GeoSparqlUnits.URI_KILOMETRE)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(100.075), GeoSparqlUnits.URI_KILOMETRE)).booleanValue());
+	}
+
+	@Test
+	public void registeredWithinDistancesHandleAntipodalGeometry() throws Exception {
+		Literal left = wkt("POINT(166.933727 79.175770)");
+		Literal right = wkt("POINT(-13.066273 -79.175770)");
+		Literal metric = (Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(21000000));
+		Literal unit = (Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(21000), GeoSparqlUnits.URI_KILOMETRE);
+
+		assertEquals(XSD.BOOLEAN, metric.getDatatype());
+		assertEquals(XSD.BOOLEAN, unit.getDatatype());
+		assertTrue(metric.booleanValue());
+		assertTrue(unit.booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(19000000))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(19000), GeoSparqlUnits.URI_KILOMETRE)).booleanValue());
+	}
+
+	@Test
+	public void nonFiniteWithinDistanceMeasurementsAreExpressionErrors() {
+		String crs = "<" + EPSG_32634 + "> ";
+		Literal left = wkt(crs + "POINT(-1e308 0)");
+		Literal right = wkt(crs + "POINT(1e308 0)");
+
+		ValueExprEvaluationException metric = assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI, left, right, VALUE_FACTORY.createLiteral(1)));
+		ValueExprEvaluationException unit = assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GEOF_WITHIN_DISTANCE_URI, left, right, VALUE_FACTORY.createLiteral(1),
+						GeoSparqlUnits.URI_METRE));
+
+		assertTrue(metric.getCause() instanceof ArithmeticException);
+		assertTrue(unit.getCause() instanceof ArithmeticException);
+	}
+
+	@Test
 	public void withinDistanceKeepsSubMillimetreSeparationAtKilometreThresholds() throws Exception {
 		String crs = "<" + EPSG_32634 + "> ";
 		Literal left = wkt(crs + "POINT(500000 4600000)");
