@@ -64,7 +64,7 @@ final class QueryFunctionManifest {
 					new UnaryGeometryDoubleToGeometryProvider(MetricBuffer::calculate,
 							GeoJsonResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
-					new BinaryGeometryToDoubleProvider(GeometryWrapper::distance)),
+					new BinaryGeometryToDoubleProvider(GeometryDistance::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_LENGTH.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(GeometryLength::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_PERIMETER.stringValue(), 1,
