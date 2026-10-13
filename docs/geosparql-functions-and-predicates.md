@@ -8,9 +8,16 @@ predicates. Each function signature shows the result type before the function na
 For repository setup, index configuration, and a first query, see
 [Using the GeoSPARQL plugin](geosparql-usage.md).
 
-Use these prefixes with the examples and signatures below. `geo:` names GeoSPARQL classes, datatypes, and properties;
-`geof:` names GeoSPARQL functions. `geoext:` names GraphDB extension functions in the USeekM namespace, `uom:` names
-OGC units of measurement, `length:` names USeekM length units, and `xsd:` names XML Schema datatypes:
+The following prefixes are mentioned in this document:
+
+| Prefix | Description |
+| --- | --- |
+| `geo:` | GeoSPARQL classes, datatypes, and properties. |
+| `geof:` | GeoSPARQL functions. |
+| `geoext:` | GraphDB extension functions in the USeekM namespace. |
+| `uom:` | OGC units of measurement. |
+| `length:` | USeekM length units. |
+| `xsd:` | XML Schema datatypes. |
 
 ```sparql
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>
