@@ -108,6 +108,12 @@ public interface GeoConstants {
     IRI GEOF_MIN_X = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minX");
     IRI GEOF_MIN_Y = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minY");
     IRI GEOF_MIN_Z = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "minZ");
+    IRI GEOF_X = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "X");
+    IRI GEOF_Y = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "Y");
+    IRI GEOF_Z = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "Z");
+    IRI GEOF_M = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "M");
+    IRI GEOF_EASTING = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "easting");
+    IRI GEOF_NORTHING = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "northing");
     IRI GEOF_BOUNDING_CIRCLE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "boundingCircle");
     IRI GEOF_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "buffer");
     IRI GEOF_METRIC_BUFFER = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "metricBuffer");
@@ -119,6 +125,8 @@ public interface GeoConstants {
     IRI GEOF_DIFFERENCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "difference");
     IRI GEOF_SYM_DIFFERENCE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "symDifference");
     IRI GEOF_TRANSFORM = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "transform");
+    IRI GEOF_TRANSFORM_CRS84 = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "transformCRS84");
+    IRI GEOF_SIMPLIFY = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "simplify");
     IRI GEOF_ENVELOPE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "envelope");
     IRI GEOF_BOUNDARY = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "boundary");
     IRI GEOF_COORDINATE_DIMENSION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "coordinateDimension");
