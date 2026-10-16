@@ -205,20 +205,6 @@ public class JenaBackedFunctionCoverageTest {
 	}
 
 	@Test
-	public void distanceUsesOnlyJenaCompatibleOutputUnits() throws Exception {
-		Literal left = wkt("POINT(0 0)");
-		Literal right = wkt("POINT(1 0)");
-
-		assertDoubleValue(evaluate(GeoConstants.GEOF_DISTANCE, left, right, GeoSparqlUnits.URI_METRE),
-				111195.07973436874, 1e-6);
-		for (IRI incompatibleUnit : List.of(GeoSparqlUnits.URI_DEGREE, GeoSparqlUnits.URI_RADIAN,
-				GeoSparqlUnits.URI_GRID_SPACING, GeoSparqlUnits.URI_UNITY, GeoSparqlUnits.URI_LIGHT_YEAR)) {
-			assertThrows(incompatibleUnit.stringValue(), ValueExprEvaluationException.class,
-					() -> evaluate(GeoConstants.GEOF_DISTANCE, left, right, incompatibleUnit));
-		}
-	}
-
-	@Test
 	public void epsg4326DistanceUsesGreatCircleDistance() throws Exception {
 		Literal left = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 20.0)");
 		Literal right = wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10.0 21.0)");

@@ -89,6 +89,40 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
+	public void geoJsonResultSerializationTransformsAuthorityAxesToLongitudeLatitude() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt("<" + EPSG_4326 + "> POINT(50 10)");
+
+		Literal result = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+				source.asGeometryWrapper(), GeoConstants.GEO_JSON_LITERAL);
+		SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, result.getDatatype());
+		assertEquals(CRS84, parsed.effectiveCrsUri());
+		assertEquals(10.0, parsed.asGeometryWrapper().getParsingGeometry().getCoordinate().x, 0.0);
+		assertEquals(50.0, parsed.asGeometryWrapper().getParsingGeometry().getCoordinate().y, 0.0);
+		assertEquals(EPSG_4326, source.effectiveCrsUri());
+		assertEquals(50.0, source.asGeometryWrapper().getParsingGeometry().getCoordinate().x, 0.0);
+		assertEquals(10.0, source.asGeometryWrapper().getParsingGeometry().getCoordinate().y, 0.0);
+	}
+
+	@Test
+	public void geoJsonResultSerializationTransformsProjectedCoordinates() {
+		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
+
+		Literal result = JenaGeometryAdapter.toRdf4jLiteral(VALUE_FACTORY,
+				source.asGeometryWrapper(), GeoConstants.GEO_JSON_LITERAL);
+		SourceGeometryLiteral parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result);
+
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, result.getDatatype());
+		assertEquals(CRS84, parsed.effectiveCrsUri());
+		assertEquals(PROJECTED_POINT_CRS84_X,
+				parsed.asGeometryWrapper().getParsingGeometry().getCoordinate().x, 1e-6);
+		assertEquals(PROJECTED_POINT_CRS84_Y,
+				parsed.asGeometryWrapper().getParsingGeometry().getCoordinate().y, 1e-6);
+		assertEquals(EPSG_32634, source.effectiveCrsUri());
+	}
+
+	@Test
 	public void gmlResultSerializationRetainsRequestedDatatypeAndCrs() {
 		SourceGeometryLiteral source = SourceGeometryLiteral.fromWkt(PROJECTED_POINT_WKT);
 

@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -42,6 +43,19 @@ public class AreaFunctionsTest {
 		assertTrue(result instanceof Literal);
 		assertEquals(1.0, ((Literal) result).doubleValue(), 0.0);
 		assertEquals(XSD.DOUBLE, ((Literal) result).getDatatype());
+	}
+
+	@Test
+	public void areaAcceptsLengthAliasesAndSquaresTheLightYearScale() throws Exception {
+		Literal polygon = wkt("<" + EPSG_32634 + "> POLYGON(("
+				+ "500000 4600000,501000 4600000,501000 4601000,"
+				+ "500000 4601000,500000 4600000))");
+
+		assertDouble(1.0, evaluate(GEOF_AREA_URI, polygon,
+				VALUE_FACTORY.createLiteral(GeoSparqlUnits.URI_KILOMETRE.stringValue(), XSD.ANYURI)), 0.0);
+		assertDouble(1.1172984903930451e-26,
+				evaluate(GEOF_AREA_URI, polygon, GeoSparqlUnits.URI_LIGHT_YEAR), 1e-39);
+		assertDouble(0.0, evaluate(GEOF_AREA_URI, wkt("POLYGON EMPTY"), GeoSparqlUnits.URI_LIGHT_YEAR), 0.0);
 	}
 
 	@Test
