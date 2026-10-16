@@ -84,8 +84,8 @@ final class LuceneGeoDocumentSchema {
 			"prefix-envelope-ordinate-preserving-source-wkb-envelope-marker-topology-dv-envelope-points-bounds-kind-indexed-source-crs";
 	/** Commit metadata key identifying the geometry serialization predicates included during full indexing. */
 	static final String COMMIT_SERIALIZATION_DISCOVERY_KEY = "geosparql.serializationDiscovery";
-	/** Commit metadata value requiring WKT, GML, and GeoJSON serialization discovery. */
-	static final String COMMIT_SERIALIZATION_DISCOVERY_VALUE = "wkt-gml-geojson";
+	/** Commit metadata value requiring format-specific and typed generic serialization discovery. */
+	static final String COMMIT_SERIALIZATION_DISCOVERY_VALUE = "wkt-gml-geojson-has-serialization";
 	/** Commit metadata key identifying the CRS transformation inputs used for candidate envelopes. */
 	static final String COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY = "geosparql.crsEnvironmentFingerprint";
 	static final String SCHEMA_MISMATCH_MESSAGE =

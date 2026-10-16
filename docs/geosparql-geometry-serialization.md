@@ -18,6 +18,10 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 | GML | `geo:gmlLiteral` | `geo:asGML` | `geof:asGML(geometry, profile)` |
 | GeoJSON | `geo:geoJSONLiteral` | `geo:asGeoJSON` | `geof:asGeoJSON(geometry)` |
 
+`geo:hasSerialization` also accepts geometry literals with any of the three listed datatypes. The literal datatype
+selects the format. Other literal datatypes and resource objects, including `dcat:Distribution` resources, are not
+spatially indexed through this property.
+
 Conversion produces a new geometry literal. The rules below describe which coordinate reference system and
 coordinate layout the result retains. Conversion may change the source text, numeric formatting, format-specific
 metadata, or omit Z and M ordinates where described below.
@@ -109,14 +113,16 @@ no spatial extent, they are not returned by spatial-envelope candidate searches.
 Each WKT, GML, or GeoJSON serialization attached to a Geometry is indexed independently, and no format is preferred.
 A GeoSPARQL predicate matches when any pair of the available geometry serializations satisfies the relation.
 
-During initial indexing and subsequent repository updates, the plugin reads all three serialization properties from
-Geometry resources and from Features through their default Geometries. The spatial index finds possible matches, and
-the plugin verifies each relation using the original geometry literal and its coordinate reference system.
+During initial indexing and subsequent repository updates, the plugin reads the three format-specific properties and
+supported typed literals on `geo:hasSerialization` from Geometry resources and from Features through their default
+Geometries. The spatial index finds possible matches, and the plugin verifies each relation using the original
+geometry literal and its coordinate reference system.
 
 ## Upgrading an existing repository
 
-After upgrading from a plugin version that did not index `geo:asGeoJSON` statements, force a reindex of each enabled
-repository so existing WKT, GML, and GeoJSON geometry data is included:
+After upgrading from a plugin version that did not index `geo:asGeoJSON` or `geo:hasSerialization` statements, force a
+reindex of each enabled repository so existing WKT, GML, and GeoJSON geometry data is included. The plugin rejects an
+index built under the older serialization-discovery policy until the reindex completes:
 
 ```sparql
 PREFIX plugin: <http://www.ontotext.com/plugins/geosparql#>
