@@ -1,7 +1,6 @@
 package com.ontotext.trree.geosparql;
 
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
-import com.ontotext.trree.sdk.Entities;
 import com.ontotext.trree.sdk.PluginConnection;
 import com.ontotext.trree.sdk.StatementIterator;
 
@@ -14,7 +13,8 @@ import java.util.function.Function;
  * from a fresh index, then visits {@code geo:asWKT}, {@code geo:asGML}, {@code geo:asGeoJSON},
  * {@code geo:hasSerialization}, and Feature
  * {@code geo:hasDefaultGeometry} statements in that order. Each source geometry literal is converted and indexed
- * before the repository iterator advances.
+ * before the repository iterator advances. Generic serialization statements that duplicate a format-specific
+ * statement on the same Geometry are skipped.
  *
  * <p>Unlike {@link RepositoryGeometrySource}, this traversal does not cache decoded geometries or collect Geometry
  * and Feature identifiers across the repository.
@@ -50,7 +50,7 @@ public class GeoSparqlFullIndexer {
 		StatementIterator iterator = pluginConnection.getStatements().get(0, predicate, 0);
 		try {
 			while (iterator.next()) {
-				indexLiteral(pluginConnection.getEntities(), iterator.subject, iterator.subject, iterator.object,
+				indexLiteral(pluginConnection, iterator.subject, iterator.subject, iterator.object,
 						predicate, subjectMapper);
 			}
 		} finally {
@@ -78,7 +78,7 @@ public class GeoSparqlFullIndexer {
 		StatementIterator iterator = pluginConnection.getStatements().get(geometryResourceId, predicate, 0);
 		try {
 			while (iterator.next()) {
-				indexLiteral(pluginConnection.getEntities(), geometryResourceId, featureId, iterator.object, predicate,
+				indexLiteral(pluginConnection, geometryResourceId, featureId, iterator.object, predicate,
 						subjectMapper);
 			}
 		} finally {
@@ -86,10 +86,16 @@ public class GeoSparqlFullIndexer {
 		}
 	}
 
-	private void indexLiteral(Entities entities, long geometryResourceId, long indexedEntityId, long literalId,
+	private void indexLiteral(PluginConnection pluginConnection, long geometryResourceId, long indexedEntityId, long literalId,
 			long predicate, Function<Long, String> subjectMapper) {
+		if (predicate == plugin.hasSerialization
+				&& (pluginConnection.getStatements().has(geometryResourceId, plugin.asWKT, literalId)
+						|| pluginConnection.getStatements().has(geometryResourceId, plugin.asGML, literalId)
+						|| pluginConnection.getStatements().has(geometryResourceId, plugin.asGeoJSON, literalId))) {
+			return;
+		}
 		IndexGeometry geometry = plugin.getIndexGeometryFromLiteralId(geometryResourceId, literalId,
-				predicate, entities);
+				predicate, pluginConnection.getEntities());
 		if (geometry != null) {
 			indexer.appendGeometry(indexedEntityId, subjectMapper, geometry);
 		}
