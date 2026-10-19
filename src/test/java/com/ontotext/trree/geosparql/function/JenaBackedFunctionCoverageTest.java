@@ -94,6 +94,7 @@ public class JenaBackedFunctionCoverageTest {
 			GeoConstants.GEOF_AS_GEO_JSON,
 			GeoConstants.GEOF_AS_WKT,
 			GeoConstants.GEOF_AS_GML,
+			GeoConstants.GEOF_AS_KML,
 			GeoConstants.GEO_DIMENSION,
 			GeoConstants.GEO_COORDINATE_DIMENSION,
 			GeoConstants.GEO_SPATIAL_DIMENSION,

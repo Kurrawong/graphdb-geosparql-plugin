@@ -37,6 +37,7 @@ public class RepositoryGeometrySourceTest {
 	private static final long AS_GEO_JSON = 13L;
 	private static final long HAS_DEFAULT_GEOMETRY = 12L;
 	private static final long HAS_SERIALIZATION = 14L;
+	private static final long AS_KML = 15L;
 	private static final long GEOMETRY_RESOURCE = 100L;
 	private static final long FEATURE_1 = 200L;
 	private static final long FEATURE_2 = 201L;
@@ -235,6 +236,7 @@ public class RepositoryGeometrySourceTest {
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.asKML = AS_KML;
 		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		GeoSparqlConfig config = new GeoSparqlConfig();
@@ -249,6 +251,7 @@ public class RepositoryGeometrySourceTest {
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.asKML = AS_KML;
 		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		GeoSparqlConfig config = new GeoSparqlConfig();

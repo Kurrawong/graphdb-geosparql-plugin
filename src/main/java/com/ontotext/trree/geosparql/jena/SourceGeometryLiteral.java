@@ -195,6 +195,9 @@ public final class SourceGeometryLiteral {
 		if (GeoConstants.GEO_JSON_LITERAL.equals(datatype)) {
 			return GeoConstants.GEO_JSON_LITERAL;
 		}
+		if (GeoConstants.GEO_KML_LITERAL.equals(datatype)) {
+			return GeoConstants.GEO_KML_LITERAL;
+		}
 		if (GeoConstants.GEO_WKT_LITERAL.equals(datatype)
 				|| GeoConstants.XMLSCHEMA_OGC_WKT.equals(datatype)
 				|| GeoConstants.XMLSCHEMA_SPATIAL_TEXT.equals(datatype)

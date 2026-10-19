@@ -41,6 +41,7 @@ public final class JenaGeometryAdapter {
 		SRSRegistry.setupDefaultSRS();
 		GeometryDatatype.registerDatatypes();
 		TypeMapper.getInstance().registerDatatype(GeoJsonGeometryDatatype.INSTANCE);
+		TypeMapper.getInstance().registerDatatype(KmlGeometryDatatype.INSTANCE);
 	}
 
 	public static SourceGeometryLiteral toSourceGeometryLiteral(Literal literal) {
@@ -75,6 +76,9 @@ public final class JenaGeometryAdapter {
 		}
 		if (GeoConstants.GEO_JSON_LITERAL.equals(jenaDatatype)) {
 			return toGeoJsonLiteral(valueFactory, wrapper, 2);
+		}
+		if (GeoConstants.GEO_KML_LITERAL.equals(jenaDatatype)) {
+			return toKmlLiteral(valueFactory, wrapper, 2);
 		}
 		if (GeoConstants.GEO_GML_LITERAL.equals(jenaDatatype) && wrapper.isEmpty()) {
 			return valueFactory.createLiteral("", datatype);
@@ -133,6 +137,13 @@ public final class JenaGeometryAdapter {
 				throw new JenaGeoSparqlException("GeoJSON output requires CRS84: " + result.getSrsURI());
 			}
 			return toGeoJsonLiteral(valueFactory, result,
+					geoJsonCoordinateDimension(source, result, geoJsonResultDimensionPolicy));
+		}
+		if (GeoConstants.GEO_KML_LITERAL.equals(jenaDatatype)) {
+			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(result.getSrsURI())) {
+				throw new JenaGeoSparqlException("KML output requires CRS84: " + result.getSrsURI());
+			}
+			return toKmlLiteral(valueFactory, result,
 					geoJsonCoordinateDimension(source, result, geoJsonResultDimensionPolicy));
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
@@ -353,7 +364,7 @@ public final class JenaGeometryAdapter {
 		requireUnmeasuredGeoJsonLayout(sourceDimensions);
 		ActualCoordinateLayout sourceLayout = actualCoordinateLayout(source.getParsingGeometry());
 		if (sourceLayout == ActualCoordinateLayout.MIXED) {
-			throw new JenaGeoSparqlException("GeoJSON source has inconsistent Z ordinates");
+			throw new JenaGeoSparqlException("GeoJSON or KML source has inconsistent Z ordinates");
 		}
 		if (sourceLayout != ActualCoordinateLayout.XYZ) {
 			return 2;
@@ -362,7 +373,7 @@ public final class JenaGeometryAdapter {
 				|| resultDimensions.getCoordinate() != 3
 				|| actualCoordinateLayout(result.getParsingGeometry()) != ActualCoordinateLayout.XYZ) {
 			throw new JenaGeoSparqlException(
-					"GeoJSON result does not preserve required source altitude");
+					"GeoJSON or KML result does not preserve required source altitude");
 		}
 		return 3;
 	}
@@ -371,7 +382,7 @@ public final class JenaGeometryAdapter {
 		if (dimensions.getCoordinate() != dimensions.getSpatial()
 				|| dimensions.getCoordinate() > 3) {
 			throw new JenaGeoSparqlException(
-					"GeoJSON output does not support measured coordinate layouts");
+					"GeoJSON or KML output does not support measured coordinate layouts");
 		}
 	}
 
@@ -487,6 +498,24 @@ public final class JenaGeometryAdapter {
 				new DimensionInfo(coordinateDimension, coordinateDimension, geometry.getDimension()));
 		org.apache.jena.rdf.model.Literal literal = output.asLiteral(GeoConstants.GEO_JSON_LITERAL.stringValue());
 		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_JSON_LITERAL);
+	}
+
+	static Literal toKmlLiteral(ValueFactory valueFactory, GeometryWrapper wrapper,
+			int coordinateDimension) {
+		GeometryWrapper crs84;
+		try {
+			crs84 = wrapper.transform(SRS_URI.DEFAULT_WKT_CRS84);
+		} catch (FactoryException | TransformException e) {
+			throw new JenaGeoSparqlException("Cannot transform " + wrapper.getSrsURI()
+					+ " to CRS84 for KML output", e);
+		}
+		Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(
+				crs84.getParsingGeometry(), coordinateDimension);
+		GeometryWrapper output = new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84,
+				GeoConstants.GEO_KML_LITERAL.stringValue(),
+				new DimensionInfo(coordinateDimension, coordinateDimension, geometry.getDimension()));
+		org.apache.jena.rdf.model.Literal literal = output.asLiteral(GeoConstants.GEO_KML_LITERAL.stringValue());
+		return valueFactory.createLiteral(literal.getLexicalForm(), GeoConstants.GEO_KML_LITERAL);
 	}
 
 	static Literal toWktLiteral(ValueFactory valueFactory, GeometryWrapper wrapper) {
