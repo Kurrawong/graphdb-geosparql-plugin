@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
+import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.query.GeometryArea;
 import com.ontotext.trree.geosparql.jena.query.GeometryBoundingCircle;
 import com.ontotext.trree.geosparql.jena.query.GeometryCentroid;
@@ -35,40 +35,40 @@ final class QueryFunctionManifest {
 					new UnaryGeometryUnitToDoubleProvider(GeometryArea::calculate, 2)),
 			new Entry(GeoConstants.GEOF_BOUNDARY.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::boundary,
-							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
+							Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_BOUNDING_CIRCLE.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryBoundingCircle::calculate,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_BUFFER.stringValue(), 3,
 					new UnaryGeometryDoubleUnitToGeometryProvider(GeometryWrapper::buffer,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_CENTROID.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryCentroid::calculate,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_CONCAVE_HULL.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryConcaveHull::calculate,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_CONVEX_HULL.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::convexHull,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_DIFFERENCE.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::difference,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_DISTANCE.stringValue(), 3,
 					new BinaryGeometryUnitToDoubleProvider(GeometryDistance::calculate)),
 			new Entry(GeoConstants.GEOF_ENVELOPE.stringValue(), 1,
 					new UnaryGeometryProvider(GeometryWrapper::envelope,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_INTERSECTION.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::intersection,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_LENGTH.stringValue(), 2,
 					new UnaryGeometryUnitToDoubleProvider(GeometryLength::calculate)),
 			new Entry(GeoConstants.GEOF_METRIC_AREA.stringValue(), 1,
 					new UnaryGeometryToDoubleProvider(GeometryArea::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_BUFFER.stringValue(), 2,
 					new UnaryGeometryDoubleToGeometryProvider(MetricBuffer::calculate,
-							GeoJsonResultDimensionPolicy.XY_ONLY, "radius")),
+							Crs84ResultDimensionPolicy.XY_ONLY, "radius")),
 			new Entry(GeoConstants.GEOF_METRIC_DISTANCE.stringValue(), 2,
 					new BinaryGeometryToDoubleProvider(GeometryDistance::calculateMetric)),
 			new Entry(GeoConstants.GEOF_METRIC_WITHIN_DISTANCE.stringValue(), 3,
@@ -111,7 +111,7 @@ final class QueryFunctionManifest {
 					new UnaryGeometryIntegerProvider(TopologicalDimension::calculate)),
 			new Entry(GeoConstants.GEOF_GEOMETRY_N.stringValue(), 2,
 					new GeometryMemberProvider(GeometryMember::calculate,
-							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
+							Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_GEOMETRY_TYPE.stringValue(), 1,
 					new UnaryGeometryAnyUriProvider(GeometryMetadata::geometryTypeUri)),
 			new Entry(GeoConstants.GEOF_IS_3D.stringValue(), 1,
@@ -128,20 +128,20 @@ final class QueryFunctionManifest {
 					new UnaryGeometryIntegerProvider(GeometryWrapper::getSpatialDimension)),
 			new Entry(GeoConstants.GEOF_SYM_DIFFERENCE.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::symDifference,
-							GeoJsonResultDimensionPolicy.XY_ONLY)),
+							Crs84ResultDimensionPolicy.XY_ONLY)),
 			new Entry(GeoConstants.GEOF_SIMPLIFY.stringValue(), 2,
 					new UnaryGeometryDoubleToGeometryProvider(GeometrySimplify::calculate,
-							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z, "tolerance")),
+							Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z, "tolerance")),
 			new Entry(GeoConstants.GEOF_TRANSFORM.stringValue(), 2,
 					new GeometryTargetSrsProvider(GeometryWrapper::transform,
-							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
+							Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_TRANSFORM_CRS84.stringValue(), 1,
 					new GeometryFixedTargetSrsProvider(GeometryWrapper::transform,
 							SRS_URI.DEFAULT_WKT_CRS84,
-							GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z)),
+							Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z)),
 			new Entry(GeoConstants.GEOF_UNION.stringValue(), 2,
 					new BinaryGeometryProvider(GeometryWrapper::union,
-							GeoJsonResultDimensionPolicy.XY_ONLY)));
+							Crs84ResultDimensionPolicy.XY_ONLY)));
 
 	private QueryFunctionManifest() {
 	}
@@ -171,7 +171,7 @@ final class QueryFunctionManifest {
 	}
 
 	record BinaryGeometryProvider(BinaryGeometryCalculation calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) implements Provider {
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy) implements Provider {
 	}
 
 	@FunctionalInterface
@@ -215,7 +215,7 @@ final class QueryFunctionManifest {
 	}
 
 	record UnaryGeometryDoubleToGeometryProvider(UnaryGeometryDoubleToGeometryCalculation calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy, String numericRole)
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy, String numericRole)
 			implements Provider {
 	}
 
@@ -225,7 +225,7 @@ final class QueryFunctionManifest {
 	}
 
 	record UnaryGeometryDoubleUnitToGeometryProvider(UnaryGeometryDoubleUnitToGeometryCalculation calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy)
 			implements Provider {
 	}
 
@@ -235,7 +235,7 @@ final class QueryFunctionManifest {
 	}
 
 	record UnaryGeometryProvider(UnaryGeometryCalculation calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) implements Provider {
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy) implements Provider {
 	}
 
 	@FunctionalInterface
@@ -257,7 +257,7 @@ final class QueryFunctionManifest {
 	}
 
 	record GeometryMemberProvider(BiFunction<GeometryWrapper, Integer, GeometryWrapper> calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy)
 			implements Provider {
 	}
 
@@ -267,11 +267,11 @@ final class QueryFunctionManifest {
 	}
 
 	record GeometryTargetSrsProvider(GeometryTargetSrsCalculation calculation,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) implements Provider {
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy) implements Provider {
 	}
 
 	record GeometryFixedTargetSrsProvider(GeometryTargetSrsCalculation calculation,
-			String targetSrsUri, GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy)
+			String targetSrsUri, Crs84ResultDimensionPolicy crs84ResultDimensionPolicy)
 			implements Provider {
 	}
 

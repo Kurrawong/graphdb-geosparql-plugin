@@ -88,13 +88,13 @@ public final class JenaGeometryAdapter {
 	}
 
 	/**
-	 * Serializes a query-function geometry result under the provider's GeoJSON dimensionality contract.
+	 * Serializes a query-function geometry result under the provider's GeoJSON and KML dimensionality contract.
 	 */
 	public static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper source,
 			GeometryWrapper result, IRI datatype,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) {
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy) {
 		return toQueryGeometryLiteral(valueFactory, source, result, datatype,
-				geoJsonResultDimensionPolicy, QueryGeometryResultPolicy.STANDARD);
+				crs84ResultDimensionPolicy, QueryGeometryResultPolicy.STANDARD);
 	}
 
 	/**
@@ -104,19 +104,19 @@ public final class JenaGeometryAdapter {
 	 */
 	public static Literal toTransformQueryGeometryLiteral(ValueFactory valueFactory,
 			GeometryWrapper source, GeometryWrapper result, String requestedTargetSrsUri, IRI datatype,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy) {
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy) {
 		if (!requestedTargetSrsUri.equals(result.getSrsURI())) {
 			throw new JenaGeoSparqlException(
 					"Transform result SRS does not match the requested target SRS: expected "
 							+ requestedTargetSrsUri + ", found " + result.getSrsURI());
 		}
 		return toQueryGeometryLiteral(valueFactory, source, result, datatype,
-				geoJsonResultDimensionPolicy, QueryGeometryResultPolicy.TRANSFORM);
+				crs84ResultDimensionPolicy, QueryGeometryResultPolicy.TRANSFORM);
 	}
 
 	private static Literal toQueryGeometryLiteral(ValueFactory valueFactory, GeometryWrapper source,
 			GeometryWrapper result, IRI datatype,
-			GeoJsonResultDimensionPolicy geoJsonResultDimensionPolicy,
+			Crs84ResultDimensionPolicy crs84ResultDimensionPolicy,
 			QueryGeometryResultPolicy resultPolicy) {
 		result = normalizeQueryGeometryType(result);
 		validateQueryGeometryResult(result, resultPolicy);
@@ -137,14 +137,14 @@ public final class JenaGeometryAdapter {
 				throw new JenaGeoSparqlException("GeoJSON output requires CRS84: " + result.getSrsURI());
 			}
 			return toGeoJsonLiteral(valueFactory, result,
-					geoJsonCoordinateDimension(source, result, geoJsonResultDimensionPolicy));
+					crs84CoordinateDimension(source, result, crs84ResultDimensionPolicy));
 		}
 		if (GeoConstants.GEO_KML_LITERAL.equals(jenaDatatype)) {
 			if (!SRS_URI.DEFAULT_WKT_CRS84.equals(result.getSrsURI())) {
 				throw new JenaGeoSparqlException("KML output requires CRS84: " + result.getSrsURI());
 			}
 			return toKmlLiteral(valueFactory, result,
-					geoJsonCoordinateDimension(source, result, geoJsonResultDimensionPolicy));
+					crs84CoordinateDimension(source, result, crs84ResultDimensionPolicy));
 		}
 		throw new JenaGeoSparqlException("Unsupported GeoSPARQL geometry datatype: " + datatype);
 	}
@@ -350,18 +350,18 @@ public final class JenaGeometryAdapter {
 		return true;
 	}
 
-	private static int geoJsonCoordinateDimension(GeometryWrapper source, GeometryWrapper result,
-			GeoJsonResultDimensionPolicy policy) {
+	private static int crs84CoordinateDimension(GeometryWrapper source, GeometryWrapper result,
+			Crs84ResultDimensionPolicy policy) {
 		if (result.isEmpty()) {
 			return 2;
 		}
 		DimensionInfo resultDimensions = result.getDimensionInfo();
-		requireUnmeasuredGeoJsonLayout(resultDimensions);
-		if (policy == GeoJsonResultDimensionPolicy.XY_ONLY) {
+		requireUnmeasuredCrs84Layout(resultDimensions);
+		if (policy == Crs84ResultDimensionPolicy.XY_ONLY) {
 			return 2;
 		}
 		DimensionInfo sourceDimensions = source.getDimensionInfo();
-		requireUnmeasuredGeoJsonLayout(sourceDimensions);
+		requireUnmeasuredCrs84Layout(sourceDimensions);
 		ActualCoordinateLayout sourceLayout = actualCoordinateLayout(source.getParsingGeometry());
 		if (sourceLayout == ActualCoordinateLayout.MIXED) {
 			throw new JenaGeoSparqlException("GeoJSON or KML source has inconsistent Z ordinates");
@@ -378,7 +378,7 @@ public final class JenaGeometryAdapter {
 		return 3;
 	}
 
-	private static void requireUnmeasuredGeoJsonLayout(DimensionInfo dimensions) {
+	private static void requireUnmeasuredCrs84Layout(DimensionInfo dimensions) {
 		if (dimensions.getCoordinate() != dimensions.getSpatial()
 				|| dimensions.getCoordinate() > 3) {
 			throw new JenaGeoSparqlException(

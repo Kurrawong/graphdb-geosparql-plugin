@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
+import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
@@ -759,10 +759,10 @@ public class DistanceAndBufferFunctionsTest {
 		QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider metricBuffer =
 				(QueryFunctionManifest.UnaryGeometryDoubleToGeometryProvider)
 						manifestEntry(GEOF_METRIC_BUFFER_URI).provider();
-		assertEquals(GeoJsonResultDimensionPolicy.XY_ONLY,
-				buffer.geoJsonResultDimensionPolicy());
-		assertEquals(GeoJsonResultDimensionPolicy.XY_ONLY,
-				metricBuffer.geoJsonResultDimensionPolicy());
+		assertEquals(Crs84ResultDimensionPolicy.XY_ONLY,
+				buffer.crs84ResultDimensionPolicy());
+		assertEquals(Crs84ResultDimensionPolicy.XY_ONLY,
+				metricBuffer.crs84ResultDimensionPolicy());
 	}
 
 	private Value evaluate(String functionUri, Value... args) throws ValueExprEvaluationException {

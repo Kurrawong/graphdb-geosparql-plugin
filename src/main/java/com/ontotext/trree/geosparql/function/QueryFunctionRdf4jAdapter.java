@@ -58,7 +58,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				requireOverlayOperand(right);
 				GeometryWrapper result = provider.calculation().apply(left, right);
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, left,
-						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
+						result, source.datatype(), provider.crs84ResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.BinaryGeometryToDoubleProvider provider -> {
 				double result = provider.calculation().apply(
@@ -90,7 +90,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				GeometryWrapper result = provider.calculation().apply(
 						source.asGeometryWrapper(), memberIndex(args[1]));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
-						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
+						result, source.datatype(), provider.crs84ResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.GeometryTargetSrsProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
@@ -100,7 +100,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 						sourceGeometry, requestedTargetSrsUri);
 				yield JenaGeometryAdapter.toTransformQueryGeometryLiteral(valueFactory, sourceGeometry,
 						result, requestedTargetSrsUri, source.datatype(),
-						provider.geoJsonResultDimensionPolicy());
+						provider.crs84ResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.GeometryFixedTargetSrsProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
@@ -109,7 +109,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 						sourceGeometry, provider.targetSrsUri());
 				yield JenaGeometryAdapter.toTransformQueryGeometryLiteral(valueFactory, sourceGeometry,
 						result, provider.targetSrsUri(), source.datatype(),
-						provider.geoJsonResultDimensionPolicy());
+						provider.crs84ResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.UnaryGeometryAnyUriProvider provider -> {
 				String result = provider.calculation().apply(geometryArgument(args[0]));
@@ -124,7 +124,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				GeometryWrapper result = provider.calculation().apply(
 						source.asGeometryWrapper(), finiteNumeric(args[1], provider.numericRole()));
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
-						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
+						result, source.datatype(), provider.crs84ResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider provider -> {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
@@ -133,7 +133,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				GeometryWrapper result = provider.calculation().apply(
 						source.asGeometryWrapper(), unit.toNative(radius), unit.unitUri());
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
-						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
+						result, source.datatype(), provider.crs84ResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.UnaryGeometryIntegerProvider provider -> {
 				int result = provider.calculation().applyAsInt(geometryArgument(args[0]));
@@ -143,7 +143,7 @@ final class QueryFunctionRdf4jAdapter implements Function {
 				SourceGeometryLiteral source = sourceGeometryArgument(args[0]);
 				GeometryWrapper result = provider.calculation().apply(source.asGeometryWrapper());
 				yield JenaGeometryAdapter.toQueryGeometryLiteral(valueFactory, source.asGeometryWrapper(),
-						result, source.datatype(), provider.geoJsonResultDimensionPolicy());
+						result, source.datatype(), provider.crs84ResultDimensionPolicy());
 			}
 			case QueryFunctionManifest.UnaryGeometryToDoubleProvider provider -> {
 				double result = provider.calculation().applyAsDouble(geometryArgument(args[0]));
