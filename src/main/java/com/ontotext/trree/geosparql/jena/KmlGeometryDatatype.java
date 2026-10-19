@@ -63,12 +63,12 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 	}
 
 	/**
-	 * Rejects infinite ordinates, including altitudes that dimension normalization would discard and that the
-	 * KML writer cannot represent. A NaN altitude denotes an absent altitude.
+	 * Rejects non-finite horizontal ordinates and infinite altitudes, including altitudes that dimension
+	 * normalization would discard, none of which KML can represent. A NaN altitude denotes an absent altitude.
 	 */
 	private static void requireFiniteOrdinates(Geometry geometry) {
 		for (Coordinate coordinate : geometry.getCoordinates()) {
-			if (Double.isInfinite(coordinate.getX()) || Double.isInfinite(coordinate.getY())
+			if (!Double.isFinite(coordinate.getX()) || !Double.isFinite(coordinate.getY())
 					|| Double.isInfinite(coordinate.getZ())) {
 				throw new DatatypeFormatException("Invalid KML geometry literal: ordinates must be finite");
 			}

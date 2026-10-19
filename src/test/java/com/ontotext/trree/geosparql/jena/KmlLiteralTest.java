@@ -99,6 +99,18 @@ public class KmlLiteralTest {
 		}
 	}
 
+	@Test
+	public void notANumberHorizontalOrdinateInAnyTupleIsRejected() {
+		for (String coordinates : new String[] {"1,2 NaN,4 5,6", "1,2 3,NaN 5,6", "1,2,10 3,4,20 NaN,6,30"}) {
+			SourceGeometryLiteral source = source("<LineString><coordinates>" + coordinates
+					+ "</coordinates></LineString>");
+
+			JenaGeoSparqlException exception = assertThrows(coordinates, JenaGeoSparqlException.class,
+					source::asGeometryWrapper);
+			assertTrue(coordinates, exception.getMessage().contains("ordinates must be finite"));
+		}
+	}
+
 	private static SourceGeometryLiteral source(String lexicalForm) {
 		Literal literal = VALUE_FACTORY.createLiteral(lexicalForm, GeoConstants.GEO_KML_LITERAL);
 		return JenaGeometryAdapter.toSourceGeometryLiteral(literal);
