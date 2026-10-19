@@ -133,6 +133,27 @@ public class GeometryAggregateTest {
 		assertTrue(GeometryAggregate.centroid(empties).isEmpty());
 	}
 
+	@Test
+	public void collectPrunesEmptyMembersAndKeepsMultipartTypes() throws Exception {
+		GeometryWrapper multiPointWithEmptyMember = new GeometryWrapper(
+				new WKTReader().read("MULTIPOINT(EMPTY,(1 2))"), SRS_URI.DEFAULT_WKT_CRS84, WKTDatatype.URI);
+
+		GeometryWrapper collected = GeometryAggregate.collect(List.of(multiPointWithEmptyMember, wkt("POINT(5 5)")));
+
+		assertEquals("MultiPoint", collected.getXYGeometry().getGeometryN(0).getGeometryType());
+		assertTrue(collected.getXYGeometry().toText(), collected.getXYGeometry().equalsExact(
+				new WKTReader().read("GEOMETRYCOLLECTION(MULTIPOINT((1 2)),POINT(5 5))")));
+	}
+
+	@Test
+	public void emptyGeometriesTakePartInSrsSelection() {
+		GeometryWrapper collected = GeometryAggregate.collect(List.of(
+				wkt("<" + EPSG_32634 + "> POINT(500000 4600000)"), wkt("POINT EMPTY")));
+
+		assertEquals(SRS_URI.DEFAULT_WKT_CRS84, collected.getSrsURI());
+		assertEquals(1, collected.getXYGeometry().getNumGeometries());
+	}
+
 	private static GeometryWrapper wkt(String lexicalForm) {
 		return GeometryWrapper.extract(lexicalForm, WKTDatatype.URI);
 	}

@@ -1,7 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
-import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.query.GeometryAggregate;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -10,7 +9,6 @@ import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.query.BindingSet;
-import org.eclipse.rdf4j.query.QueryEvaluationException;
 import org.eclipse.rdf4j.query.parser.sparql.aggregate.AggregateCollector;
 import org.eclipse.rdf4j.query.parser.sparql.aggregate.AggregateFunction;
 import org.eclipse.rdf4j.query.parser.sparql.aggregate.AggregateFunctionFactory;
@@ -22,7 +20,7 @@ import java.util.function.Predicate;
 
 /**
  * RDF4J custom aggregate for one GeoSPARQL spatial aggregate function. A group's result is unbound when the group
- * has no geometries or when any value in it is not a valid geometry literal.
+ * has no geometries, when any value in it is not a valid geometry literal, or when the calculation fails.
  */
 final class SpatialAggregateFactory implements AggregateFunctionFactory {
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
@@ -75,7 +73,7 @@ final class SpatialAggregateFactory implements AggregateFunctionFactory {
 						collector.geometries.add(
 								JenaGeometryAdapter.toSourceGeometryLiteral(value, true).asGeometryWrapper());
 					}
-				} catch (JenaGeoSparqlException | QueryEvaluationException e) {
+				} catch (RuntimeException e) {
 					collector.failed = true;
 				}
 			}
@@ -100,7 +98,8 @@ final class SpatialAggregateFactory implements AggregateFunctionFactory {
 				GeometryWrapper result = calculation.apply(geometries);
 				return JenaGeometryAdapter.toQueryGeometryLiteral(VALUE_FACTORY, result, result,
 						VALUE_FACTORY.createIRI(result.getGeometryDatatypeURI()), Crs84ResultDimensionPolicy.XY_ONLY);
-			} catch (JenaGeoSparqlException e) {
+			} catch (RuntimeException e) {
+				// Calculation and serialization failures, such as JTS topology errors, leave the group unbound.
 				return null;
 			}
 		}

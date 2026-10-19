@@ -8,9 +8,18 @@ import org.apache.jena.geosparql.implementation.datatype.WKTDatatype;
 import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryCollection;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.MultiLineString;
+import org.locationtech.jts.geom.MultiPoint;
+import org.locationtech.jts.geom.MultiPolygon;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.Polygon;
 import org.opengis.referencing.operation.TransformException;
 import org.opengis.util.FactoryException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -22,13 +31,16 @@ public final class GeometryAggregate {
 	}
 
 	/**
-	 * Collects the geometries into one GeometryCollection in a shared SRS and geometry datatype.
+	 * Collects the geometries into one GeometryCollection in a shared SRS and geometry datatype, both chosen from
+	 * every geometry in the group. Empty geometries and empty collection members at any depth are omitted, keeping
+	 * the remaining nesting and member types, so a group of only empty geometries gives an empty collection.
 	 */
 	public static GeometryWrapper collect(List<GeometryWrapper> geometries) {
 		String srsUri = shared(geometries, GeometryWrapper::getSrsURI, SRS_URI.DEFAULT_WKT_CRS84);
 		String datatypeUri = shared(geometries, GeometryWrapper::getGeometryDatatypeURI, WKTDatatype.URI);
 		Geometry[] members = geometries.stream()
-				.map(geometry -> inSrs(geometry, srsUri).getXYGeometry())
+				.filter(geometry -> !geometry.isEmpty())
+				.map(geometry -> withoutEmptyMembers(inSrs(geometry, srsUri).getXYGeometry()))
 				.toArray(Geometry[]::new);
 		return wrap(CustomGeometryFactory.theInstance().createGeometryCollection(members), srsUri, datatypeUri);
 	}
@@ -86,6 +98,37 @@ public final class GeometryAggregate {
 	public static GeometryWrapper union(List<GeometryWrapper> geometries) {
 		GeometryWrapper collected = collect(geometries);
 		return wrap(collected.getXYGeometry().union(), collected.getSrsURI(), collected.getGeometryDatatypeURI());
+	}
+
+	/**
+	 * Removes empty members at every depth. The WKT result boundary rejects collections with empty members because
+	 * Jena's WKT reader does not read them back faithfully.
+	 */
+	private static Geometry withoutEmptyMembers(Geometry geometry) {
+		if (!(geometry instanceof GeometryCollection collection)) {
+			return geometry;
+		}
+		List<Geometry> members = new ArrayList<>();
+		for (int index = 0; index < collection.getNumGeometries(); index++) {
+			Geometry member = withoutEmptyMembers(collection.getGeometryN(index));
+			if (!member.isEmpty()) {
+				members.add(member);
+			}
+		}
+		if (members.size() == collection.getNumGeometries()) {
+			return geometry;
+		}
+		GeometryFactory factory = CustomGeometryFactory.theInstance();
+		if (collection instanceof MultiPoint) {
+			return factory.createMultiPoint(members.toArray(new Point[0]));
+		}
+		if (collection instanceof MultiLineString) {
+			return factory.createMultiLineString(members.toArray(new LineString[0]));
+		}
+		if (collection instanceof MultiPolygon) {
+			return factory.createMultiPolygon(members.toArray(new Polygon[0]));
+		}
+		return factory.createGeometryCollection(members.toArray(new Geometry[0]));
 	}
 
 	private static GeometryWrapper wrap(Geometry xyGeometry, String srsUri, String datatypeUri) {

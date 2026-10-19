@@ -181,7 +181,12 @@ the group's geometries.
 When every geometry in a group uses the same CRS, the result uses that CRS; otherwise every geometry is transformed to
 CRS84. When every geometry has the same literal datatype, the result uses that datatype; otherwise it is a
 `geo:wktLiteral`. GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct geometry literal once. The result
-is unbound for a group that contains a value that is not a valid geometry literal.
+is unbound for a group that contains a value that is not a valid geometry literal, or whose calculation fails.
+
+Empty geometries count when choosing the result CRS and datatype, but are left out of the aggregated geometries,
+together with empty members of collections at any depth. This keeps the represented point set, but `geof:aggCollect`
+can return fewer members than the group has values, with different `geof:geometryN` results and member types. A group
+of only empty geometries gives an empty GeometryCollection, such as `GEOMETRYCOLLECTION EMPTY`.
 
 GraphDB 11.0 through 11.5.1 does not evaluate custom aggregates with more than one argument, so a query that passes
 `targetPercent` to `geof:aggConcaveHull` is rejected. Omit `targetPercent` to use the default.

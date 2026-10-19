@@ -84,6 +84,24 @@ public class TestSpatialAggregates extends AbstractGeoSparqlPluginTest {
 		assertNull(results.get("south"));
 	}
 
+	@Test
+	public void calculationFailureLeavesOnlyItsGroupUnbound() {
+		executeSparqlUpdateQuery(PREFIXES + """
+				INSERT DATA {
+				  ex:c1 ex:region ex:selfIntersecting ;
+				    geo:hasGeometry [ geo:asWKT "POLYGON((0 0,2 2,2 0,0 2,0 0))"^^geo:wktLiteral ] .
+				  ex:c2 ex:region ex:selfIntersecting ;
+				    geo:hasGeometry [ geo:asWKT "POLYGON((1 0,3 0,3 2,1 2,1 0))"^^geo:wktLiteral ] .
+				}
+				""");
+
+		Map<String, Geometry> results = aggregatePerRegion("geof:aggUnion(?wkt)");
+
+		assertTrue(results.containsKey("selfIntersecting"));
+		assertNull(results.get("selfIntersecting"));
+		assertNotNull(results.get("north"));
+	}
+
 	/**
 	 * Dependency limitation: GraphDB 11.0 bundles the RDF4J 5.1.2 SPARQL parser, which rejects custom aggregates
 	 * with more than one argument, and GraphDB 11.5.1 evaluates only the first argument of a custom aggregate. Once
