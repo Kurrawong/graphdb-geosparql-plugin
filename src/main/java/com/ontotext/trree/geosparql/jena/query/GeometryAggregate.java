@@ -109,13 +109,18 @@ public final class GeometryAggregate {
 			return geometry;
 		}
 		List<Geometry> members = new ArrayList<>();
+		boolean changed = false;
 		for (int index = 0; index < collection.getNumGeometries(); index++) {
-			Geometry member = withoutEmptyMembers(collection.getGeometryN(index));
-			if (!member.isEmpty()) {
+			Geometry original = collection.getGeometryN(index);
+			Geometry member = withoutEmptyMembers(original);
+			changed |= member != original;
+			if (member.isEmpty()) {
+				changed = true;
+			} else {
 				members.add(member);
 			}
 		}
-		if (members.size() == collection.getNumGeometries()) {
+		if (!changed) {
 			return geometry;
 		}
 		GeometryFactory factory = CustomGeometryFactory.theInstance();

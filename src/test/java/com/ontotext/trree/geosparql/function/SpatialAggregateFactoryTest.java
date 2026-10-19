@@ -59,6 +59,20 @@ public class SpatialAggregateFactoryTest {
 	}
 
 	@Test
+	public void collectPrunesEmptyMembersBelowCollectionsWhoseMemberCountIsUnchanged() throws Exception {
+		Literal nested = VALUE_FACTORY.createLiteral("{\"type\":\"GeometryCollection\",\"geometries\":["
+				+ "{\"type\":\"GeometryCollection\",\"geometries\":["
+				+ "{\"type\":\"Point\",\"coordinates\":[]},{\"type\":\"Point\",\"coordinates\":[3,4]}]}]}",
+				GeoConstants.GEO_JSON_LITERAL);
+
+		Literal result = collect(List.of(nested, wkt("POINT(1 2)")));
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		assertTrue(result.stringValue(), geometry(result).equalsExact(new WKTReader().read(
+				"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(3 4))),POINT(1 2))")));
+	}
+
+	@Test
 	public void groupWithoutGeometriesIsUnbound() {
 		assertNull(aggregate(GeoConstants.GEOF_AGG_COLLECT.stringValue(), List.of()));
 	}
