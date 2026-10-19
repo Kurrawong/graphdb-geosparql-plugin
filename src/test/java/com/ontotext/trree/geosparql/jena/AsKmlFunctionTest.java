@@ -124,6 +124,16 @@ public class AsKmlFunctionTest {
 		assertTrue(exception.getMessage(), exception.getMessage().contains("ordinates must be finite"));
 	}
 
+	@Test
+	public void standaloneLinearRingIsWrittenAsLineStringThatReadsBack() throws Exception {
+		Literal result = evaluate(wkt("LINEARRING(0 0,2 0,2 2,0 0)"));
+
+		assertEquals("<LineString xmlns=\"http://www.opengis.net/kml/2.2\"><coordinates>0,0 2,0 2,2 0,0</coordinates>"
+				+ "</LineString>", compact(result));
+		Geometry parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result).asGeometryWrapper().getXYGeometry();
+		assertTrue(parsed.toText(), parsed.equalsExact(new WKTReader().read("LINESTRING(0 0,2 0,2 2,0 0)")));
+	}
+
 	private static Literal evaluate(Literal source) throws Exception {
 		return (Literal) JenaFunctionEvaluator.evaluate(VALUE_FACTORY, GeoConstants.GEOF_AS_KML.stringValue(), source);
 	}

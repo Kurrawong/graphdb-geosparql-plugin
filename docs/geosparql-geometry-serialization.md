@@ -113,9 +113,9 @@ read as that member.
 
 Generated KML declares the `http://www.opengis.net/kml/2.2` namespace on its root element and writes each ordinate as a
 plain decimal. Every multipart geometry and GeometryCollection is written as one `MultiGeometry`: nested collections are
-flattened, ring members are written as `LineString` elements, and empty members are omitted. Ring orientation is not
-normalized. Vertices are transformed to CRS84 as for generated GeoJSON, without densifying edges or splitting geometries
-at the antimeridian.
+flattened, rings outside polygons are written as `LineString` elements, and empty members are omitted. Ring orientation
+is not normalized. Vertices are transformed to CRS84 as for generated GeoJSON, without densifying edges or splitting
+geometries at the antimeridian.
 
 ## GML profile
 

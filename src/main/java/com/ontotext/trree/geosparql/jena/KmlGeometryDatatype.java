@@ -182,14 +182,14 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 	}
 
 	/**
-	 * Flattens nested collections, removes empty members, and writes ring members as line strings. The JTS reader
-	 * cannot read a nested {@code MultiGeometry} or a {@code LinearRing} member, and KML cannot represent an empty
-	 * geometry. Every collection is written as a {@code MultiGeometry}, so the rebuilt collection type does not
-	 * affect the output.
+	 * Flattens nested collections, removes empty members, and writes rings as line strings. The JTS reader cannot
+	 * read a nested {@code MultiGeometry} or a {@code LinearRing} outside a {@code Polygon}, and KML cannot
+	 * represent an empty geometry. Every collection is written as a {@code MultiGeometry}, so the rebuilt collection
+	 * type does not affect the output.
 	 */
 	private static Geometry flattenedWithoutEmptyMembers(Geometry geometry) {
 		if (!(geometry instanceof GeometryCollection)) {
-			return geometry;
+			return lineStringIfRing(geometry);
 		}
 		List<Geometry> members = new ArrayList<>();
 		addNonEmptyLeafMembers(geometry, members);
@@ -198,15 +198,19 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 
 	private static void addNonEmptyLeafMembers(Geometry geometry, List<Geometry> members) {
 		if (!(geometry instanceof GeometryCollection collection)) {
-			if (geometry instanceof LinearRing ring && !ring.isEmpty()) {
-				members.add(GEOMETRY_FACTORY.createLineString(ring.getCoordinateSequence()));
-			} else if (!geometry.isEmpty()) {
-				members.add(geometry);
+			if (!geometry.isEmpty()) {
+				members.add(lineStringIfRing(geometry));
 			}
 			return;
 		}
 		for (int index = 0; index < collection.getNumGeometries(); index++) {
 			addNonEmptyLeafMembers(collection.getGeometryN(index), members);
 		}
+	}
+
+	private static Geometry lineStringIfRing(Geometry geometry) {
+		return geometry instanceof LinearRing ring
+				? GEOMETRY_FACTORY.createLineString(ring.getCoordinateSequence())
+				: geometry;
 	}
 }
