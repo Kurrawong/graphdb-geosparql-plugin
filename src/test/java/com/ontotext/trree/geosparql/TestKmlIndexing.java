@@ -6,13 +6,14 @@ import org.junit.Test;
 import static org.junit.Assert.assertTrue;
 
 public class TestKmlIndexing extends AbstractGeoSparqlPluginTest {
+	private static final String NS = "http://example.com/kml-indexing/";
 	private static final String PREFIXES = """
 			PREFIX geo: <http://www.opengis.net/ont/geosparql#>
 			PREFIX ex: <http://example.com/kml-indexing/>
 			""";
 
 	@Test
-	public void enableTimeFullIndexMakesKmlOnlyGeometryAndFeatureQueryable() {
+	public void enableTimeFullIndexMakesKmlOnlyGeometryAndFeatureQueryable() throws Exception {
 		executeSparqlUpdateQuery(PREFIXES + """
 				INSERT DATA {
 				  ex:container a geo:Feature ; geo:hasDefaultGeometry ex:containerGeom .
@@ -27,12 +28,13 @@ public class TestKmlIndexing extends AbstractGeoSparqlPluginTest {
 
 		enablePlugin();
 
+		assertCandidateLookupFindsThing();
 		assertTrue(ask("ex:thingGeom geo:sfWithin ex:containerGeom"));
 		assertTrue(ask("ex:thing geo:sfWithin ex:container"));
 	}
 
 	@Test
-	public void addingKmlIndexesGeometryAndReferencingFeature() {
+	public void addingKmlIndexesGeometryAndReferencingFeature() throws Exception {
 		executeSparqlUpdateQuery(PREFIXES + """
 				INSERT DATA {
 				  ex:container a geo:Feature ; geo:hasDefaultGeometry ex:containerGeom .
@@ -50,12 +52,13 @@ public class TestKmlIndexing extends AbstractGeoSparqlPluginTest {
 				}
 				""");
 
+		assertCandidateLookupFindsThing();
 		assertTrue(ask("ex:thingGeom geo:sfWithin ex:containerGeom"));
 		assertTrue(ask("ex:thing geo:sfWithin ex:container"));
 	}
 
 	@Test
-	public void kmlLiteralIsIndexedThroughHasSerialization() {
+	public void kmlLiteralIsIndexedThroughHasSerialization() throws Exception {
 		executeSparqlUpdateQuery(PREFIXES + """
 				INSERT DATA {
 				  ex:container a geo:Feature ; geo:hasDefaultGeometry ex:containerGeom .
@@ -69,8 +72,21 @@ public class TestKmlIndexing extends AbstractGeoSparqlPluginTest {
 
 		enablePlugin();
 
+		assertCandidateLookupFindsThing();
 		assertTrue(ask("ex:thingGeom geo:sfWithin ex:containerGeom"));
 		assertTrue(ask("ex:thing geo:sfWithin ex:container"));
+	}
+
+	/**
+	 * Uses one bound relation operand so the relation is answered through index candidate lookup.
+	 */
+	private void assertCandidateLookupFindsThing() throws Exception {
+		assertTrue(executeSparqlQueryWithResult(PREFIXES
+				+ "SELECT ?geometry WHERE { ?geometry geo:sfWithin ex:containerGeom }", "geometry")
+				.contains(VF.createIRI(NS + "thingGeom")));
+		assertTrue(executeSparqlQueryWithResult(PREFIXES
+				+ "SELECT ?feature WHERE { ?feature geo:sfWithin ex:container }", "feature")
+				.contains(VF.createIRI(NS + "thing")));
 	}
 
 	private boolean ask(String pattern) {

@@ -170,8 +170,10 @@ public class GeoSparqlFullIndexerTest {
 								+ "srsName='http://www.opengis.net/def/crs/OGC/1.3/CRS84'>"
 								+ "<gml:pos>1 1</gml:pos></gml:Point>", GeoConstants.GEO_GML_LITERAL),
 				SimpleValueFactory.getInstance().createLiteral(
-						"{\"type\":\"Point\",\"coordinates\":[1,1]}", GeoConstants.GEO_JSON_LITERAL));
-		List<Long> predicates = List.of(AS_WKT, AS_GML, AS_GEO_JSON);
+						"{\"type\":\"Point\",\"coordinates\":[1,1]}", GeoConstants.GEO_JSON_LITERAL),
+				SimpleValueFactory.getInstance().createLiteral(
+						"<Point><coordinates>1,1</coordinates></Point>", GeoConstants.GEO_KML_LITERAL));
+		List<Long> predicates = List.of(AS_WKT, AS_GML, AS_GEO_JSON, AS_KML);
 		Literal distinct = SimpleValueFactory.getInstance().createLiteral("POINT(2 2)", GeoConstants.GEO_WKT_LITERAL);
 		for (int i = 0; i < literals.size(); i++) {
 			Literal literal = literals.get(i);
