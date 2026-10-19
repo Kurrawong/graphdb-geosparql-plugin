@@ -174,7 +174,7 @@ the group's geometries.
 | `geomLiteral geof:aggBoundingCircle(geomLiteral geometry)` | Returns the bounding circle of the group, as `geof:boundingCircle`. |
 | `geomLiteral geof:aggCentroid(geomLiteral geometry)` | Returns the centroid of the group, as `geof:centroid`. |
 | `geomLiteral geof:aggCollect(geomLiteral geometry)` | Returns a GeometryCollection of the group's geometries. |
-| `geomLiteral geof:aggConcaveHull(geomLiteral geometry)` | Returns the concave hull of the group, as `geof:concaveHull`. |
+| `geomLiteral geof:aggConcaveHull(geomLiteral geometry [, numeric targetPercent])` | Returns the concave hull of the group. The optional `targetPercent`, from 0 to 1, is the maximum edge-length ratio: 0 gives the tightest hull and 1 the convex hull. It defaults to 0, which matches `geof:concaveHull`. |
 | `geomLiteral geof:aggConvexHull(geomLiteral geometry)` | Returns the convex hull of the group, as `geof:convexHull`. |
 | `geomLiteral geof:aggUnion(geomLiteral geometry)` | Returns the point-set union of the group. |
 
@@ -183,9 +183,8 @@ CRS84. When every geometry has the same literal datatype, the result uses that d
 `geo:wktLiteral`. GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct geometry literal once. The result
 is unbound for a group that contains a value that is not a valid geometry literal.
 
-GeoSPARQL also defines `geof:aggConcaveHull(geometry, targetPercent)`. GraphDB 11.0 through 11.5.1 does not evaluate
-custom aggregates with more than one argument, so the two-argument form is rejected and `geof:aggConcaveHull` always
-produces the tightest concave hull.
+GraphDB 11.0 through 11.5.1 does not evaluate custom aggregates with more than one argument, so a query that passes
+`targetPercent` to `geof:aggConcaveHull` is rejected. Omit `targetPercent` to use the default.
 
 ```sparql
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>

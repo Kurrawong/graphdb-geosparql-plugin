@@ -87,11 +87,11 @@ public class TestSpatialAggregates extends AbstractGeoSparqlPluginTest {
 	/**
 	 * Dependency limitation: GraphDB 11.0 bundles the RDF4J 5.1.2 SPARQL parser, which rejects custom aggregates
 	 * with more than one argument, and GraphDB 11.5.1 evaluates only the first argument of a custom aggregate. Once
-	 * GraphDB evaluates every argument, this query returns the concave hull with {@code targetPercent} 1, which is
-	 * the convex hull of each group.
+	 * GraphDB evaluates every argument, this query returns the concave hull with the optional {@code targetPercent}
+	 * 1, which is the convex hull of each group.
 	 */
 	@Test
-	public void twoArgumentConcaveHullAggregateIsRejectedByQueryParser() {
+	public void concaveHullAggregateWithTargetPercentIsRejectedByQueryParser() {
 		IllegalArgumentException rejection = assertThrows(IllegalArgumentException.class,
 				() -> aggregatePerRegion("geof:aggConcaveHull(?wkt, 1.0)"));
 

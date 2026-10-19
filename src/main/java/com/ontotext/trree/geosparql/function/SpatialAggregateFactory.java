@@ -46,7 +46,7 @@ final class SpatialAggregateFactory implements AggregateFunctionFactory {
 				new SpatialAggregateFactory(GeoConstants.GEOF_AGG_COLLECT.stringValue(),
 						GeometryAggregate::collect),
 				new SpatialAggregateFactory(GeoConstants.GEOF_AGG_CONCAVE_HULL.stringValue(),
-						geometries -> GeometryAggregate.concaveHull(geometries, 0.0)),
+						GeometryAggregate::concaveHull),
 				new SpatialAggregateFactory(GeoConstants.GEOF_AGG_CONVEX_HULL.stringValue(),
 						GeometryAggregate::convexHull),
 				new SpatialAggregateFactory(GeoConstants.GEOF_AGG_UNION.stringValue(),

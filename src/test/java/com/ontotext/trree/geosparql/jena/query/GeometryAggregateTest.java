@@ -105,6 +105,17 @@ public class GeometryAggregateTest {
 	}
 
 	@Test
+	public void concaveHullWithoutTargetPercentMatchesScalarConcaveHullOfTheGroup() throws Exception {
+		List<GeometryWrapper> points = List.of(wkt("POINT(0 0)"), wkt("POINT(10 0)"), wkt("POINT(10 10)"),
+				wkt("POINT(8 2)"), wkt("POINT(2 2)"), wkt("POINT(0 10)"));
+
+		GeometryWrapper hull = GeometryAggregate.concaveHull(points);
+
+		assertTrue(hull.getXYGeometry().toText(), hull.getXYGeometry().equalsExact(GeometryConcaveHull.calculate(
+				wkt("MULTIPOINT((0 0),(10 0),(10 10),(8 2),(2 2),(0 10))")).getXYGeometry()));
+	}
+
+	@Test
 	public void concaveHullRejectsTargetPercentOutsideZeroToOne() {
 		List<GeometryWrapper> points = List.of(wkt("POINT(0 0)"), wkt("POINT(1 1)"), wkt("POINT(0 1)"));
 		for (double targetPercent : new double[] {-0.1, 1.1, Double.NaN}) {
