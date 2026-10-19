@@ -14,8 +14,11 @@ import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.io.kml.KMLReader;
 import org.locationtech.jts.io.kml.KMLWriter;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * KML geometry datatype with CRS84 longitude/latitude semantics, parsed by the JTS KML reader.
@@ -25,8 +28,8 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 
 	private static final GeometryFactory GEOMETRY_FACTORY = CustomGeometryFactory.theInstance();
 	private static final String KML_NAMESPACE = "http://www.opengis.net/kml/2.2";
-	/** Fixed fractional digits keep KML ordinates out of exponent notation. */
-	private static final int ORDINATE_PRECISION = 15;
+	private static final Pattern COORDINATES = Pattern.compile("<coordinates>([^<]*)</coordinates>");
+	private static final Pattern ORDINATE = Pattern.compile("[^,\\s]+");
 
 	private KmlGeometryDatatype() {
 		super(GeoConstants.GEO_KML_LITERAL.stringValue());
@@ -51,11 +54,25 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 				parsed = GEOMETRY_FACTORY.createGeometryCollection();
 			}
 		}
+		requireFiniteOrdinates(parsed);
 		int coordinateDimension = everyCoordinateHasAltitude(parsed) ? 3 : 2;
 		Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(parsed, coordinateDimension);
 		return new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84, getURI(),
 				new DimensionInfo(coordinateDimension, coordinateDimension, geometry.getDimension()),
 				geometryLiteral);
+	}
+
+	/**
+	 * Rejects infinite ordinates, including altitudes that dimension normalization would discard and that the
+	 * KML writer cannot represent. A NaN altitude denotes an absent altitude.
+	 */
+	private static void requireFiniteOrdinates(Geometry geometry) {
+		for (Coordinate coordinate : geometry.getCoordinates()) {
+			if (Double.isInfinite(coordinate.getX()) || Double.isInfinite(coordinate.getY())
+					|| Double.isInfinite(coordinate.getZ())) {
+				throw new DatatypeFormatException("Invalid KML geometry literal: ordinates must be finite");
+			}
+		}
 	}
 
 	private static boolean everyCoordinateHasAltitude(Geometry geometry) {
@@ -78,11 +95,28 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 		if (wrapper.isEmpty()) {
 			return "";
 		}
-		KMLWriter writer = new KMLWriter();
-		writer.setPrecision(ORDINATE_PRECISION);
-		String kml = writer.write(flattenedWithoutEmptyMembers(wrapper.getParsingGeometry()));
+		Geometry geometry = flattenedWithoutEmptyMembers(wrapper.getParsingGeometry());
+		requireFiniteOrdinates(geometry);
+		String kml = plainOrdinates(new KMLWriter().write(geometry));
 		int rootNameEnd = kml.indexOf('>');
 		return kml.substring(0, rootNameEnd) + " xmlns=\"" + KML_NAMESPACE + "\"" + kml.substring(rootNameEnd);
+	}
+
+	/**
+	 * Rewrites every ordinate as a plain decimal. Without a precision setting, the JTS writer formats ordinates
+	 * with {@link Double#toString(double)}, which is locale-independent but may use exponent notation; the writer's
+	 * precision setting uses the default locale's digits and signs instead.
+	 */
+	private static String plainOrdinates(String kml) {
+		Matcher coordinates = COORDINATES.matcher(kml);
+		StringBuilder result = new StringBuilder();
+		while (coordinates.find()) {
+			String plain = ORDINATE.matcher(coordinates.group(1)).replaceAll(ordinate ->
+					new BigDecimal(ordinate.group()).stripTrailingZeros().toPlainString());
+			coordinates.appendReplacement(result, Matcher.quoteReplacement("<coordinates>" + plain + "</coordinates>"));
+		}
+		coordinates.appendTail(result);
+		return result.toString();
 	}
 
 	/**

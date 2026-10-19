@@ -1,6 +1,7 @@
 package com.ontotext.trree.geosparql.jena;
 
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.apache.jena.datatypes.DatatypeFormatException;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
 import org.eclipse.rdf4j.model.Literal;
@@ -15,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /** Verifies conversion to reusable CRS84 KML geometry literals. */
@@ -107,6 +109,19 @@ public class AsKmlFunctionTest {
 		Geometry expected = JenaGeometryAdapter.toSourceGeometryLiteral(source).asGeometryWrapper().getXYGeometry();
 		Geometry parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result).asGeometryWrapper().getXYGeometry();
 		assertTrue(expected.equalsTopo(parsed));
+	}
+
+	@Test
+	public void geometryWithInfiniteAltitudeCannotBeWritten() throws Exception {
+		JenaGeometryAdapter.initialize();
+		GeometryWrapper wrapper = new GeometryWrapper(new WKTReader().read("POINT Z(1 2 3)"),
+				SRS_URI.DEFAULT_WKT_CRS84, GeoConstants.GEO_WKT_LITERAL.stringValue());
+		wrapper.getParsingGeometry().getCoordinate().setZ(Double.POSITIVE_INFINITY);
+
+		DatatypeFormatException exception = assertThrows(DatatypeFormatException.class,
+				() -> JenaGeometryAdapter.toKmlLiteral(VALUE_FACTORY, wrapper, 3));
+
+		assertTrue(exception.getMessage(), exception.getMessage().contains("ordinates must be finite"));
 	}
 
 	private static Literal evaluate(Literal source) throws Exception {

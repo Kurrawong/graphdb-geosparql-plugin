@@ -88,6 +88,17 @@ public class KmlLiteralTest {
 		assertThrows(JenaGeoSparqlException.class, source::asGeometryWrapper);
 	}
 
+	@Test
+	public void infiniteOrdinatesAreRejected() {
+		for (String coordinates : new String[] {"1,2,Infinity 3,4,5", "1,2,-Infinity 3,4,5", "1,2,Infinity 3,4",
+				"1,2 3,4,-Infinity"}) {
+			SourceGeometryLiteral source = source("<LineString><coordinates>" + coordinates
+					+ "</coordinates></LineString>");
+
+			assertThrows(coordinates, JenaGeoSparqlException.class, source::asGeometryWrapper);
+		}
+	}
+
 	private static SourceGeometryLiteral source(String lexicalForm) {
 		Literal literal = VALUE_FACTORY.createLiteral(lexicalForm, GeoConstants.GEO_KML_LITERAL);
 		return JenaGeometryAdapter.toSourceGeometryLiteral(literal);
