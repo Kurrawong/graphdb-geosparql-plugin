@@ -15,11 +15,14 @@ import org.locationtech.jts.geom.util.GeometryTransformer;
  * edge-length ratio ranges from zero, the tightest hull, to one, the convex hull.
  */
 public final class GeometryConcaveHull {
+	/** The JTS 1.20 default criterion: maximum concaveness. */
+	private static final double DEFAULT_MAXIMUM_EDGE_LENGTH_RATIO = 0.0;
+
 	private GeometryConcaveHull() {
 	}
 
 	public static GeometryWrapper calculate(GeometryWrapper geometry) {
-		return calculate(geometry, 0.0);
+		return calculate(geometry, DEFAULT_MAXIMUM_EDGE_LENGTH_RATIO);
 	}
 
 	public static GeometryWrapper calculate(GeometryWrapper geometry, double maximumEdgeLengthRatio) {

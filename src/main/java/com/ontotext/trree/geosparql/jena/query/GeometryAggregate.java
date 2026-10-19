@@ -18,9 +18,6 @@ import java.util.function.Function;
  * Calculates GeoSPARQL spatial aggregates over the geometries of one group.
  */
 public final class GeometryAggregate {
-	/** Matches the edge-length ratio of {@code geof:concaveHull}. */
-	public static final double DEFAULT_CONCAVE_HULL_TARGET_PERCENT = 0.0;
-
 	private GeometryAggregate() {
 	}
 
@@ -65,11 +62,11 @@ public final class GeometryAggregate {
 	}
 
 	/**
-	 * Calculates the concave hull of the collected geometries with the default {@code targetPercent}, which gives
-	 * the same hull as {@code geof:concaveHull} applied to the collected geometries.
+	 * Calculates the concave hull of the collected geometries without a {@code targetPercent}, as
+	 * {@code geof:concaveHull} applied to the collected geometries.
 	 */
 	public static GeometryWrapper concaveHull(List<GeometryWrapper> geometries) {
-		return concaveHull(geometries, DEFAULT_CONCAVE_HULL_TARGET_PERCENT);
+		return GeometryConcaveHull.calculate(collect(geometries));
 	}
 
 	/**
