@@ -154,7 +154,7 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 | `geomLiteral geof:buffer(geomLiteral geometry, numeric radius, uri unit)` | Returns a buffer using `radius` in the specified unit. Accepts linear radius units when the source CRS has linear coordinates, or angular radius units for geographic coordinates. |
 | `geomLiteral geof:centroid(geomLiteral geometry)` | Returns the centroid of `geometry`. |
 | `geomLiteral geof:convexHull(geomLiteral geometry)` | Returns the convex hull of `geometry`. |
-| `geomLiteral geof:concaveHull(geomLiteral geometry)` | Returns the planar concave hull of the complete input vertex set, without holes. |
+| `geomLiteral geof:concaveHull(geomLiteral geometry)` | Returns the planar concave hull of the complete input vertex set, without holes. The hull uses a maximum edge-length ratio of 0, which produces the most concave single polygon that contains every vertex. |
 | `geomLiteral geof:difference(geomLiteral left, geomLiteral right)` | Returns the point-set difference of `left` and `right` in the CRS of `left`. |
 | `geomLiteral geof:envelope(geomLiteral geometry)` | Returns the axis-aligned bounding rectangle of `geometry`. |
 | `geomLiteral geof:intersection(geomLiteral left, geomLiteral right)` | Returns the point-set intersection of `left` and `right` in the CRS of `left`. |
