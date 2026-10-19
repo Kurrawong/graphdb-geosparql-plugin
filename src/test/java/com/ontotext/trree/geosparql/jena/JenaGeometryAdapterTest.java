@@ -54,6 +54,22 @@ public class JenaGeometryAdapterTest {
 	}
 
 	@Test
+	public void nonFiniteCoordinatesAreRejectedForEverySourceGeometryLiteral() {
+		String lineString = "<gml:LineString xmlns:gml='http://www.opengis.net/gml/3.2' srsName='%s'>"
+				+ "<gml:posList>%s</gml:posList></gml:LineString>";
+		for (String gml : List.of(String.format(lineString, CRS84, "1 2 NaN 4 5 6"),
+				String.format(lineString, CRS84, "1 2 3 NaN 5 6"),
+				String.format(lineString, EPSG_32634, "500000 4600000 Infinity 4600010"))) {
+			SourceGeometryLiteral source = JenaGeometryAdapter.toSourceGeometryLiteral(
+					VALUE_FACTORY.createLiteral(gml, GeoConstants.GEO_GML_LITERAL));
+
+			JenaGeoSparqlException exception = assertThrows(gml, JenaGeoSparqlException.class,
+					source::asGeometryWrapper);
+			assertTrue(gml, exception.getMessage().contains("ordinates must be finite"));
+		}
+	}
+
+	@Test
 	public void wktWithoutExplicitCrsUsesCrs84AndPreservesLexicalForm() {
 		SourceGeometryLiteral geometry = SourceGeometryLiteral.fromWkt("POINT(1 2)");
 
