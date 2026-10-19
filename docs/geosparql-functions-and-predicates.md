@@ -32,7 +32,7 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
 | Type | Meaning |
 | --- | --- |
-| `geomLiteral` | A source geometry literal with datatype `geo:wktLiteral`, `geo:gmlLiteral`, or `geo:geoJSONLiteral`. |
+| `geomLiteral` | A source geometry literal with datatype `geo:wktLiteral`, `geo:gmlLiteral`, `geo:geoJSONLiteral`, or `geo:kmlLiteral`. |
 | `numeric` | A literal with a valid numeric XSD datatype. |
 | `doubleLiteral` | A literal whose lexical form can be parsed as an `xsd:double`. This type is used by alternative signatures and GraphDB extension functions. |
 | `uri` | An IRI or a simple `xsd:anyURI` literal. |
@@ -292,8 +292,8 @@ searching the index, so there is no candidate-filtering speedup for that pair.
 
 The subject and object may be `geo:Feature` or `geo:Geometry` resources. For a Feature, the plugin uses the Geometry
 resources linked through `geo:hasDefaultGeometry`. For a Geometry, it uses geometry literals supplied through
-`geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, or `geo:hasSerialization` when the latter carries a `geo:wktLiteral`,
-`geo:gmlLiteral`, or `geo:geoJSONLiteral`. These literals may also be supplied as bound values on either side. This
+`geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, `geo:asKML`, or `geo:hasSerialization` when the latter carries a
+`geo:wktLiteral`, `geo:gmlLiteral`, `geo:geoJSONLiteral`, or `geo:kmlLiteral`. These literals may also be supplied as bound values on either side. This
 bound-literal form is a GraphDB query convenience. GeoSPARQL defines
 relation properties between `geo:SpatialObject` resources, so queries intended to be portable should use Feature or
 Geometry resources as predicate operands and use `geof:` functions to compare geometry literals.
@@ -368,6 +368,7 @@ reads these statements when building or updating the spatial index.
 | `geo:asWKT` | Associates a Geometry resource with a WKT geometry literal. |
 | `geo:asGML` | Associates a Geometry resource with a GML geometry literal. |
 | `geo:asGeoJSON` | Associates a Geometry resource with a GeoJSON geometry literal. |
+| `geo:asKML` | Associates a Geometry resource with a KML geometry literal. |
 
 For example, the following update gives a Feature a default Geometry and supplies its WKT serialization:
 
@@ -381,8 +382,8 @@ INSERT DATA {
 }
 ```
 
-Use `geo:asGML` with a `geo:gmlLiteral` or `geo:asGeoJSON` with a `geo:geoJSONLiteral` to supply the corresponding
-alternative serialization.
+Use `geo:asGML` with a `geo:gmlLiteral`, `geo:asGeoJSON` with a `geo:geoJSONLiteral`, or `geo:asKML` with a
+`geo:kmlLiteral` to supply the corresponding alternative serialization.
 
 ## Geometry conversion
 
@@ -391,6 +392,7 @@ alternative serialization.
 | `geo:geoJSONLiteral geof:asGeoJSON(geomLiteral geometry)` | Converts `geometry` to CRS84 GeoJSON. |
 | `geo:wktLiteral geof:asWKT(geomLiteral geometry)` | Converts `geometry` to WKT without changing its CRS. |
 | `geo:gmlLiteral geof:asGML(geomLiteral geometry, xsd:string profile)` | Converts `geometry` to the supported GML 3.2 geometry-fragment profile. |
+| `geo:kmlLiteral geof:asKML(geomLiteral geometry)` | Converts `geometry` to a CRS84 KML geometry element. |
 
 The `geof:asGML` profile string must be
 `http://www.opengis.net/def/profile/ogc/2.0/gml-sf0`.
