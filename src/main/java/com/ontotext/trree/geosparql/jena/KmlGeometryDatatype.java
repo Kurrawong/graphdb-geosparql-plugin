@@ -12,13 +12,20 @@ import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LinearRing;
-import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.io.kml.KMLReader;
 import org.locationtech.jts.io.kml.KMLWriter;
 
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import java.io.StringReader;
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,7 +39,7 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 	private static final String KML_NAMESPACE = "http://www.opengis.net/kml/2.2";
 	private static final Pattern COORDINATES = Pattern.compile("<coordinates>([^<]*)</coordinates>");
 	private static final Pattern ORDINATE = Pattern.compile("[^,\\s]+");
-	private static final Pattern LINEAR_RING_ELEMENT = Pattern.compile("<(?:[\\w.-]+:)?LinearRing[\\s/>]");
+	private static final Set<String> MULTI_GEOMETRY_MEMBERS = Set.of("Point", "LineString", "Polygon");
 
 	private KmlGeometryDatatype() {
 		super(GeoConstants.GEO_KML_LITERAL.stringValue());
@@ -43,10 +50,8 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 		Geometry parsed;
 		if (geometryLiteral.isEmpty()) {
 			parsed = GEOMETRY_FACTORY.createPoint();
-		} else if (geometryLiteral.contains("<!DOCTYPE")) {
-			// The JTS reader uses a default XMLInputFactory, which resolves DTD entities.
-			throw new DatatypeFormatException("Invalid KML geometry literal: document type declarations are not permitted");
 		} else {
+			requireSupportedStructure(geometryLiteral);
 			try {
 				parsed = new KMLReader(GEOMETRY_FACTORY).read(geometryLiteral);
 			} catch (Exception e) {
@@ -56,9 +61,8 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 				// The JTS reader returns no geometry for an empty MultiGeometry.
 				parsed = GEOMETRY_FACTORY.createGeometryCollection();
 			}
-			requireEveryLinearRingRead(geometryLiteral, parsed);
 		}
-		requireFiniteOrdinates(parsed);
+		requireFiniteAltitudes(parsed);
 		int coordinateDimension = everyCoordinateHasAltitude(parsed) ? 3 : 2;
 		Geometry geometry = GeoJsonGeometryDatatype.normalizeCoordinateSequences(parsed, coordinateDimension);
 		return new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84, getURI(),
@@ -67,26 +71,62 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 	}
 
 	/**
-	 * Rejects a literal with a {@code LinearRing} element that is not a polygon boundary. The JTS reader omits a
-	 * {@code LinearRing} member of a {@code MultiGeometry} instead of rejecting it.
+	 * Checks the structure that the JTS reader does not enforce, using an XML reader that refuses DTDs and external
+	 * entities. The JTS reader uses a default XML input factory, which resolves DTD entities, and it omits a
+	 * {@code MultiGeometry} member that is not a Point, LineString, or Polygon instead of rejecting it.
 	 */
-	private static void requireEveryLinearRingRead(String geometryLiteral, Geometry parsed) {
-		long ringElements = LINEAR_RING_ELEMENT.matcher(geometryLiteral).results().count();
-		long polygonRings = 0;
-		for (int index = 0; index < parsed.getNumGeometries(); index++) {
-			if (parsed.getGeometryN(index) instanceof Polygon polygon && !polygon.isEmpty()) {
-				polygonRings += 1 + polygon.getNumInteriorRing();
+	private static void requireSupportedStructure(String geometryLiteral) {
+		XMLInputFactory factory = XMLInputFactory.newFactory();
+		factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+		factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+		XMLStreamReader reader = null;
+		try {
+			reader = factory.createXMLStreamReader(new StringReader(geometryLiteral));
+			Deque<String> openElements = new ArrayDeque<>();
+			while (reader.hasNext()) {
+				int event = reader.next();
+				if (event == XMLStreamConstants.DTD) {
+					throw new DatatypeFormatException(
+							"Invalid KML geometry literal: document type declarations are not permitted");
+				}
+				if (event == XMLStreamConstants.START_ELEMENT) {
+					String name = reader.getLocalName();
+					if ("MultiGeometry".equals(openElements.peek()) && !MULTI_GEOMETRY_MEMBERS.contains(name)) {
+						throw new DatatypeFormatException("Invalid KML geometry literal: MultiGeometry members must "
+								+ "be Point, LineString, or Polygon elements, found " + name);
+					}
+					openElements.push(name);
+				} else if (event == XMLStreamConstants.END_ELEMENT) {
+					openElements.pop();
+				}
 			}
-		}
-		if (ringElements != polygonRings) {
-			throw new DatatypeFormatException(
-					"Invalid KML geometry literal: LinearRing is supported only as a Polygon boundary");
+		} catch (XMLStreamException e) {
+			throw new DatatypeFormatException("Invalid KML geometry literal: " + e.getMessage(), e);
+		} finally {
+			if (reader != null) {
+				try {
+					reader.close();
+				} catch (XMLStreamException e) {
+					// The reader holds no resources beyond the in-memory literal.
+				}
+			}
 		}
 	}
 
 	/**
-	 * Rejects non-finite horizontal ordinates and infinite altitudes, including altitudes that dimension
-	 * normalization would discard, none of which KML can represent. A NaN altitude denotes an absent altitude.
+	 * Rejects infinite altitudes, including altitudes that dimension normalization would discard. Shared source
+	 * geometry literal validation checks the remaining ordinates. A NaN altitude denotes an absent altitude.
+	 */
+	private static void requireFiniteAltitudes(Geometry geometry) {
+		for (Coordinate coordinate : geometry.getCoordinates()) {
+			if (Double.isInfinite(coordinate.getZ())) {
+				throw new DatatypeFormatException("Invalid KML geometry literal: ordinates must be finite");
+			}
+		}
+	}
+
+	/**
+	 * Rejects ordinates that KML cannot represent: non-finite horizontal ordinates and infinite altitudes.
 	 */
 	private static void requireFiniteOrdinates(Geometry geometry) {
 		for (Coordinate coordinate : geometry.getCoordinates()) {

@@ -47,7 +47,8 @@ public class KmlLiteralTest {
 		SourceGeometryLiteral source = source("<!DOCTYPE Point [<!ENTITY position \"1,2\">]>"
 				+ "<Point><coordinates>&position;</coordinates></Point>");
 
-		assertThrows(JenaGeoSparqlException.class, source::asGeometryWrapper);
+		JenaGeoSparqlException exception = assertThrows(JenaGeoSparqlException.class, source::asGeometryWrapper);
+		assertTrue(exception.getMessage(), exception.getMessage().contains("document type declarations"));
 	}
 
 	@Test
@@ -134,6 +135,29 @@ public class KmlLiteralTest {
 				+ "<Point><coordinates>20,20</coordinates></Point></MultiGeometry>");
 
 		assertEquals(2, source.asGeometryWrapper().getParsingGeometry().getNumGeometries());
+	}
+
+	@Test
+	public void unsupportedMultiGeometryMembersAreRejected() {
+		String point = "<Point><coordinates>1,2</coordinates></Point>";
+		for (String member : new String[] {
+				"<Model><Location><longitude>5</longitude><latitude>6</latitude></Location></Model>",
+				"<Track><coord>5 6 0</coord></Track>",
+				"<gx:Track xmlns:gx=\"http://www.google.com/kml/ext/2.2\"><gx:coord>5 6 0</gx:coord></gx:Track>"}) {
+			SourceGeometryLiteral source = source("<MultiGeometry>" + point + member + "</MultiGeometry>");
+
+			JenaGeoSparqlException exception = assertThrows(member, JenaGeoSparqlException.class,
+					source::asGeometryWrapper);
+			assertTrue(member, exception.getMessage().contains("MultiGeometry members"));
+		}
+	}
+
+	@Test
+	public void markupInCommentsDoesNotAffectParsing() {
+		SourceGeometryLiteral source = source("<!-- <!DOCTYPE Point> <LinearRing> -->"
+				+ "<Point><coordinates>1,2</coordinates></Point>");
+
+		assertEquals("Point", source.asGeometryWrapper().getParsingGeometry().getGeometryType());
 	}
 
 	private static SourceGeometryLiteral source(String lexicalForm) {

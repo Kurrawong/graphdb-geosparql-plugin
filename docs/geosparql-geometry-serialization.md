@@ -19,6 +19,8 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 | GeoJSON | `geo:geoJSONLiteral` | `geo:asGeoJSON` | `geof:asGeoJSON(geometry)` |
 | KML | `geo:kmlLiteral` | `geo:asKML` | `geof:asKML(geometry)` |
 
+Geometry literals with a non-finite horizontal coordinate are rejected in every format.
+
 `geo:hasSerialization` also accepts geometry literals with any of the four listed datatypes. The literal datatype
 selects the format. Other literal datatypes and resource objects, including `dcat:Distribution` resources, are not
 spatially indexed through this property.
@@ -92,12 +94,13 @@ ellipsoid. Review the generated coordinates when converting antimeridian-crossin
 `geo:kmlLiteral` is fixed to CRS84 and contains one KML geometry element. The plugin reads it with the JTS KML
 reader, which accepts `Point`, `LineString`, `Polygon`, and `MultiGeometry` root elements. Element namespaces are not
 checked, so the `http://www.opengis.net/kml/2.2` namespace, which KML 2.2 and KML 2.3 share, and unqualified elements
-are both accepted. Modifier and extension elements such as `extrude`, `tessellate`, and `altitudeMode` are ignored.
-They are not preserved or re-emitted.
+are both accepted. Modifier and extension elements inside a geometry element, such as `extrude`, `tessellate`, and
+`altitudeMode`, are ignored. They are not preserved or re-emitted.
 
-`Placemark`, `kml`, and other container roots, standalone `LinearRing` and `Model` roots, a `LinearRing` member of a
-`MultiGeometry`, a `MultiGeometry` nested in another `MultiGeometry`, document type declarations, malformed coordinate
-tuples, non-finite longitudes or latitudes, infinite altitudes, and coordinates outside the CRS84 domain are rejected.
+`Placemark`, `kml`, and other container roots, standalone `LinearRing` and `Model` roots, document type declarations,
+malformed coordinate tuples, non-finite longitudes or latitudes, infinite altitudes, and coordinates outside the CRS84
+domain are rejected. A `MultiGeometry` may contain only `Point`, `LineString`, and `Polygon` elements; any other member,
+such as a `LinearRing`, `Model`, `Track`, extension element, or nested `MultiGeometry`, is rejected rather than omitted.
 Other malformed KML may be read leniently and is not supported.
 
 A literal is XYZ only when every coordinate tuple has an altitude. Otherwise the altitudes are ignored and the literal
