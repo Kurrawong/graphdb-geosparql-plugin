@@ -111,6 +111,31 @@ public class KmlLiteralTest {
 		}
 	}
 
+	@Test
+	public void linearRingMemberOfMultiGeometryIsRejected() {
+		String ring = "<LinearRing><coordinates>0,0 10,0 10,10 0,10 0,0</coordinates></LinearRing>";
+		for (String kml : new String[] {"<MultiGeometry>" + ring + "</MultiGeometry>",
+				"<MultiGeometry><Point><coordinates>1,2</coordinates></Point>" + ring + "</MultiGeometry>",
+				"<kml:MultiGeometry xmlns:kml=\"http://www.opengis.net/kml/2.2\">" + ring.replace("<", "<kml:")
+						.replace("<kml:/", "</kml:") + "</kml:MultiGeometry>"}) {
+			SourceGeometryLiteral source = source(kml);
+
+			JenaGeoSparqlException exception = assertThrows(kml, JenaGeoSparqlException.class,
+					source::asGeometryWrapper);
+			assertTrue(kml, exception.getMessage().contains("LinearRing"));
+		}
+	}
+
+	@Test
+	public void polygonRingsInMultiGeometryAreRead() {
+		SourceGeometryLiteral source = source("<MultiGeometry><Polygon><outerBoundaryIs><LinearRing><coordinates>"
+				+ "0,0 10,0 10,10 0,10 0,0</coordinates></LinearRing></outerBoundaryIs><innerBoundaryIs><LinearRing>"
+				+ "<coordinates>2,2 2,4 4,4 4,2 2,2</coordinates></LinearRing></innerBoundaryIs></Polygon>"
+				+ "<Point><coordinates>20,20</coordinates></Point></MultiGeometry>");
+
+		assertEquals(2, source.asGeometryWrapper().getParsingGeometry().getNumGeometries());
+	}
+
 	private static SourceGeometryLiteral source(String lexicalForm) {
 		Literal literal = VALUE_FACTORY.createLiteral(lexicalForm, GeoConstants.GEO_KML_LITERAL);
 		return JenaGeometryAdapter.toSourceGeometryLiteral(literal);

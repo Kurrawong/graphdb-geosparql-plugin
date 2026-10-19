@@ -1,7 +1,7 @@
 # Geometry serialization and conversion
 
-The GraphDB GeoSPARQL plugin supports WKT, GML, GeoJSON, and KML geometry literals. These formats can be stored using the
-corresponding GeoSPARQL properties, used with GeoSPARQL functions and predicates, and converted using the functions
+The GraphDB GeoSPARQL plugin supports WKT, GML, GeoJSON, and KML geometry literals. These formats can be stored using
+the corresponding GeoSPARQL properties, used with GeoSPARQL functions and predicates, and converted using the functions
 below.
 
 Use these prefixes with the examples and function names on this page:
@@ -95,10 +95,10 @@ checked, so the `http://www.opengis.net/kml/2.2` namespace, which KML 2.2 and KM
 are both accepted. Modifier and extension elements such as `extrude`, `tessellate`, and `altitudeMode` are ignored.
 They are not preserved or re-emitted.
 
-`Placemark`, `kml`, and other container roots, standalone `LinearRing` and `Model` roots, a `MultiGeometry` nested in
-another `MultiGeometry`, document type declarations, malformed coordinate tuples, non-finite longitudes or latitudes,
-infinite altitudes, and coordinates outside the CRS84 domain are rejected. Other malformed KML may be read leniently
-and is not supported.
+`Placemark`, `kml`, and other container roots, standalone `LinearRing` and `Model` roots, a `LinearRing` member of a
+`MultiGeometry`, a `MultiGeometry` nested in another `MultiGeometry`, document type declarations, malformed coordinate
+tuples, non-finite longitudes or latitudes, infinite altitudes, and coordinates outside the CRS84 domain are rejected.
+Other malformed KML may be read leniently and is not supported.
 
 A literal is XYZ only when every coordinate tuple has an altitude. Otherwise the altitudes are ignored and the literal
 is XY. The plugin does not interpret `altitudeMode`, so altitudes are not related to ground level, sea level, or the
@@ -108,10 +108,11 @@ A `MultiGeometry` whose members are all Points, all LineStrings, or all Polygons
 geometry. Any other `MultiGeometry` is read as a GeometryCollection, and a `MultiGeometry` with a single member is
 read as that member.
 
-Generated KML declares the `http://www.opengis.net/kml/2.2` namespace on its root element and writes each ordinate as
-a plain decimal. Every multipart geometry and GeometryCollection is written as one `MultiGeometry`: nested
-collections are flattened and empty members are omitted. Ring orientation is not normalized. Vertices are
-transformed to CRS84 as for generated GeoJSON, without densifying edges or splitting geometries at the antimeridian.
+Generated KML declares the `http://www.opengis.net/kml/2.2` namespace on its root element and writes each ordinate as a
+plain decimal. Every multipart geometry and GeometryCollection is written as one `MultiGeometry`: nested collections are
+flattened, ring members are written as `LineString` elements, and empty members are omitted. Ring orientation is not
+normalized. Vertices are transformed to CRS84 as for generated GeoJSON, without densifying edges or splitting geometries
+at the antimeridian.
 
 ## GML profile
 
@@ -144,8 +145,8 @@ no spatial extent, they are not returned by spatial-envelope candidate searches.
 
 ## Geometry serialization indexing
 
-Each WKT, GML, GeoJSON, or KML serialization attached to a Geometry is indexed independently, and no format is preferred.
-A GeoSPARQL predicate matches when any pair of the available geometry serializations satisfies the relation.
+Each WKT, GML, GeoJSON, or KML serialization attached to a Geometry is indexed independently, and no format is
+preferred. A GeoSPARQL predicate matches when any pair of the available geometry serializations satisfies the relation.
 
 During initial indexing and subsequent repository updates, the plugin reads the four format-specific properties and
 supported typed literals on `geo:hasSerialization` from Geometry resources and from Features through their default
@@ -155,9 +156,8 @@ geometry literal and its coordinate reference system.
 ## Upgrading an existing repository
 
 After upgrading from a plugin version that did not index `geo:asGeoJSON`, `geo:asKML`, or `geo:hasSerialization`
-statements, force a reindex of each enabled repository so existing WKT, GML, GeoJSON, and KML geometry data is
-included. The plugin rejects an
-index built under the older serialization-discovery policy until the reindex completes:
+statements, force a reindex of each enabled repository so existing WKT, GML, GeoJSON, and KML geometry data is included.
+The plugin rejects an index built under the older serialization-discovery policy until the reindex completes:
 
 ```sparql
 PREFIX plugin: <http://www.ontotext.com/plugins/geosparql#>

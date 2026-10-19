@@ -12,6 +12,8 @@ import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.Function;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 import org.junit.Test;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.io.WKTReader;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -58,6 +60,20 @@ public class KmlQueryFunctionResultTest {
 		assertEquals(GeoConstants.GEO_KML_LITERAL, result.getDatatype());
 		assertEquals(5.0, JenaGeometryAdapter.toSourceGeometryLiteral(result)
 				.asGeometryWrapper().getParsingGeometry().getCoordinate().getZ(), 0.0);
+	}
+
+	@Test
+	public void boundaryWithSeveralRingsReadsBackAsEquivalentLines() throws Exception {
+		Literal source = kml("<Polygon><outerBoundaryIs><LinearRing><coordinates>0,0 10,0 10,10 0,10 0,0"
+				+ "</coordinates></LinearRing></outerBoundaryIs><innerBoundaryIs><LinearRing><coordinates>"
+				+ "2,2 2,4 4,4 4,2 2,2</coordinates></LinearRing></innerBoundaryIs></Polygon>");
+
+		Literal result = (Literal) evaluate(GeoConstants.GEOF_BOUNDARY.stringValue(), source);
+
+		Geometry parsed = JenaGeometryAdapter.toSourceGeometryLiteral(result).asGeometryWrapper().getXYGeometry();
+		assertEquals(2, parsed.getNumGeometries());
+		assertTrue(parsed.toText(), new WKTReader().read(
+				"MULTILINESTRING((0 0,10 0,10 10,0 10,0 0),(2 2,2 4,4 4,4 2,2 2))").equalsTopo(parsed));
 	}
 
 	private static Value evaluate(String functionUri, Value... args) throws ValueExprEvaluationException {

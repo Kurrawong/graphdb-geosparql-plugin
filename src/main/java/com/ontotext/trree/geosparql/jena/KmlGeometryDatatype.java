@@ -11,6 +11,8 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LinearRing;
+import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.io.kml.KMLReader;
 import org.locationtech.jts.io.kml.KMLWriter;
 
@@ -30,6 +32,7 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 	private static final String KML_NAMESPACE = "http://www.opengis.net/kml/2.2";
 	private static final Pattern COORDINATES = Pattern.compile("<coordinates>([^<]*)</coordinates>");
 	private static final Pattern ORDINATE = Pattern.compile("[^,\\s]+");
+	private static final Pattern LINEAR_RING_ELEMENT = Pattern.compile("<(?:[\\w.-]+:)?LinearRing[\\s/>]");
 
 	private KmlGeometryDatatype() {
 		super(GeoConstants.GEO_KML_LITERAL.stringValue());
@@ -53,6 +56,7 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 				// The JTS reader returns no geometry for an empty MultiGeometry.
 				parsed = GEOMETRY_FACTORY.createGeometryCollection();
 			}
+			requireEveryLinearRingRead(geometryLiteral, parsed);
 		}
 		requireFiniteOrdinates(parsed);
 		int coordinateDimension = everyCoordinateHasAltitude(parsed) ? 3 : 2;
@@ -60,6 +64,24 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 		return new GeometryWrapper(geometry, SRS_URI.DEFAULT_WKT_CRS84, getURI(),
 				new DimensionInfo(coordinateDimension, coordinateDimension, geometry.getDimension()),
 				geometryLiteral);
+	}
+
+	/**
+	 * Rejects a literal with a {@code LinearRing} element that is not a polygon boundary. The JTS reader omits a
+	 * {@code LinearRing} member of a {@code MultiGeometry} instead of rejecting it.
+	 */
+	private static void requireEveryLinearRingRead(String geometryLiteral, Geometry parsed) {
+		long ringElements = LINEAR_RING_ELEMENT.matcher(geometryLiteral).results().count();
+		long polygonRings = 0;
+		for (int index = 0; index < parsed.getNumGeometries(); index++) {
+			if (parsed.getGeometryN(index) instanceof Polygon polygon && !polygon.isEmpty()) {
+				polygonRings += 1 + polygon.getNumInteriorRing();
+			}
+		}
+		if (ringElements != polygonRings) {
+			throw new DatatypeFormatException(
+					"Invalid KML geometry literal: LinearRing is supported only as a Polygon boundary");
+		}
 	}
 
 	/**
@@ -120,9 +142,10 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 	}
 
 	/**
-	 * Flattens nested collections and removes empty members. The JTS reader cannot read a nested
-	 * {@code MultiGeometry} and KML cannot represent an empty geometry. Every collection is written as a
-	 * {@code MultiGeometry}, so the rebuilt collection type does not affect the output.
+	 * Flattens nested collections, removes empty members, and writes ring members as line strings. The JTS reader
+	 * cannot read a nested {@code MultiGeometry} or a {@code LinearRing} member, and KML cannot represent an empty
+	 * geometry. Every collection is written as a {@code MultiGeometry}, so the rebuilt collection type does not
+	 * affect the output.
 	 */
 	private static Geometry flattenedWithoutEmptyMembers(Geometry geometry) {
 		if (!(geometry instanceof GeometryCollection)) {
@@ -135,7 +158,9 @@ final class KmlGeometryDatatype extends GeometryDatatype {
 
 	private static void addNonEmptyLeafMembers(Geometry geometry, List<Geometry> members) {
 		if (!(geometry instanceof GeometryCollection collection)) {
-			if (!geometry.isEmpty()) {
+			if (geometry instanceof LinearRing ring && !ring.isEmpty()) {
+				members.add(GEOMETRY_FACTORY.createLineString(ring.getCoordinateSequence()));
+			} else if (!geometry.isEmpty()) {
 				members.add(geometry);
 			}
 			return;
