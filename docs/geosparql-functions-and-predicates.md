@@ -162,6 +162,43 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 | `geomLiteral geof:simplify(geomLiteral geometry, numeric tolerance)` | Simplifies `geometry` using Douglas-Peucker with a finite, nonnegative `tolerance` in source CRS coordinate units. The result retains the source CRS and literal datatype; topology is not guaranteed to be preserved. |
 | `geomLiteral geof:union(geomLiteral left, geomLiteral right)` | Returns the point-set union of `left` and `right` in the CRS of `left`. |
 
+## Spatial aggregates
+
+Spatial aggregates combine the geometry literals of each group in a `SELECT`, `HAVING`, or `ORDER BY` aggregate
+expression. Each aggregate gives the same result as the matching geometry operation applied to a GeometryCollection of
+the group's geometries.
+
+| Aggregate | Description |
+| --- | --- |
+| `geomLiteral geof:aggBoundingBox(geomLiteral geometry)` | Returns the axis-aligned bounding rectangle of the group, as `geof:envelope`. |
+| `geomLiteral geof:aggBoundingCircle(geomLiteral geometry)` | Returns the bounding circle of the group, as `geof:boundingCircle`. |
+| `geomLiteral geof:aggCentroid(geomLiteral geometry)` | Returns the centroid of the group, as `geof:centroid`. |
+| `geomLiteral geof:aggCollect(geomLiteral geometry)` | Returns a GeometryCollection of the group's geometries. |
+| `geomLiteral geof:aggConcaveHull(geomLiteral geometry)` | Returns the concave hull of the group, as `geof:concaveHull`. |
+| `geomLiteral geof:aggConvexHull(geomLiteral geometry)` | Returns the convex hull of the group, as `geof:convexHull`. |
+| `geomLiteral geof:aggUnion(geomLiteral geometry)` | Returns the point-set union of the group. |
+
+When every geometry in a group uses the same CRS, the result uses that CRS; otherwise every geometry is transformed to
+CRS84. When every geometry has the same literal datatype, the result uses that datatype; otherwise it is a
+`geo:wktLiteral`. GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct geometry literal once. The result
+is unbound for a group that contains a value that is not a valid geometry literal.
+
+GeoSPARQL also defines `geof:aggConcaveHull(geometry, targetPercent)`. GraphDB 11.0 through 11.5.1 does not evaluate
+custom aggregates with more than one argument, so the two-argument form is rejected and `geof:aggConcaveHull` always
+produces the tightest concave hull.
+
+```sparql
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+PREFIX ex: <http://example.com/>
+
+SELECT ?region (geof:aggUnion(?geometry) AS ?area) WHERE {
+  ?feature ex:region ?region ;
+      geo:hasGeometry/geo:asWKT ?geometry .
+}
+GROUP BY ?region
+```
+
 ## Measurements
 
 | Function | Description |

@@ -1,5 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
+import org.eclipse.rdf4j.query.parser.sparql.aggregate.CustomAggregateFunctionRegistry;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
 
@@ -70,6 +71,10 @@ public final class GeoSparqlFunctionRegistration {
             } else {
                 registry.add(new QueryFunctionRdf4jAdapter(entry));
             }
+        }
+        CustomAggregateFunctionRegistry aggregateRegistry = CustomAggregateFunctionRegistry.getInstance();
+        for (SpatialAggregateFactory factory : SpatialAggregateFactory.all()) {
+            aggregateRegistry.add(factory);
         }
     }
 

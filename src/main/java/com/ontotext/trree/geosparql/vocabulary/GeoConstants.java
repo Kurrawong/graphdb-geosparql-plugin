@@ -145,6 +145,13 @@ public interface GeoConstants {
     IRI GEOF_AS_WKT = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asWKT");
     IRI GEOF_AS_GML = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asGML");
     IRI GEOF_AS_KML = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "asKML");
+    IRI GEOF_AGG_BOUNDING_BOX = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "aggBoundingBox");
+    IRI GEOF_AGG_BOUNDING_CIRCLE = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "aggBoundingCircle");
+    IRI GEOF_AGG_CENTROID = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "aggCentroid");
+    IRI GEOF_AGG_COLLECT = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "aggCollect");
+    IRI GEOF_AGG_CONCAVE_HULL = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "aggConcaveHull");
+    IRI GEOF_AGG_CONVEX_HULL = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "aggConvexHull");
+    IRI GEOF_AGG_UNION = SimpleValueFactory.getInstance().createIRI(NS_GEOF + "aggUnion");
 
     IRI EXT_AREA = SimpleValueFactory.getInstance().createIRI(NS_EXT + "area");
     IRI EXT_CLOSEST_POINT = SimpleValueFactory.getInstance().createIRI(NS_EXT + "closestPoint");
