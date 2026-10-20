@@ -154,6 +154,25 @@ public class GeometryAggregateTest {
 		assertEquals(1, collected.getXYGeometry().getNumGeometries());
 	}
 
+	@Test
+	public void collectOfMeasuredGeometriesReportsMeasuredLayout() {
+		GeometryWrapper collected = GeometryAggregate.collect(List.of(wkt("POINT M(1 2 5)"), wkt("POINT M(3 4 7)")));
+
+		assertEquals(3, collected.getCoordinateDimension());
+		assertEquals(2, collected.getSpatialDimension());
+	}
+
+	@Test
+	public void collectKeepsMeasuresSharedByMeasuredGeometries() {
+		GeometryWrapper collected = GeometryAggregate.collect(List.of(wkt("POINT ZM(1 2 3 4)"), wkt("POINT M(5 6 7)")));
+
+		assertEquals(3, collected.getCoordinateDimension());
+		assertEquals(2, collected.getSpatialDimension());
+		assertEquals(4.0, collected.getParsingGeometry().getGeometryN(0).getCoordinate().getM(), 0.0);
+		assertEquals(7.0, collected.getParsingGeometry().getGeometryN(1).getCoordinate().getM(), 0.0);
+		assertTrue(Double.isNaN(collected.getParsingGeometry().getGeometryN(0).getCoordinate().getZ()));
+	}
+
 	private static GeometryWrapper wkt(String lexicalForm) {
 		return GeometryWrapper.extract(lexicalForm, WKTDatatype.URI);
 	}

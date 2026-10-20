@@ -3,10 +3,14 @@ package com.ontotext.trree.geosparql.jena.query;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import org.apache.jena.geosparql.implementation.DimensionInfo;
 import org.apache.jena.geosparql.implementation.GeometryWrapper;
-import org.apache.jena.geosparql.implementation.GeometryWrapperFactory;
+import org.apache.jena.geosparql.implementation.GeometryReverse;
 import org.apache.jena.geosparql.implementation.datatype.WKTDatatype;
+import org.apache.jena.geosparql.implementation.jts.CoordinateSequenceDimensions;
+import org.apache.jena.geosparql.implementation.jts.CustomCoordinateSequence;
 import org.apache.jena.geosparql.implementation.jts.CustomGeometryFactory;
 import org.apache.jena.geosparql.implementation.vocabulary.SRS_URI;
+import org.locationtech.jts.geom.CoordinateSequence;
+import org.locationtech.jts.geom.CoordinateSequenceFilter;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryCollection;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -16,6 +20,7 @@ import org.locationtech.jts.geom.MultiPoint;
 import org.locationtech.jts.geom.MultiPolygon;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
+import org.locationtech.jts.geom.util.GeometryEditor;
 import org.opengis.referencing.operation.TransformException;
 import org.opengis.util.FactoryException;
 
@@ -32,17 +37,23 @@ public final class GeometryAggregate {
 
 	/**
 	 * Collects the geometries into one GeometryCollection in a shared SRS and geometry datatype, both chosen from
-	 * every geometry in the group. Empty geometries and empty collection members at any depth are omitted, keeping
-	 * the remaining nesting and member types, so a group of only empty geometries gives an empty collection.
+	 * every geometry in the group. Members keep the axis order of the shared SRS and the Z and M ordinates that every
+	 * member has; a member with other ordinates loses them, so mixed coordinate layouts reduce to the shared ones.
+	 * Empty geometries and empty collection members at any depth are omitted, keeping the remaining nesting and
+	 * member types, so a group of only empty geometries gives an empty collection.
 	 */
 	public static GeometryWrapper collect(List<GeometryWrapper> geometries) {
 		String srsUri = shared(geometries, GeometryWrapper::getSrsURI, SRS_URI.DEFAULT_WKT_CRS84);
 		String datatypeUri = shared(geometries, GeometryWrapper::getGeometryDatatypeURI, WKTDatatype.URI);
-		Geometry[] members = geometries.stream()
+		List<Geometry> members = geometries.stream()
 				.filter(geometry -> !geometry.isEmpty())
-				.map(geometry -> withoutEmptyMembers(inSrs(geometry, srsUri).getXYGeometry()))
-				.toArray(Geometry[]::new);
-		return wrap(CustomGeometryFactory.theInstance().createGeometryCollection(members), srsUri, datatypeUri);
+				.map(geometry -> withoutEmptyMembers(inSrs(geometry, srsUri).getParsingGeometry()))
+				.toList();
+		CoordinateSequenceDimensions layout = sharedLayout(members);
+		GeometryCollection collection = CustomGeometryFactory.theInstance().createGeometryCollection(
+				members.stream().map(member -> withLayout(member, layout)).toArray(Geometry[]::new));
+		return new GeometryWrapper(collection, srsUri, datatypeUri,
+				new DimensionInfo(layout, collection.getDimension()));
 	}
 
 	/**
@@ -93,11 +104,16 @@ public final class GeometryAggregate {
 	}
 
 	/**
-	 * Calculates the union of the collected geometries.
+	 * Calculates the union of the collected geometries. Like {@code geof:union}, the result keeps the coordinate
+	 * layout of the collected geometries, so ordinates the union cannot carry make the result unrepresentable.
 	 */
 	public static GeometryWrapper union(List<GeometryWrapper> geometries) {
 		GeometryWrapper collected = collect(geometries);
-		return wrap(collected.getXYGeometry().union(), collected.getSrsURI(), collected.getGeometryDatatypeURI());
+		Geometry xyUnion = collected.getXYGeometry().union();
+		DimensionInfo dimensions = collected.getDimensionInfo();
+		return new GeometryWrapper(GeometryReverse.check(xyUnion, collected.getSrsURI()), collected.getSrsURI(),
+				collected.getGeometryDatatypeURI(),
+				new DimensionInfo(dimensions.getCoordinate(), dimensions.getSpatial(), xyUnion.getDimension()));
 	}
 
 	/**
@@ -136,12 +152,63 @@ public final class GeometryAggregate {
 		return factory.createGeometryCollection(members.toArray(new Geometry[0]));
 	}
 
-	private static GeometryWrapper wrap(Geometry xyGeometry, String srsUri, String datatypeUri) {
-		if (xyGeometry.isEmpty()) {
-			return new GeometryWrapper(xyGeometry, srsUri, datatypeUri,
-					new DimensionInfo(2, 2, xyGeometry.getDimension()));
+	/**
+	 * Returns the Z and M ordinates present in every coordinate sequence, or XY when there are no members.
+	 */
+	private static CoordinateSequenceDimensions sharedLayout(List<Geometry> members) {
+		boolean[] shared = {!members.isEmpty(), !members.isEmpty()};
+		CoordinateSequenceFilter filter = new CoordinateSequenceFilter() {
+			@Override
+			public void filter(CoordinateSequence sequence, int index) {
+				shared[0] &= sequence.hasZ();
+				shared[1] &= sequence.hasM();
+			}
+
+			@Override
+			public boolean isDone() {
+				return !shared[0] && !shared[1];
+			}
+
+			@Override
+			public boolean isGeometryChanged() {
+				return false;
+			}
+		};
+		members.forEach(member -> member.apply(filter));
+		return layout(shared[0], shared[1]);
+	}
+
+	private static Geometry withLayout(Geometry geometry, CoordinateSequenceDimensions layout) {
+		boolean z = layout == CoordinateSequenceDimensions.XYZ || layout == CoordinateSequenceDimensions.XYZM;
+		boolean m = layout == CoordinateSequenceDimensions.XYM || layout == CoordinateSequenceDimensions.XYZM;
+		GeometryEditor editor = new GeometryEditor(CustomGeometryFactory.theInstance());
+		return editor.edit(geometry, new GeometryEditor.CoordinateSequenceOperation() {
+			@Override
+			public CoordinateSequence edit(CoordinateSequence source, Geometry component) {
+				if (source.hasZ() == z && source.hasM() == m) {
+					return source;
+				}
+				CustomCoordinateSequence target = new CustomCoordinateSequence(source.size(), layout);
+				for (int index = 0; index < source.size(); index++) {
+					target.setOrdinate(index, CoordinateSequence.X, source.getX(index));
+					target.setOrdinate(index, CoordinateSequence.Y, source.getY(index));
+					if (z) {
+						target.setOrdinate(index, CoordinateSequence.Z, source.getZ(index));
+					}
+					if (m) {
+						target.setOrdinate(index, CoordinateSequence.M, source.getM(index));
+					}
+				}
+				return target;
+			}
+		});
+	}
+
+	private static CoordinateSequenceDimensions layout(boolean z, boolean m) {
+		if (z) {
+			return m ? CoordinateSequenceDimensions.XYZM : CoordinateSequenceDimensions.XYZ;
 		}
-		return GeometryWrapperFactory.createGeometry(xyGeometry, srsUri, datatypeUri);
+		return m ? CoordinateSequenceDimensions.XYM : CoordinateSequenceDimensions.XY;
 	}
 
 	/**
