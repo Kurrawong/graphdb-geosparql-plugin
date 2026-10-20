@@ -200,9 +200,11 @@ XY results. GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct 
 unbound for a group that contains a value that is not a valid geometry literal, or whose calculation fails.
 
 Empty geometries count when choosing the result CRS and datatype, but are left out of the aggregated geometries,
-together with empty members of collections at any depth. This keeps the represented point set, but `geof:aggCollect`
-can return fewer members than the group has values, with different `geof:geometryN` results and member types. A group
-of only empty geometries gives an empty GeometryCollection, such as `GEOMETRYCOLLECTION EMPTY`.
+together with empty members of collections at any depth. This keeps the represented point set, but `geof:aggCollect` can
+return fewer members than the group has values, with different `geof:geometryN` results and member types. A group of
+only empty geometries is collected as an empty GeometryCollection, so `geof:aggCollect` returns
+`GEOMETRYCOLLECTION EMPTY` and each other aggregate returns the empty result of its operation, such as `POINT EMPTY`
+from `geof:aggCentroid`.
 
 GraphDB 11.0 through 11.5.1 does not evaluate custom aggregates with more than one argument, so a query that passes
 `targetPercent` to `geof:aggConcaveHull` is rejected. Omit `targetPercent` to use the default. On GraphDB 11.0, an

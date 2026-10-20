@@ -125,12 +125,16 @@ public class GeometryAggregateTest {
 	}
 
 	@Test
-	public void groupOfEmptyGeometriesProducesEmptyResults() {
+	public void groupOfEmptyGeometriesProducesTheEmptyResultOfEachOperation() {
 		List<GeometryWrapper> empties = List.of(wkt("POINT EMPTY"), wkt("POLYGON EMPTY"));
 
-		assertTrue(GeometryAggregate.collect(empties).isEmpty());
-		assertTrue(GeometryAggregate.union(empties).isEmpty());
-		assertTrue(GeometryAggregate.centroid(empties).isEmpty());
+		assertEmpty("GeometryCollection", GeometryAggregate.collect(empties));
+		assertEmpty("GeometryCollection", GeometryAggregate.convexHull(empties));
+		assertEmpty("GeometryCollection", GeometryAggregate.union(empties));
+		assertEmpty("Point", GeometryAggregate.boundingBox(empties));
+		assertEmpty("Point", GeometryAggregate.centroid(empties));
+		assertEmpty("Polygon", GeometryAggregate.boundingCircle(empties));
+		assertEmpty("Polygon", GeometryAggregate.concaveHull(empties));
 	}
 
 	@Test
@@ -171,6 +175,11 @@ public class GeometryAggregateTest {
 		assertEquals(4.0, collected.getParsingGeometry().getGeometryN(0).getCoordinate().getM(), 0.0);
 		assertEquals(7.0, collected.getParsingGeometry().getGeometryN(1).getCoordinate().getM(), 0.0);
 		assertTrue(Double.isNaN(collected.getParsingGeometry().getGeometryN(0).getCoordinate().getZ()));
+	}
+
+	private static void assertEmpty(String geometryType, GeometryWrapper result) {
+		assertTrue(geometryType, result.isEmpty());
+		assertEquals(geometryType, result.getGeometryType());
 	}
 
 	private static GeometryWrapper wkt(String lexicalForm) {
