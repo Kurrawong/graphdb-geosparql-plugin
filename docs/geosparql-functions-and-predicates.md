@@ -192,11 +192,12 @@ GROUP BY ?region
 
 When every geometry in a group uses the same CRS, the result uses that CRS; otherwise every geometry is transformed to
 CRS84. When every geometry has the same literal datatype, the result uses that datatype; otherwise it is a
-`geo:wktLiteral`. Geometries keep the Z and M ordinates that every geometry in the group has, and lose the others, so a
-group mixing XYZ and XY geometries is collected as XY. A result that cannot carry the collected ordinates leaves the
-group unbound, as for the matching scalar function. GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct
-geometry literal once. The result is unbound for a group that contains a value that is not a valid geometry literal, or
-whose calculation fails.
+`geo:wktLiteral`. The collected geometries keep the Z and M ordinates that every geometry in the group has and lose the
+others, so a group that mixes XYZ and XY geometries is collected as XY. `geof:aggCollect`, `geof:aggConvexHull`, and
+`geof:aggUnion` keep the collected ordinates, or leave the group unbound when the result cannot carry them, as their
+scalar counterparts do. `geof:aggCentroid`, `geof:aggBoundingCircle`, and `geof:aggConcaveHull` return XY results.
+GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct geometry literal once. The result is unbound for a
+group that contains a value that is not a valid geometry literal, or whose calculation fails.
 
 Empty geometries count when choosing the result CRS and datatype, but are left out of the aggregated geometries,
 together with empty members of collections at any depth. This keeps the represented point set, but `geof:aggCollect`
