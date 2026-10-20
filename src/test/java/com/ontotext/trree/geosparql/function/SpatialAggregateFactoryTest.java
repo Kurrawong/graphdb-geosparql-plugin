@@ -73,6 +73,23 @@ public class SpatialAggregateFactoryTest {
 	}
 
 	@Test
+	public void groupOfLegacyWktLiteralsKeepsTheLegacyDatatype() throws Exception {
+		Literal result = collect(List.of(legacyWkt("POINT(1 2)"), legacyWkt("POINT(3 4)")));
+
+		assertEquals(GeoConstants.XMLSCHEMA_SPATIAL_TEXT, result.getDatatype());
+		assertTrue(result.stringValue(), geometry(result).equalsExact(
+				new WKTReader().read("GEOMETRYCOLLECTION(POINT(1 2),POINT(3 4))")));
+	}
+
+	@Test
+	public void legacyAndGeoSparqlWktLiteralsProduceGeoSparqlWktLiteral() {
+		for (List<Literal> group : List.of(List.of(legacyWkt("POINT(1 2)"), wkt("POINT(3 4)")),
+				List.of(wkt("POINT(3 4)"), legacyWkt("POINT(1 2)")))) {
+			assertEquals(GeoConstants.GEO_WKT_LITERAL, collect(group).getDatatype());
+		}
+	}
+
+	@Test
 	public void groupWithoutGeometriesIsUnbound() {
 		assertNull(aggregate(GeoConstants.GEOF_AGG_COLLECT.stringValue(), List.of()));
 	}
@@ -104,5 +121,9 @@ public class SpatialAggregateFactoryTest {
 
 	private static Literal wkt(String lexicalForm) {
 		return VALUE_FACTORY.createLiteral(lexicalForm, GeoConstants.GEO_WKT_LITERAL);
+	}
+
+	private static Literal legacyWkt(String lexicalForm) {
+		return VALUE_FACTORY.createLiteral(lexicalForm, GeoConstants.XMLSCHEMA_SPATIAL_TEXT);
 	}
 }

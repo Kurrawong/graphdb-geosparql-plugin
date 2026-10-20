@@ -4,6 +4,7 @@ import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.query.BindingSet;
+import org.eclipse.rdf4j.query.QueryEvaluationException;
 import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.junit.Before;
@@ -11,6 +12,7 @@ import org.junit.Test;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.WKTReader;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +116,38 @@ public class TestSpatialAggregates extends AbstractGeoSparqlPluginTest {
 				() -> aggregatePerRegion("geof:aggConcaveHull(?wkt, 1.0)"));
 
 		assertEquals("Custom aggregate functions cannot have more than one argument", rejection.getMessage());
+	}
+
+	@Test
+	public void groupedResultsCanBeOrderedByAnAggregateExpression() {
+		List<String> regions = new ArrayList<>();
+		try (TupleQueryResult result = connection.prepareTupleQuery(QueryLanguage.SPARQL, PREFIXES
+				+ "SELECT ?region WHERE { ?feature ex:region ?region ; geo:hasGeometry/geo:asWKT ?wkt }"
+				+ " GROUP BY ?region ORDER BY DESC(STR(geof:aggCentroid(?wkt)))").evaluate()) {
+			result.forEach(bindings -> regions.add(bindings.getValue("region").stringValue().replaceFirst(".*/", "")));
+		}
+
+		assertEquals(List.of("south", "north"), regions);
+	}
+
+	/**
+	 * Dependency limitation: GraphDB 11.0 evaluates an aggregate in {@code ORDER BY} only when the query has an
+	 * explicit {@code GROUP BY}. Without one, it evaluates the aggregate per solution and rejects it, as it does
+	 * built-in aggregates such as {@code SUM}. Once GraphDB supports implicit grouping here, this query returns one
+	 * solution with the number of geometries.
+	 */
+	@Test
+	public void aggregateInOrderByWithoutGroupByIsRejectedByGraphDb() {
+		QueryEvaluationException rejection = assertThrows(QueryEvaluationException.class, () -> {
+			try (TupleQueryResult result = connection.prepareTupleQuery(QueryLanguage.SPARQL, PREFIXES
+					+ "SELECT (COUNT(?wkt) AS ?count) WHERE { ?feature geo:hasGeometry/geo:asWKT ?wkt }"
+					+ " ORDER BY geof:aggCollect(?wkt)").evaluate()) {
+				result.forEach(bindings -> { });
+			}
+		});
+
+		assertEquals("Unsupported value expr type: class org.eclipse.rdf4j.query.algebra.AggregateFunctionCall",
+				rejection.getMessage());
 	}
 
 	private Map<String, Geometry> aggregatePerRegion(String aggregate) {

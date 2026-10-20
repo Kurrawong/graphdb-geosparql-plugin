@@ -165,8 +165,9 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 ## Spatial aggregates
 
 Spatial aggregates combine the geometry literals of each group in a `SELECT`, `HAVING`, or `ORDER BY` aggregate
-expression. Each aggregate gives the same result as the matching geometry operation applied to a GeometryCollection of
-the group's geometries.
+expression. On GraphDB 11.0, an aggregate in `ORDER BY` requires an explicit `GROUP BY`; without one, GraphDB rejects
+the query with `Unsupported value expr type`, as it does for built-in aggregates such as `SUM`. Each aggregate gives the
+same result as the matching geometry operation applied to a GeometryCollection of the group's geometries.
 
 | Aggregate | Description |
 | --- | --- |
@@ -179,9 +180,10 @@ the group's geometries.
 | `geomLiteral geof:aggUnion(geomLiteral geometry)` | Returns the point-set union of the group. |
 
 When every geometry in a group uses the same CRS, the result uses that CRS; otherwise every geometry is transformed to
-CRS84. When every geometry has the same literal datatype, the result uses that datatype; otherwise it is a
-`geo:wktLiteral`. GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct geometry literal once. The result
-is unbound for a group that contains a value that is not a valid geometry literal, or whose calculation fails.
+CRS84. When every geometry has the same literal datatype, the result uses that datatype, including a legacy or
+compatibility datatype such as `http://rdf.opensahara.com/type/geo/wkt`; otherwise it is a `geo:wktLiteral`. GeoJSON and
+KML results are XY. `DISTINCT` aggregates each distinct geometry literal once. The result is unbound for a group that
+contains a value that is not a valid geometry literal, or whose calculation fails.
 
 Empty geometries count when choosing the result CRS and datatype, but are left out of the aggregated geometries,
 together with empty members of collections at any depth. This keeps the represented point set, but `geof:aggCollect`
