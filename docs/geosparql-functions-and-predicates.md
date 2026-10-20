@@ -207,9 +207,9 @@ only empty geometries is collected as an empty GeometryCollection, so `geof:aggC
 from `geof:aggCentroid`.
 
 GraphDB 11.0 through 11.5.1 does not evaluate custom aggregates with more than one argument, so a query that passes
-`targetPercent` to `geof:aggConcaveHull` is rejected. Omit `targetPercent` to use the default. On GraphDB 11.0, an
-aggregate written directly in `ORDER BY` requires an explicit `GROUP BY`; without one, project the aggregate with
-`AS ?alias` and order by `?alias`.
+`targetPercent` to `geof:aggConcaveHull` is rejected. Omit `targetPercent` to use the default. GraphDB 11.0 rejects an
+aggregate in `ORDER BY` when the query has no `GROUP BY`. Such a query has a single result row, so ordering it has no
+effect.
 
 ## Measurements
 
