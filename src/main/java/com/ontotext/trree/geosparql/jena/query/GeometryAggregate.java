@@ -117,8 +117,9 @@ public final class GeometryAggregate {
 	}
 
 	/**
-	 * Removes empty members at every depth. The WKT result boundary rejects collections with empty members because
-	 * Jena's WKT reader does not read them back faithfully.
+	 * Removes empty members at every depth. Dependency limitation: the Apache Jena 6.2 WKT reader drops a leading
+	 * empty collection member and merges consecutive ones, so the WKT result boundary rejects collections with empty
+	 * members. Once Jena reads each empty member as written, collected geometries can keep their empty members.
 	 */
 	private static Geometry withoutEmptyMembers(Geometry geometry) {
 		if (!(geometry instanceof GeometryCollection collection)) {

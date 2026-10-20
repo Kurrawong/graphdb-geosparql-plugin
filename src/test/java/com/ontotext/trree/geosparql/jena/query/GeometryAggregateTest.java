@@ -177,6 +177,18 @@ public class GeometryAggregateTest {
 		assertTrue(Double.isNaN(collected.getParsingGeometry().getGeometryN(0).getCoordinate().getZ()));
 	}
 
+	/**
+	 * Dependency limitation: the Apache Jena 6.2 WKT reader does not read collections with empty members back
+	 * faithfully. It drops a leading empty member and merges consecutive empty members, so the WKT result boundary
+	 * rejects such collections and {@code collect} omits empty members. Once Jena reads each empty member as written,
+	 * these literals read back with every member, and {@code collect} can keep empty members.
+	 */
+	@Test
+	public void jenaWktReaderDropsLeadingAndMergesConsecutiveEmptyMembers() {
+		assertEquals(1, wkt("GEOMETRYCOLLECTION(POINT EMPTY, POINT(3 4))").getParsingGeometry().getNumGeometries());
+		assertEquals(1, wkt("GEOMETRYCOLLECTION(POINT EMPTY, POINT EMPTY)").getParsingGeometry().getNumGeometries());
+	}
+
 	private static void assertEmpty(String geometryType, GeometryWrapper result) {
 		assertTrue(geometryType, result.isEmpty());
 		assertEquals(geometryType, result.getGeometryType());
