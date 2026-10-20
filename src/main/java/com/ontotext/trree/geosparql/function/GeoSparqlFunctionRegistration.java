@@ -1,8 +1,8 @@
 package com.ontotext.trree.geosparql.function;
 
-import org.eclipse.rdf4j.query.parser.sparql.aggregate.CustomAggregateFunctionRegistry;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.eclipse.rdf4j.query.algebra.evaluation.function.FunctionRegistry;
+import org.eclipse.rdf4j.query.parser.sparql.aggregate.CustomAggregateFunctionRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
