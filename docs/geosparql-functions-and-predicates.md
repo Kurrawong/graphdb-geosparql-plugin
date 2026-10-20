@@ -166,7 +166,19 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 
 Spatial aggregates combine the geometry literals of each group in a `SELECT`, `HAVING`, or `ORDER BY` aggregate
 expression. Each aggregate gives the same result as the matching geometry operation applied to a GeometryCollection of
-the group's geometries.
+the group's geometries. For example, this query returns the union of the geometries in each region:
+
+```sparql
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+PREFIX ex: <http://example.com/>
+
+SELECT ?region (geof:aggUnion(?geometry) AS ?area) WHERE {
+  ?feature ex:region ?region ;
+      geo:hasGeometry/geo:asWKT ?geometry .
+}
+GROUP BY ?region
+```
 
 | Aggregate | Description |
 | --- | --- |
@@ -192,18 +204,6 @@ GraphDB 11.0 through 11.5.1 does not evaluate custom aggregates with more than o
 `targetPercent` to `geof:aggConcaveHull` is rejected. Omit `targetPercent` to use the default. On GraphDB 11.0, an
 aggregate written directly in `ORDER BY` requires an explicit `GROUP BY`; without one, project the aggregate with
 `AS ?alias` and order by `?alias`.
-
-```sparql
-PREFIX geo: <http://www.opengis.net/ont/geosparql#>
-PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
-PREFIX ex: <http://example.com/>
-
-SELECT ?region (geof:aggUnion(?geometry) AS ?area) WHERE {
-  ?feature ex:region ?region ;
-      geo:hasGeometry/geo:asWKT ?geometry .
-}
-GROUP BY ?region
-```
 
 ## Measurements
 
