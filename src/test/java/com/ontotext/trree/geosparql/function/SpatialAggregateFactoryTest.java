@@ -2,6 +2,7 @@ package com.ontotext.trree.geosparql.function;
 
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -13,6 +14,7 @@ import org.junit.Test;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.WKTReader;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -82,6 +84,23 @@ public class SpatialAggregateFactoryTest {
 		assertEquals(GeoConstants.XMLSCHEMA_SPATIAL_TEXT, result.getDatatype());
 		assertTrue(result.stringValue(), geometry(result).equalsExact(
 				new WKTReader().read("GEOMETRYCOLLECTION(POINT(1 2),POINT(3 4))")));
+	}
+
+	@Test
+	public void groupsOfOneNonWktSerializationKeepItAndReadBack() throws Exception {
+		assertCollectKeepsDatatypeAndReadsBack(GeoConstants.GEO_GML_LITERAL,
+				"GEOMETRYCOLLECTION(POINT(1 2),POINT(3 4))",
+				"<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\"><gml:pos>1 2</gml:pos></gml:Point>",
+				"<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\"><gml:pos>3 4</gml:pos></gml:Point>");
+		assertCollectKeepsDatatypeAndReadsBack(GeoConstants.GEO_JSON_LITERAL,
+				"GEOMETRYCOLLECTION(POINT(1 2),POINT(3 4))",
+				"{\"type\":\"Point\",\"coordinates\":[1,2]}",
+				"{\"type\":\"Point\",\"coordinates\":[3,4]}");
+		// KML has one collection element, so a collection of points reads back as a MultiPoint.
+		assertCollectKeepsDatatypeAndReadsBack(GeoConstants.GEO_KML_LITERAL,
+				"MULTIPOINT((1 2),(3 4))",
+				"<Point><coordinates>1,2</coordinates></Point>",
+				"<Point><coordinates>3,4</coordinates></Point>");
 	}
 
 	@Test
@@ -162,6 +181,16 @@ public class SpatialAggregateFactoryTest {
 			function.processAggregate(bindings, value -> true, collector);
 		}
 		return collector.getFinalValue();
+	}
+
+	private static void assertCollectKeepsDatatypeAndReadsBack(IRI datatype, String expectedWkt,
+			String... lexicalForms) throws Exception {
+		Literal result = collect(Arrays.stream(lexicalForms)
+				.map(lexicalForm -> VALUE_FACTORY.createLiteral(lexicalForm, datatype))
+				.toList());
+
+		assertEquals(datatype, result.getDatatype());
+		assertTrue(result.stringValue(), geometry(result).equalsExact(new WKTReader().read(expectedWkt)));
 	}
 
 	private static Geometry parsingGeometry(Literal literal) {

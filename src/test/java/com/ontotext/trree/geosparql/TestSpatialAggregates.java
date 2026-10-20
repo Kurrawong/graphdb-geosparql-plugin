@@ -119,6 +119,18 @@ public class TestSpatialAggregates extends AbstractGeoSparqlPluginTest {
 	}
 
 	@Test
+	public void groupsCanBeFilteredByAnAggregateExpressionInHaving() {
+		List<String> regions = new ArrayList<>();
+		try (TupleQueryResult result = connection.prepareTupleQuery(QueryLanguage.SPARQL, PREFIXES
+				+ "SELECT ?region WHERE { ?feature ex:region ?region ; geo:hasGeometry/geo:asWKT ?wkt }"
+				+ " GROUP BY ?region HAVING (geof:numGeometries(geof:aggCollect(?wkt)) > 1)").evaluate()) {
+			result.forEach(bindings -> regions.add(bindings.getValue("region").stringValue().replaceFirst(".*/", "")));
+		}
+
+		assertEquals(List.of("north"), regions);
+	}
+
+	@Test
 	public void groupedResultsCanBeOrderedByAnAggregateExpression() {
 		List<String> regions = new ArrayList<>();
 		try (TupleQueryResult result = connection.prepareTupleQuery(QueryLanguage.SPARQL, PREFIXES
