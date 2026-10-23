@@ -31,9 +31,12 @@ public class DistanceAndBufferFunctionsTest {
 	private static final String GEOF_DISTANCE_URI = GeoConstants.NS_GEOF + "distance";
 	private static final String GEOF_METRIC_BUFFER_URI = GeoConstants.NS_GEOF + "metricBuffer";
 	private static final String GEOF_METRIC_DISTANCE_URI = GeoConstants.NS_GEOF + "metricDistance";
+	private static final String GEOF_METRIC_WITHIN_DISTANCE_URI = GeoConstants.NS_GEOF + "metricWithinDistance";
+	private static final String GEOF_WITHIN_DISTANCE_URI = GeoConstants.NS_GEOF + "withinDistance";
 	private static final String EPSG_32634 = "http://www.opengis.net/def/crs/EPSG/0/32634";
 	private static final String CRS84 = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 	private static final String METRE = "http://www.opengis.net/def/uom/OGC/1.0/metre";
+	private static final String KILOMETRE = "http://www.opengis.net/def/uom/OGC/1.0/kilometre";
 	private static final String DEGREE = "http://www.opengis.net/def/uom/OGC/1.0/degree";
 	private static final ValueFactory VALUE_FACTORY = SimpleValueFactory.getInstance();
 	private static final ValueFactoryTripleSource TRIPLE_SOURCE = new ValueFactoryTripleSource(VALUE_FACTORY);
@@ -48,6 +51,277 @@ public class DistanceAndBufferFunctionsTest {
 		assertTrue(result instanceof Literal);
 		assertEquals(5.0, ((Literal) result).doubleValue(), 0.0);
 		assertEquals(XSD.DOUBLE, ((Literal) result).getDatatype());
+	}
+
+	@Test
+	public void metricWithinDistanceIncludesTheBoundary() throws Exception {
+		Literal left = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		Literal right = wkt("<" + EPSG_32634 + "> POINT(500003 4600004)");
+
+		Literal atBoundary = (Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(5));
+		assertEquals(XSD.BOOLEAN, atBoundary.getDatatype());
+		assertTrue(atBoundary.booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(4.999))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(-1))).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, left, VALUE_FACTORY.createLiteral(0))).booleanValue());
+	}
+
+	@Test
+	public void metricWithinDistanceUsesTheLeftCrsDistanceCalculation() throws Exception {
+		Literal geographicLeft = wkt("POINT(0 0)");
+		Literal geographicRight = wkt("POINT(1 0)");
+		Literal projectedRight = wkt("<" + EPSG_32634 + "> POINT(799997.80 4589779.63)");
+		Literal geographicNearProjected = wkt("POINT(24.5887755 41.4035958)");
+
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				geographicLeft, geographicRight, VALUE_FACTORY.createLiteral(111196))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				geographicLeft, geographicRight, VALUE_FACTORY.createLiteral(111194))).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				geographicNearProjected, projectedRight, VALUE_FACTORY.createLiteral(1))).booleanValue());
+	}
+
+	@Test
+	public void metricWithinDistanceRejectsInvalidThresholdsAndArity() {
+		Literal point = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+
+		for (Value threshold : List.of(
+				VALUE_FACTORY.createLiteral("5"),
+				VALUE_FACTORY.createIRI("http://example.com/distance/5"),
+				VALUE_FACTORY.createLiteral(Double.NaN),
+				VALUE_FACTORY.createLiteral(Double.POSITIVE_INFINITY),
+				VALUE_FACTORY.createLiteral("1e9999", XSD.DECIMAL))) {
+			assertThrows(threshold.toString(), ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI, point, point, threshold));
+		}
+		assertThrows(ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI, point, point));
+		assertThrows(ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+							point, point, VALUE_FACTORY.createLiteral(1), VALUE_FACTORY.createLiteral(2)));
+	}
+
+	@Test
+	public void metricWithinDistanceUsesDistanceEmptyGeometryBehavior() throws Exception {
+		Literal projectedEmpty = wkt("<" + EPSG_32634 + "> POINT EMPTY");
+		Literal projectedPoint = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		Literal geographicEmpty = wkt("POINT EMPTY");
+		Literal geographicPoint = wkt("POINT(1 1)");
+
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				projectedEmpty, projectedPoint, VALUE_FACTORY.createLiteral(0))).booleanValue());
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(
+				GEOF_METRIC_WITHIN_DISTANCE_URI,
+				geographicEmpty, geographicPoint, VALUE_FACTORY.createLiteral(0)));
+	}
+
+	@Test
+	public void withinDistanceConvertsToTheRequestedUnitAndIncludesTheBoundary() throws Exception {
+		Literal left = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		Literal right = wkt("<" + EPSG_32634 + "> POINT(500003 4600004)");
+		IRI kilometre = VALUE_FACTORY.createIRI(KILOMETRE);
+
+		Literal atBoundary = (Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(0.005), kilometre);
+		assertEquals(XSD.BOOLEAN, atBoundary.getDatatype());
+		assertTrue(atBoundary.booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(0.004), kilometre)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(-1), kilometre)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, left, VALUE_FACTORY.createLiteral(0), kilometre)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(5), VALUE_FACTORY.createLiteral(METRE, XSD.ANYURI)))
+				.booleanValue());
+	}
+
+	@Test
+	public void registeredWithinDistancesInterpretGeographicGrads() throws Exception {
+		String crs = "<http://www.opengis.net/def/crs/EPSG/0/4807> ";
+		Literal left = wkt(crs + "POINT(49 0)");
+		Literal right = wkt(crs + "POINT(50 0)");
+
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(100076))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(100075))).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(100.076), GeoSparqlUnits.URI_KILOMETRE)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(100.075), GeoSparqlUnits.URI_KILOMETRE)).booleanValue());
+	}
+
+	@Test
+	public void registeredWithinDistancesHandleAntipodalGeometry() throws Exception {
+		Literal left = wkt("POINT(166.933727 79.175770)");
+		Literal right = wkt("POINT(-13.066273 -79.175770)");
+		Literal metric = (Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(21000000));
+		Literal unit = (Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(21000), GeoSparqlUnits.URI_KILOMETRE);
+
+		assertEquals(XSD.BOOLEAN, metric.getDatatype());
+		assertEquals(XSD.BOOLEAN, unit.getDatatype());
+		assertTrue(metric.booleanValue());
+		assertTrue(unit.booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(19000000))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left, right,
+				VALUE_FACTORY.createLiteral(19000), GeoSparqlUnits.URI_KILOMETRE)).booleanValue());
+	}
+
+	@Test
+	public void nonFiniteWithinDistanceMeasurementsAreExpressionErrors() {
+		String crs = "<" + EPSG_32634 + "> ";
+		Literal left = wkt(crs + "POINT(-1e308 0)");
+		Literal right = wkt(crs + "POINT(1e308 0)");
+
+		ValueExprEvaluationException metric = assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI, left, right, VALUE_FACTORY.createLiteral(1)));
+		ValueExprEvaluationException unit = assertThrows(ValueExprEvaluationException.class,
+				() -> evaluate(GEOF_WITHIN_DISTANCE_URI, left, right, VALUE_FACTORY.createLiteral(1),
+						GeoSparqlUnits.URI_METRE));
+
+		assertTrue(metric.getCause() instanceof ArithmeticException);
+		assertTrue(unit.getCause() instanceof ArithmeticException);
+	}
+
+	@Test
+	public void withinDistanceKeepsSubMillimetreSeparationAtKilometreThresholds() throws Exception {
+		String crs = "<" + EPSG_32634 + "> ";
+		Literal left = wkt(crs + "POINT(500000 4600000)");
+		IRI kilometre = VALUE_FACTORY.createIRI(KILOMETRE);
+
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left,
+				wkt(crs + "POINT(500005 4600000)"), VALUE_FACTORY.createLiteral(0.005), kilometre)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left,
+				wkt(crs + "POINT(500005.0004 4600000)"), VALUE_FACTORY.createLiteral(0.005), kilometre)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, left,
+				wkt(crs + "POINT(500000.0004 4600000)"), VALUE_FACTORY.createLiteral(0), kilometre)).booleanValue());
+	}
+
+	@Test
+	public void registeredWithinDistancesDoNotRoundNonMetreCoordinates() throws Exception {
+		String crs = "<http://www.opengis.net/def/crs/EPSG/0/2227> ";
+		Literal left = wkt(crs + "POINT(6300000 2000000)");
+		Literal right = wkt(crs + "POINT(6300005 2000000)");
+
+		assertFalse(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(1.524003))).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(1.524003), GeoSparqlUnits.URI_METRE)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_METRIC_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(1.524004))).booleanValue());
+	}
+
+	@Test
+	public void withinDistanceRejectsNegativeThresholdsThatUnderflowDuringConversion() throws Exception {
+		Literal point = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		IRI millimetre = VALUE_FACTORY.createIRI(Unit_URI.MILLIMETRE_URL);
+		Literal threshold = VALUE_FACTORY.createLiteral(-Double.MIN_VALUE);
+
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI, point, point, threshold, millimetre)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				point, point, VALUE_FACTORY.createLiteral(0.0), millimetre)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				point, point, VALUE_FACTORY.createLiteral(-0.0), millimetre)).booleanValue());
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+				point, point, threshold, VALUE_FACTORY.createIRI("http://example.com/unit/unknown")));
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+				wkt("<http://example.com/crs/unknown> POINT(0 0)"), point, threshold, millimetre));
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+				wkt("POINT EMPTY"), wkt("POINT(0 0)"), threshold, millimetre));
+	}
+
+	@Test
+	public void withinDistanceAcceptsLengthAliasesAndScalesLightYearThresholds() throws Exception {
+		Literal left = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		Literal right = wkt("<" + EPSG_32634 + "> POINT(500003 4600004)");
+		Literal kilometre = VALUE_FACTORY.createLiteral(GeoSparqlUnits.URI_KILOMETRE.stringValue(), XSD.ANYURI);
+
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(0.005), kilometre)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(0.004), kilometre)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(17), GeoSparqlUnits.URI_FOOT)).booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(16), GeoSparqlUnits.URI_FOOT)).booleanValue());
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(6.0 / 9.460528405e15), GeoSparqlUnits.URI_LIGHT_YEAR))
+				.booleanValue());
+		assertFalse(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(4.0 / 9.460528405e15), GeoSparqlUnits.URI_LIGHT_YEAR))
+				.booleanValue());
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+				left, right, VALUE_FACTORY.createLiteral(Double.MAX_VALUE), GeoSparqlUnits.URI_LIGHT_YEAR));
+	}
+
+	@Test
+	public void withinDistanceUsesTheLeftCrsForMixedCrsInputs() throws Exception {
+		Literal geographicLeft = wkt("POINT(24.5887755 41.4035958)");
+		Literal projectedRight = wkt("<" + EPSG_32634 + "> POINT(799997.80 4589779.63)");
+
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				geographicLeft, projectedRight, VALUE_FACTORY.createLiteral(0.001),
+				VALUE_FACTORY.createIRI(KILOMETRE))).booleanValue());
+	}
+
+	@Test
+	public void withinDistanceRejectsInvalidArgumentsAndIncompatibleUnits() {
+		Literal point = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		IRI metre = VALUE_FACTORY.createIRI(METRE);
+		for (Value threshold : List.of(
+				VALUE_FACTORY.createLiteral("5"),
+				VALUE_FACTORY.createIRI("http://example.com/distance/5"),
+				VALUE_FACTORY.createLiteral(Double.NaN),
+				VALUE_FACTORY.createLiteral(Double.POSITIVE_INFINITY),
+				VALUE_FACTORY.createLiteral("1e9999", XSD.DECIMAL))) {
+			assertThrows(threshold.toString(), ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_WITHIN_DISTANCE_URI, point, point, threshold, metre));
+		}
+		for (Value unit : List.of(
+				VALUE_FACTORY.createLiteral(METRE),
+				VALUE_FACTORY.createLiteral(METRE, "en"),
+				VALUE_FACTORY.createLiteral(1),
+				VALUE_FACTORY.createIRI("http://example.com/unit/unknown"),
+				VALUE_FACTORY.createIRI(DEGREE))) {
+			assertThrows(unit.toString(), ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_WITHIN_DISTANCE_URI, point, point,
+							VALUE_FACTORY.createLiteral(0), unit));
+		}
+		assertThrows(ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_WITHIN_DISTANCE_URI, point, point, VALUE_FACTORY.createLiteral(5)));
+		assertThrows(ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_WITHIN_DISTANCE_URI, point, point, VALUE_FACTORY.createLiteral(5),
+							metre, metre));
+		assertThrows(ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+							wkt("not geometry"), point, VALUE_FACTORY.createLiteral(5), metre));
+		assertThrows(ValueExprEvaluationException.class,
+					() -> evaluate(GEOF_WITHIN_DISTANCE_URI,
+							wkt("<http://example.com/crs/unknown> POINT(1 2)"), point,
+							VALUE_FACTORY.createLiteral(5), metre));
+	}
+
+	@Test
+	public void withinDistanceUsesDistanceEmptyGeometryBehavior() throws Exception {
+		Literal projectedEmpty = wkt("<" + EPSG_32634 + "> POINT EMPTY");
+		Literal projectedPoint = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
+		Literal geographicEmpty = wkt("POINT EMPTY");
+		Literal geographicPoint = wkt("POINT(1 1)");
+		IRI metre = VALUE_FACTORY.createIRI(METRE);
+
+		assertTrue(((Literal) evaluate(GEOF_WITHIN_DISTANCE_URI,
+				projectedEmpty, projectedPoint, VALUE_FACTORY.createLiteral(0), metre)).booleanValue());
+		assertThrows(ValueExprEvaluationException.class, () -> evaluate(
+				GEOF_WITHIN_DISTANCE_URI, geographicEmpty, geographicPoint,
+				VALUE_FACTORY.createLiteral(0), metre));
 	}
 
 	@Test
@@ -470,6 +744,10 @@ public class DistanceAndBufferFunctionsTest {
 				QueryFunctionManifest.BinaryGeometryUnitToDoubleProvider.class);
 		assertManifestEntry(GEOF_METRIC_DISTANCE_URI, 2,
 				QueryFunctionManifest.BinaryGeometryToDoubleProvider.class);
+		assertManifestEntry(GEOF_METRIC_WITHIN_DISTANCE_URI, 3,
+				QueryFunctionManifest.BinaryGeometryDoubleToBooleanProvider.class);
+		assertManifestEntry(GEOF_WITHIN_DISTANCE_URI, 4,
+				QueryFunctionManifest.BinaryGeometryDoubleUnitToBooleanProvider.class);
 		assertManifestEntry(GEOF_BUFFER_URI, 3,
 				QueryFunctionManifest.UnaryGeometryDoubleUnitToGeometryProvider.class);
 		assertManifestEntry(GEOF_METRIC_BUFFER_URI, 2,
