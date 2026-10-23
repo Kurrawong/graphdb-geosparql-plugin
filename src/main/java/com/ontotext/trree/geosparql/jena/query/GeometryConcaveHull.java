@@ -11,16 +11,23 @@ import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.util.GeometryTransformer;
 
 /**
- * Calculates the planar concave hull from the complete input vertex set using maximum-edge-length ratio zero
- * with holes disabled.
+ * Calculates the planar concave hull from the complete input vertex set with holes disabled. The maximum
+ * edge-length ratio ranges from zero, the tightest hull, to one, the convex hull.
  */
 public final class GeometryConcaveHull {
+	/** The JTS 1.20 default criterion: maximum concaveness. */
+	private static final double DEFAULT_MAXIMUM_EDGE_LENGTH_RATIO = 0.0;
+
 	private GeometryConcaveHull() {
 	}
 
 	public static GeometryWrapper calculate(GeometryWrapper geometry) {
+		return calculate(geometry, DEFAULT_MAXIMUM_EDGE_LENGTH_RATIO);
+	}
+
+	public static GeometryWrapper calculate(GeometryWrapper geometry, double maximumEdgeLengthRatio) {
 		ConcaveHull calculation = new ConcaveHull(geometry.getXYGeometry());
-		calculation.setMaximumEdgeLengthRatio(0.0);
+		calculation.setMaximumEdgeLengthRatio(maximumEdgeLengthRatio);
 		calculation.setHolesAllowed(false);
 		Geometry result = xyGeometry(calculation.getHull());
 		if (result.isEmpty()) {

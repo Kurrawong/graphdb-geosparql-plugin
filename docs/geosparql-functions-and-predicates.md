@@ -154,13 +154,62 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 | `geomLiteral geof:buffer(geomLiteral geometry, numeric radius, uri unit)` | Returns a buffer using `radius` in the specified unit. Accepts linear radius units when the source CRS has linear coordinates, or angular radius units for geographic coordinates. |
 | `geomLiteral geof:centroid(geomLiteral geometry)` | Returns the centroid of `geometry`. |
 | `geomLiteral geof:convexHull(geomLiteral geometry)` | Returns the convex hull of `geometry`. |
-| `geomLiteral geof:concaveHull(geomLiteral geometry)` | Returns the planar concave hull of the complete input vertex set, without holes. |
+| `geomLiteral geof:concaveHull(geomLiteral geometry)` | Returns the planar concave hull of the complete input vertex set, without holes. The hull uses a maximum edge-length ratio of 0, which produces the most concave single polygon that contains every vertex. |
 | `geomLiteral geof:difference(geomLiteral left, geomLiteral right)` | Returns the point-set difference of `left` and `right` in the CRS of `left`. |
 | `geomLiteral geof:envelope(geomLiteral geometry)` | Returns the axis-aligned bounding rectangle of `geometry`. |
 | `geomLiteral geof:intersection(geomLiteral left, geomLiteral right)` | Returns the point-set intersection of `left` and `right` in the CRS of `left`. |
 | `geomLiteral geof:symDifference(geomLiteral left, geomLiteral right)` | Returns the points that occur in either input but not in both, in the CRS of `left`. |
 | `geomLiteral geof:simplify(geomLiteral geometry, numeric tolerance)` | Simplifies `geometry` using Douglas-Peucker with a finite, nonnegative `tolerance` in source CRS coordinate units. The result retains the source CRS and literal datatype; topology is not guaranteed to be preserved. |
 | `geomLiteral geof:union(geomLiteral left, geomLiteral right)` | Returns the point-set union of `left` and `right` in the CRS of `left`. |
+
+## Spatial aggregates
+
+Spatial aggregates combine the geometry literals of each group in a `SELECT`, `HAVING`, or `ORDER BY` aggregate
+expression. Each aggregate gives the same result as the matching geometry operation applied to a GeometryCollection of
+the group's geometries. For example, this query returns the union of the geometries in each region:
+
+```sparql
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+PREFIX ex: <http://example.com/>
+
+SELECT ?region (geof:aggUnion(?geometry) AS ?area) WHERE {
+  ?feature ex:region ?region ;
+      geo:hasGeometry/geo:asWKT ?geometry .
+}
+GROUP BY ?region
+```
+
+| Aggregate | Description |
+| --- | --- |
+| `geomLiteral geof:aggBoundingBox(geomLiteral geometry)` | Returns the axis-aligned bounding rectangle of the group, as `geof:envelope`. |
+| `geomLiteral geof:aggBoundingCircle(geomLiteral geometry)` | Returns the bounding circle of the group, as `geof:boundingCircle`. |
+| `geomLiteral geof:aggCentroid(geomLiteral geometry)` | Returns the centroid of the group, as `geof:centroid`. |
+| `geomLiteral geof:aggCollect(geomLiteral geometry)` | Returns a GeometryCollection of the group's geometries. |
+| `geomLiteral geof:aggConcaveHull(geomLiteral geometry [, numeric targetPercent])` | Returns the concave hull of the group. The optional `targetPercent`, from 0 to 1, is the maximum edge-length ratio: 0 gives the tightest hull and 1 the convex hull. It defaults to 0, which matches `geof:concaveHull`. |
+| `geomLiteral geof:aggConvexHull(geomLiteral geometry)` | Returns the convex hull of the group, as `geof:convexHull`. |
+| `geomLiteral geof:aggUnion(geomLiteral geometry)` | Returns the point-set union of the group. |
+
+When every geometry in a group uses the same CRS, the result uses that CRS; otherwise every geometry is transformed to
+CRS84. When every geometry has the same literal datatype, the result uses that datatype; otherwise it is a
+`geo:wktLiteral`. The collected geometries keep the Z and M ordinates that every geometry in the group has and lose the
+others, so a group that mixes XYZ and XY geometries is collected as XY. `geof:aggCollect` keeps the collected ordinates.
+`geof:aggConvexHull` and `geof:aggUnion` also keep them, or leave the group unbound when the result cannot carry them,
+as `geof:convexHull` and `geof:union` do. `geof:aggCentroid`, `geof:aggBoundingCircle`, and `geof:aggConcaveHull` return
+XY results. GeoJSON and KML results are XY. `DISTINCT` aggregates each distinct geometry literal once. The result is
+unbound for a group that contains a value that is not a valid geometry literal, or whose calculation fails.
+
+Empty geometries count when choosing the result CRS and datatype, but are left out of the aggregated geometries,
+together with empty members of collections at any depth. This keeps the represented point set, but `geof:aggCollect` can
+return fewer members than the group has values, with different `geof:geometryN` results and member types. A group of
+only empty geometries is collected as an empty GeometryCollection, so `geof:aggCollect` returns
+`GEOMETRYCOLLECTION EMPTY` and each other aggregate returns the empty result of its operation, such as `POINT EMPTY`
+from `geof:aggCentroid`.
+
+GraphDB 11.0 through 11.5.1 does not evaluate custom aggregates with more than one argument, so a query that passes
+`targetPercent` to `geof:aggConcaveHull` is rejected. Omit `targetPercent` to use the default. GraphDB 11.0 rejects an
+aggregate in `ORDER BY` when the query has no `GROUP BY`. Such a query has a single result row, so ordering it has no
+effect.
 
 ## Measurements
 
