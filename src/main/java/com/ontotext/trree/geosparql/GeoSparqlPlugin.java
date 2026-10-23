@@ -70,6 +70,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 	long asWKT;
 	long asGML;
 	long asGeoJSON;
+	long asKML;
 	long hasSerialization;
 	long hasDefaultGeometry;
 
@@ -97,7 +98,8 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 
         initPluginFeatures(pluginConnection.getEntities());
 
-        updateListener = new GeoSparqlUpdateListener(this, asWKT, asGML, asGeoJSON, hasDefaultGeometry);
+        updateListener = new GeoSparqlUpdateListener(this, asWKT, asGML, asGeoJSON, asKML,
+                hasDefaultGeometry);
     }
 
     @Override
@@ -243,13 +245,16 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
 			datatype = literal.getDatatype();
 			if (!GeoConstants.GEO_WKT_LITERAL.equals(datatype)
 					&& !GeoConstants.GEO_GML_LITERAL.equals(datatype)
-					&& !GeoConstants.GEO_JSON_LITERAL.equals(datatype)) {
+					&& !GeoConstants.GEO_JSON_LITERAL.equals(datatype)
+					&& !GeoConstants.GEO_KML_LITERAL.equals(datatype)) {
 				return null;
 			}
 		} else if (predicateId == asGML) {
 			datatype = GeoConstants.GEO_GML_LITERAL;
 		} else if (predicateId == asGeoJSON) {
 			datatype = GeoConstants.GEO_JSON_LITERAL;
+		} else if (predicateId == asKML) {
+			datatype = GeoConstants.GEO_KML_LITERAL;
 		} else {
 			datatype = GeoConstants.GEO_WKT_LITERAL;
 		}
@@ -353,6 +358,7 @@ public class GeoSparqlPlugin extends PluginBase implements PatternInterpreter, U
         asWKT = entities.put(GeoConstants.GEO_AS_WKT, Entities.Scope.DEFAULT);
         asGML = entities.put(GeoConstants.GEO_AS_GML, Entities.Scope.DEFAULT);
         asGeoJSON = entities.put(GeoConstants.GEO_AS_GEO_JSON, Entities.Scope.DEFAULT);
+        asKML = entities.put(GeoConstants.GEO_AS_KML, Entities.Scope.DEFAULT);
         hasSerialization = entities.put(GeoConstants.GEO_HAS_SERIALIZATION, Entities.Scope.DEFAULT);
         hasDefaultGeometry = entities.put(GeoConstants.GEO_HAS_DEFAULT_GEOMETRY, Entities.Scope.DEFAULT);
     }

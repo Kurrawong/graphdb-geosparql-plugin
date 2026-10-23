@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
+import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -75,10 +75,10 @@ public class UnaryGeometryFunctionsTest {
 					entry.provider() instanceof QueryFunctionManifest.UnaryGeometryProvider);
 			QueryFunctionManifest.UnaryGeometryProvider provider =
 					(QueryFunctionManifest.UnaryGeometryProvider) entry.provider();
-			GeoJsonResultDimensionPolicy expected = BOUNDARY_URI.equals(functionUri)
-					? GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z
-					: GeoJsonResultDimensionPolicy.XY_ONLY;
-			assertEquals(functionUri, expected, provider.geoJsonResultDimensionPolicy());
+			Crs84ResultDimensionPolicy expected = BOUNDARY_URI.equals(functionUri)
+					? Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z
+					: Crs84ResultDimensionPolicy.XY_ONLY;
+			assertEquals(functionUri, expected, provider.crs84ResultDimensionPolicy());
 		}
 	}
 
@@ -242,7 +242,7 @@ public class UnaryGeometryFunctionsTest {
 				BOUNDARY_URI, 1,
 				new QueryFunctionManifest.UnaryGeometryProvider(
 						geometry -> geometry.envelope(),
-						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+						Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z));
 		Function function = new QueryFunctionRdf4jAdapter(entry);
 		Literal source = geoJson(
 				"{\"type\":\"LineString\",\"coordinates\":[[0,0,5],[2,2,6]]}");

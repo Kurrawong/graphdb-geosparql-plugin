@@ -74,6 +74,9 @@ public final class JenaFunctionEvaluator {
 			if (GeoConstants.GEOF_AS_GML.stringValue().equals(functionUri)) {
 				return asGml(valueFactory, functionUri, args);
 			}
+			if (GeoConstants.GEOF_AS_KML.stringValue().equals(functionUri)) {
+				return asKml(valueFactory, functionUri, args);
+			}
 			if (GeoConstants.GEO_DIMENSION.stringValue().equals(functionUri)) {
 				requireArgs(functionUri, args, 1);
 				return valueFactory.createLiteral(geometry(args[0]).getTopologicalDimension());
@@ -422,6 +425,17 @@ public final class JenaFunctionEvaluator {
 				? sourceGeometry.getCoordinateDimension()
 				: 2;
 		return JenaGeometryAdapter.toGeoJsonLiteral(valueFactory, sourceGeometry, coordinateDimension);
+	}
+
+	private static Literal asKml(ValueFactory valueFactory, String functionUri, Value... args)
+			throws Exception {
+		requireArgs(functionUri, args, 1);
+		SourceGeometryLiteral source = sourceLiteral(args[0]);
+		GeometryWrapper sourceGeometry = source.asGeometryWrapper();
+		int coordinateDimension = GeoConstants.GEO_KML_LITERAL.equals(source.jenaDatatype())
+				? sourceGeometry.getCoordinateDimension()
+				: 2;
+		return JenaGeometryAdapter.toKmlLiteral(valueFactory, sourceGeometry, coordinateDimension);
 	}
 
 	private static Literal asWkt(ValueFactory valueFactory, String functionUri, Value... args)

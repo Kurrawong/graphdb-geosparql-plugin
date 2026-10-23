@@ -37,6 +37,7 @@ public class RepositoryGeometrySourceTest {
 	private static final long AS_GEO_JSON = 13L;
 	private static final long HAS_DEFAULT_GEOMETRY = 12L;
 	private static final long HAS_SERIALIZATION = 14L;
+	private static final long AS_KML = 15L;
 	private static final long GEOMETRY_RESOURCE = 100L;
 	private static final long FEATURE_1 = 200L;
 	private static final long FEATURE_2 = 201L;
@@ -178,6 +179,47 @@ public class RepositoryGeometrySourceTest {
 	}
 
 	@Test
+	public void kmlPredicateAppliesFallbackDatatype() {
+		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
+				.createIRI("http://example.com/geometry"));
+		entities.add(LITERAL, SimpleValueFactory.getInstance()
+				.createLiteral("<Point><coordinates>1,2</coordinates></Point>"));
+		FakeStatements statements = new FakeStatements();
+		statements.add(GEOMETRY_RESOURCE, AS_KML, LITERAL);
+
+		List<IndexGeometry> geometries = new RepositoryGeometrySource(plugin,
+				new FakePluginConnection(entities, statements))
+				.geometriesForGeometryResource(GEOMETRY_RESOURCE);
+
+		assertEquals(1, geometries.size());
+		assertEquals(GeoConstants.GEO_KML_LITERAL, geometries.get(0).sourceGeometryLiteral().datatype());
+		assertEquals("Point", geometries.get(0).sourceGeometryLiteral().asGeometryWrapper().getGeometryType());
+	}
+
+	@Test
+	public void kmlPredicateUsesConversionContract() {
+		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
+				.createIRI("http://example.com/geometry"));
+		entities.add(LITERAL, SimpleValueFactory.getInstance()
+				.createLiteral("<Point><coordinates>1</coordinates></Point>"));
+		FakeStatements statements = new FakeStatements();
+		statements.add(GEOMETRY_RESOURCE, AS_KML, LITERAL);
+		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
+				new FakePluginConnection(entities, statements));
+
+		PluginException failure = assertThrows(PluginException.class,
+				() -> source.geometriesForGeometryResource(GEOMETRY_RESOURCE));
+
+		assertTrue(failure.getMessage().contains("Could not index GeoSPARQL geometry"));
+		assertTrue(failure.getMessage().contains("predicate/fallback datatype: "
+				+ GeoConstants.GEO_KML_LITERAL));
+	}
+
+	@Test
 	public void genericSerializationUsesOnlySupportedLiteralDatatypes() {
 		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
 		FakeEntities entities = new FakeEntities();
@@ -193,41 +235,50 @@ public class RepositoryGeometrySourceTest {
 				"{\"type\":\"Point\",\"coordinates\":[3,3]}", GeoConstants.GEO_JSON_LITERAL));
 		entities.add(303L, SimpleValueFactory.getInstance().createLiteral("POINT(4 4)"));
 		entities.add(304L, SimpleValueFactory.getInstance().createIRI("http://example.com/distribution"));
+		entities.add(305L, SimpleValueFactory.getInstance().createLiteral(
+				"<Point><coordinates>5,5</coordinates></Point>", GeoConstants.GEO_KML_LITERAL));
 		FakeStatements statements = new FakeStatements();
 		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, LITERAL);
 		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 301L);
 		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 302L);
 		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 303L);
 		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 304L);
+		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, 305L);
 		statements.add(FEATURE_1, HAS_DEFAULT_GEOMETRY, GEOMETRY_RESOURCE);
 
 		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
 				new FakePluginConnection(entities, statements));
 		List<IndexGeometry> geometries = source.geometriesForGeometryResource(GEOMETRY_RESOURCE);
 		assertEquals(List.of(GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_GML_LITERAL,
-				GeoConstants.GEO_JSON_LITERAL), geometries.stream()
+				GeoConstants.GEO_JSON_LITERAL, GeoConstants.GEO_KML_LITERAL), geometries.stream()
 					.map(geometry -> geometry.sourceGeometryLiteral().datatype()).toList());
-		assertEquals(3, source.geometriesForFeature(FEATURE_1).size());
+		assertEquals(4, source.geometriesForFeature(FEATURE_1).size());
 	}
 
 	@Test
 	public void malformedSupportedGenericSerializationReportsIndexingFailure() {
-		GeoSparqlPlugin plugin = newRepositoryPlugin(false);
-		FakeEntities entities = new FakeEntities();
-		entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
-				.createIRI("http://example.com/geometry"));
-		entities.add(LITERAL, SimpleValueFactory.getInstance().createLiteral(
-				"{\"type\":\"Point\",\"coordinates\":[1]}", GeoConstants.GEO_JSON_LITERAL));
-		FakeStatements statements = new FakeStatements();
-		statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, LITERAL);
+		for (Literal malformed : List.of(
+				SimpleValueFactory.getInstance().createLiteral(
+						"{\"type\":\"Point\",\"coordinates\":[1]}", GeoConstants.GEO_JSON_LITERAL),
+				SimpleValueFactory.getInstance().createLiteral(
+						"<Point><coordinates>1</coordinates></Point>", GeoConstants.GEO_KML_LITERAL))) {
+			GeoSparqlPlugin plugin = newRepositoryPlugin(false);
+			FakeEntities entities = new FakeEntities();
+			entities.add(GEOMETRY_RESOURCE, SimpleValueFactory.getInstance()
+					.createIRI("http://example.com/geometry"));
+			entities.add(LITERAL, malformed);
+			FakeStatements statements = new FakeStatements();
+			statements.add(GEOMETRY_RESOURCE, HAS_SERIALIZATION, LITERAL);
 
-		RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
-				new FakePluginConnection(entities, statements));
-		PluginException failure = assertThrows(PluginException.class,
-				() -> source.geometriesForGeometryResource(GEOMETRY_RESOURCE));
+			RepositoryGeometrySource source = new RepositoryGeometrySource(plugin,
+					new FakePluginConnection(entities, statements));
+			PluginException failure = assertThrows(PluginException.class,
+					() -> source.geometriesForGeometryResource(GEOMETRY_RESOURCE));
 
-		assertTrue(failure.getMessage().contains("Could not index GeoSPARQL geometry"));
-		assertTrue(failure.getMessage().contains(GeoConstants.GEO_JSON_LITERAL.stringValue()));
+			String context = malformed.getDatatype().stringValue();
+			assertTrue(context, failure.getMessage().contains("Could not index GeoSPARQL geometry"));
+			assertTrue(context, failure.getMessage().contains(context));
+		}
 	}
 
 	private static CountingGeoSparqlPlugin newPlugin(boolean ignoreErrors) {
@@ -235,6 +286,7 @@ public class RepositoryGeometrySourceTest {
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.asKML = AS_KML;
 		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		GeoSparqlConfig config = new GeoSparqlConfig();
@@ -249,6 +301,7 @@ public class RepositoryGeometrySourceTest {
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.asKML = AS_KML;
 		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		GeoSparqlConfig config = new GeoSparqlConfig();

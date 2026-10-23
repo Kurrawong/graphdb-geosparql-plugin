@@ -17,6 +17,7 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.CoordinateSequence;
 import org.locationtech.jts.geom.util.GeometryEditor;
@@ -168,12 +169,27 @@ public final class SourceGeometryLiteral {
 
 	static void validateGeometryWrapper(GeometryWrapper wrapper) {
 		requireRecognizedCrs(wrapper);
+		requireFiniteOrdinates(wrapper.getParsingGeometry());
 		if (wrapper.getSrsInfo().isGeographic()
 				&& !wrapper.isEmpty()
 				&& !wrapper.getSrsInfo().getDomainEnvelope()
 						.contains(wrapper.getXYGeometry().getEnvelopeInternal())) {
 			throw new JenaGeoSparqlException("Geometry coordinates are outside the CRS domain for "
 					+ wrapper.getSrsURI());
+		}
+	}
+
+	/**
+	 * Requires finite horizontal ordinates and no infinite Z or M ordinate in every position. The CRS domain check
+	 * compares only the geometry envelope, which ignores a NaN ordinate after the first position. A NaN Z or M
+	 * ordinate denotes an absent ordinate.
+	 */
+	private static void requireFiniteOrdinates(Geometry geometry) {
+		for (Coordinate coordinate : geometry.getCoordinates()) {
+			if (!Double.isFinite(coordinate.getX()) || !Double.isFinite(coordinate.getY())
+					|| Double.isInfinite(coordinate.getZ()) || Double.isInfinite(coordinate.getM())) {
+				throw new JenaGeoSparqlException("Geometry ordinates must be finite");
+			}
 		}
 	}
 
@@ -194,6 +210,9 @@ public final class SourceGeometryLiteral {
 		}
 		if (GeoConstants.GEO_JSON_LITERAL.equals(datatype)) {
 			return GeoConstants.GEO_JSON_LITERAL;
+		}
+		if (GeoConstants.GEO_KML_LITERAL.equals(datatype)) {
+			return GeoConstants.GEO_KML_LITERAL;
 		}
 		if (GeoConstants.GEO_WKT_LITERAL.equals(datatype)
 				|| GeoConstants.XMLSCHEMA_OGC_WKT.equals(datatype)

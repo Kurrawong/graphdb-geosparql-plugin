@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
+import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -45,8 +45,8 @@ public class TransformFunctionTest {
 		assertTrue(entry.provider() instanceof QueryFunctionManifest.GeometryTargetSrsProvider);
 		QueryFunctionManifest.GeometryTargetSrsProvider provider =
 				(QueryFunctionManifest.GeometryTargetSrsProvider) entry.provider();
-		assertEquals(GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z,
-				provider.geoJsonResultDimensionPolicy());
+		assertEquals(Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z,
+				provider.crs84ResultDimensionPolicy());
 	}
 
 	@Test
@@ -159,7 +159,7 @@ public class TransformFunctionTest {
 						(geometry, targetSrsUri) -> {
 							throw failure;
 						},
-						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+						Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z));
 		Function function = new QueryFunctionRdf4jAdapter(entry);
 
 		ValueExprEvaluationException exception = assertThrows(
@@ -326,7 +326,7 @@ public class TransformFunctionTest {
 						(geometry, targetSrsUri) -> GeometryWrapperFactory.createPoint(
 								new Coordinate(1, 2), CRS84,
 								geometry.getGeometryDatatypeURI()),
-						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+						Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z));
 		Function function = new QueryFunctionRdf4jAdapter(entry);
 
 		assertThrows(ValueExprEvaluationException.class,
@@ -400,7 +400,7 @@ public class TransformFunctionTest {
 				new QueryFunctionManifest.GeometryTargetSrsProvider(
 						(geometry, targetSrsUri) -> GeometryWrapperFactory.createPoint(
 								coordinate, targetSrsUri, geometry.getGeometryDatatypeURI()),
-						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+						Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z));
 		return new QueryFunctionRdf4jAdapter(entry);
 	}
 

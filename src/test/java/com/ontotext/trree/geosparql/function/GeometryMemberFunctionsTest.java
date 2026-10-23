@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
+import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -170,7 +170,7 @@ public class GeometryMemberFunctionsTest {
 				GEOMETRY_N_URI, 2,
 				new QueryFunctionManifest.GeometryMemberProvider(
 						(geometry, index) -> geometry.envelope(),
-						GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z));
+						Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z));
 		Function function = new QueryFunctionRdf4jAdapter(entry);
 		Literal source = geoJson("{\"type\":\"Point\",\"coordinates\":[1,2,3]}");
 
@@ -267,9 +267,9 @@ public class GeometryMemberFunctionsTest {
 
 		assertEquals(2, geometryN.mandatoryArity());
 		assertTrue(geometryN.provider() instanceof QueryFunctionManifest.GeometryMemberProvider);
-		assertEquals(GeoJsonResultDimensionPolicy.PRESERVE_DEFINED_Z,
+		assertEquals(Crs84ResultDimensionPolicy.PRESERVE_DEFINED_Z,
 				((QueryFunctionManifest.GeometryMemberProvider) geometryN.provider())
-						.geoJsonResultDimensionPolicy());
+						.crs84ResultDimensionPolicy());
 		assertEquals(1, numGeometries.mandatoryArity());
 		assertTrue(numGeometries.provider() instanceof QueryFunctionManifest.UnaryGeometryIntegerProvider);
 	}

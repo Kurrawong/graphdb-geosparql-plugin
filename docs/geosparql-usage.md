@@ -23,7 +23,7 @@ INSERT DATA {
 }
 ```
 
-The plugin also discovers geometry literals supplied with `geo:asGML` and `geo:asGeoJSON`.
+The plugin also discovers geometry literals supplied with `geo:asGML`, `geo:asGeoJSON`, and `geo:asKML`.
 
 ### Enable the plugin
 

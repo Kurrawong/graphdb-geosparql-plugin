@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
+import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -41,7 +41,7 @@ public class QueryFunctionRdf4jAdapterTest {
 					assertEquals(Unit_URI.METRE_URL, unit);
 					assertEquals(1.0, radius, 1e-15);
 					return geometry.buffer(radius, Unit_URI.METRE_URL);
-				}, GeoJsonResultDimensionPolicy.XY_ONLY)));
+				}, Crs84ResultDimensionPolicy.XY_ONLY)));
 		Literal point = wkt("<" + EPSG_32634 + "> POINT(500000 4600000)");
 
 		Literal result = (Literal) function.evaluate(VF, point,

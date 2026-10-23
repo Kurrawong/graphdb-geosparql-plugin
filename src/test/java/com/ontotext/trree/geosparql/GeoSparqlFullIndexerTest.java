@@ -33,6 +33,7 @@ public class GeoSparqlFullIndexerTest {
 	private static final long AS_GEO_JSON = 12L;
 	private static final long HAS_DEFAULT_GEOMETRY = 13L;
 	private static final long HAS_SERIALIZATION = 14L;
+	private static final long AS_KML = 15L;
 	private static final long GEOMETRY_1 = 100L;
 	private static final long GEOMETRY_2 = 101L;
 	private static final long LITERAL_1 = 200L;
@@ -169,8 +170,10 @@ public class GeoSparqlFullIndexerTest {
 								+ "srsName='http://www.opengis.net/def/crs/OGC/1.3/CRS84'>"
 								+ "<gml:pos>1 1</gml:pos></gml:Point>", GeoConstants.GEO_GML_LITERAL),
 				SimpleValueFactory.getInstance().createLiteral(
-						"{\"type\":\"Point\",\"coordinates\":[1,1]}", GeoConstants.GEO_JSON_LITERAL));
-		List<Long> predicates = List.of(AS_WKT, AS_GML, AS_GEO_JSON);
+						"{\"type\":\"Point\",\"coordinates\":[1,1]}", GeoConstants.GEO_JSON_LITERAL),
+				SimpleValueFactory.getInstance().createLiteral(
+						"<Point><coordinates>1,1</coordinates></Point>", GeoConstants.GEO_KML_LITERAL));
+		List<Long> predicates = List.of(AS_WKT, AS_GML, AS_GEO_JSON, AS_KML);
 		Literal distinct = SimpleValueFactory.getInstance().createLiteral("POINT(2 2)", GeoConstants.GEO_WKT_LITERAL);
 		for (int i = 0; i < literals.size(); i++) {
 			Literal literal = literals.get(i);
@@ -207,6 +210,7 @@ public class GeoSparqlFullIndexerTest {
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.asKML = AS_KML;
 		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		plugin.setConfig(new GeoSparqlConfig());

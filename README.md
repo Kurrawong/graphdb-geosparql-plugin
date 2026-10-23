@@ -1,7 +1,7 @@
 # GraphDB GeoSPARQL Plugin
 
 The GraphDB GeoSPARQL Plugin adds indexed GeoSPARQL predicates and SPARQL functions for querying and transforming
-geometry data in GraphDB 11. It supports WKT, GML, and GeoJSON literals, spatial relationships, measurements,
+geometry data in GraphDB 11. It supports WKT, GML, GeoJSON, and KML literals, spatial relationships, measurements,
 coordinate transformations, and geometry conversion.
 
 Install the plugin using the steps below, then follow [Using the GeoSPARQL plugin](docs/geosparql-usage.md) to enable
@@ -38,7 +38,7 @@ Build the plugin as described under [Building from source](#building-from-source
   error handling.
 - [GeoSPARQL functions and predicates reference](docs/geosparql-functions-and-predicates.md) — supported functions,
   signatures, indexed predicates, geometry data-model properties, and GraphDB extensions.
-- [Geometry serialization and conversion](docs/geosparql-geometry-serialization.md) — WKT, GML, and GeoJSON formats,
+- [Geometry serialization and conversion](docs/geosparql-geometry-serialization.md) — WKT, GML, GeoJSON, and KML formats,
   conversion rules, dimensions, metadata, and indexing behavior.
 - [GeoSPARQL CRS deployment](docs/geosparql-crs-deployment.md) — Apache SIS data, projected CRS support, validation,
   and troubleshooting.

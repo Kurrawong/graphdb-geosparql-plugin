@@ -10,7 +10,7 @@ import java.util.function.Function;
  * Rebuilds the complete GeoSPARQL Lucene index from repository geometry statements.
  *
  * <p>{@link GeoSparqlPlugin} uses this class for enable-time indexing and explicit force reindex. A rebuild starts
- * from a fresh index, then visits {@code geo:asWKT}, {@code geo:asGML}, {@code geo:asGeoJSON},
+ * from a fresh index, then visits {@code geo:asWKT}, {@code geo:asGML}, {@code geo:asGeoJSON}, {@code geo:asKML},
  * {@code geo:hasSerialization}, and Feature
  * {@code geo:hasDefaultGeometry} statements in that order. Each source geometry literal is converted and indexed
  * before the repository iterator advances. Generic serialization statements that duplicate a format-specific
@@ -41,6 +41,7 @@ public class GeoSparqlFullIndexer {
 		indexGeometryResources(pluginConnection, plugin.asWKT, subjectMapper);
 		indexGeometryResources(pluginConnection, plugin.asGML, subjectMapper);
 		indexGeometryResources(pluginConnection, plugin.asGeoJSON, subjectMapper);
+		indexGeometryResources(pluginConnection, plugin.asKML, subjectMapper);
 		indexGeometryResources(pluginConnection, plugin.hasSerialization, subjectMapper);
 		indexFeatures(pluginConnection, subjectMapper);
 	}
@@ -65,6 +66,7 @@ public class GeoSparqlFullIndexer {
 				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.asWKT, subjectMapper);
 				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.asGML, subjectMapper);
 				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.asGeoJSON, subjectMapper);
+				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.asKML, subjectMapper);
 				indexFeatureGeometry(pluginConnection, iterator.subject, iterator.object, plugin.hasSerialization,
 						subjectMapper);
 			}
@@ -91,7 +93,8 @@ public class GeoSparqlFullIndexer {
 		if (predicate == plugin.hasSerialization
 				&& (pluginConnection.getStatements().has(geometryResourceId, plugin.asWKT, literalId)
 						|| pluginConnection.getStatements().has(geometryResourceId, plugin.asGML, literalId)
-						|| pluginConnection.getStatements().has(geometryResourceId, plugin.asGeoJSON, literalId))) {
+						|| pluginConnection.getStatements().has(geometryResourceId, plugin.asGeoJSON, literalId)
+						|| pluginConnection.getStatements().has(geometryResourceId, plugin.asKML, literalId))) {
 			return;
 		}
 		IndexGeometry geometry = plugin.getIndexGeometryFromLiteralId(geometryResourceId, literalId,

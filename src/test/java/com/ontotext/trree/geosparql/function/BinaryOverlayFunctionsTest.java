@@ -1,6 +1,6 @@
 package com.ontotext.trree.geosparql.function;
 
-import com.ontotext.trree.geosparql.jena.GeoJsonResultDimensionPolicy;
+import com.ontotext.trree.geosparql.jena.Crs84ResultDimensionPolicy;
 import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
@@ -47,8 +47,8 @@ public class BinaryOverlayFunctionsTest {
 					entry.provider() instanceof QueryFunctionManifest.BinaryGeometryProvider);
 			QueryFunctionManifest.BinaryGeometryProvider provider =
 					(QueryFunctionManifest.BinaryGeometryProvider) entry.provider();
-			assertEquals(functionUri, GeoJsonResultDimensionPolicy.XY_ONLY,
-					provider.geoJsonResultDimensionPolicy());
+			assertEquals(functionUri, Crs84ResultDimensionPolicy.XY_ONLY,
+					provider.crs84ResultDimensionPolicy());
 		}
 	}
 
