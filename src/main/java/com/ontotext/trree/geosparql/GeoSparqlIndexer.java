@@ -23,7 +23,7 @@ public interface GeoSparqlIndexer {
 	 * Replaces all indexed geometry documents for an entity during an incremental update.
 	 *
 	 * @param subject  id of the subject
-	 * @param geometries geometries that corresponds to asWKT/asGML's object
+	 * @param geometries index geometries derived from the entity's supported geometry serializations
 	 */
 	void indexGeometryList(long subject, Function<Long, String> subjectMapper, List<IndexGeometry> geometries);
 
@@ -108,11 +108,20 @@ public interface GeoSparqlIndexer {
 	}
 
 	/**
-	 * Makes the most recently committed index transaction final after GraphDB completes the RDF transaction.
+	 * Finalizes index state after GraphDB commits the RDF transaction.
+	 *
+	 * <p>The GraphDB transaction can no longer be aborted at this point. Implementations must retain durable
+	 * fail-closed recovery state before reporting a finalization failure.
 	 */
 	default void complete() throws Exception {
 	}
 
+	/**
+	 * Restores the pre-transaction index after GraphDB aborts the RDF transaction.
+	 *
+	 * <p>The RDF outcome is already fixed when this method runs. Implementations must retain durable fail-closed
+	 * recovery state before reporting a restoration failure.
+	 */
 	void rollback() throws Exception;
 
 	/**

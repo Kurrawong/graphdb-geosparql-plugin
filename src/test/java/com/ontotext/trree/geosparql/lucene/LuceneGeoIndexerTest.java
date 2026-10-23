@@ -10,6 +10,7 @@ import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.sdk.PluginException;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.lucene.document.Document;
@@ -53,6 +54,7 @@ import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.locationtech.spatial4j.context.SpatialContext;
 import org.junit.After;
 import org.junit.Before;
@@ -113,6 +115,7 @@ public class LuceneGeoIndexerTest {
 
     @Before
     public void init() throws Exception {
+        JenaGeometryAdapter.initialize();
         initializeTestSpatialStrategy();
 		sampleGeometry = TestIndexGeometries.fromWkt("POINT(1 2)");
     }
@@ -409,6 +412,39 @@ public class LuceneGeoIndexerTest {
             geometries.close();
         }
     }
+
+	@Test
+	public void entityTraversalRestoresWktGmlAndGeoJsonSourceLiteralIdentity() throws Exception {
+		SourceGeometryLiteral wkt = SourceGeometryLiteral.fromLiteral(SimpleValueFactory.getInstance().createLiteral(
+				"POINT(1 2)", GeoConstants.GEO_WKT_LITERAL));
+		SourceGeometryLiteral gml = SourceGeometryLiteral.fromLiteral(SimpleValueFactory.getInstance().createLiteral(
+				"<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" "
+						+ "srsName=\"http://www.opengis.net/def/crs/OGC/1.3/CRS84\"><gml:pos>1 2</gml:pos>"
+						+ "</gml:Point>", GeoConstants.GEO_GML_LITERAL));
+		SourceGeometryLiteral geoJson = SourceGeometryLiteral.fromLiteral(SimpleValueFactory.getInstance().createLiteral(
+				"{\"type\":\"Point\",\"coordinates\":[1,2]}", GeoConstants.GEO_JSON_LITERAL));
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("serialization-source-identities");
+		Files.createDirectories(dataDir);
+
+		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+		indexer.begin();
+		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(
+				IndexGeometry.fromSourceGeometryLiteral(wkt),
+				IndexGeometry.fromSourceGeometryLiteral(gml),
+				IndexGeometry.fromSourceGeometryLiteral(geoJson)));
+		indexer.commit();
+		indexer.complete();
+
+		Set<SourceGeometryLiteral> restored = new HashSet<>();
+		try (CloseableIterator<SourceGeometryLiteral> geometries =
+					createIndexer(dataDir.toFile()).getSourceGeometryLiteralsFor(1L)) {
+			while (geometries.hasNext()) {
+				restored.add(geometries.next());
+			}
+		}
+
+		assertEquals(Set.of(wkt, gml, geoJson), restored);
+	}
 
     @Test
     public void sourceGeometryIteratorDiscardsSourceReuseAtEntityBoundary() throws Exception {
@@ -1070,6 +1106,9 @@ public class LuceneGeoIndexerTest {
         assertEquals(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_VALUE,
                 ((DirectoryReader) reader).getIndexCommit().getUserData()
                         .get(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY));
+		assertEquals(LuceneGeoDocumentSchema.COMMIT_SERIALIZATION_DISCOVERY_VALUE,
+				((DirectoryReader) reader).getIndexCommit().getUserData()
+						.get(LuceneGeoDocumentSchema.COMMIT_SERIALIZATION_DISCOVERY_KEY));
     }
 
     private boolean hasRequiredEntityIdDocValues(IndexReader reader) {

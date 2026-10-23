@@ -39,8 +39,7 @@ import static org.junit.Assert.*;
 /**
  * Verifies that the prefix tree and the precision can be changed and that the changes affect the index on the next
  * full indexing operation. When force reindex fails, transaction abort restores the prior runtime configuration and
- * Lucene index before removing the pending marker. Regression provenance:
- * https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/2.
+ * Lucene index before removing the pending marker.
  */
 public class TestChangeSettings extends AbstractGeoSparqlPluginTest {
     private static final String SPATIAL_PREFIX_FIELD = "geoData1";

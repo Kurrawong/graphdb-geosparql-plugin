@@ -27,8 +27,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Lucene mutation and persistence failures abort index writes even when {@code ignoreErrors=true}.
  *
- * <p>Provenance: <a href="https://github.com/Kurrawong/graphdb-geosparql-plugin/issues/5">#5</a>.
- * {@code ignoreErrors} remains limited to source-data conversion failures such as malformed literals and
+ * <p>{@code ignoreErrors} remains limited to source-data conversion failures such as malformed literals and
  * unsupported CRS values. Skip coverage for those source-data failures remains in
  * {@link com.ontotext.trree.geosparql.TestPluginIgnoreErrors}.
  */

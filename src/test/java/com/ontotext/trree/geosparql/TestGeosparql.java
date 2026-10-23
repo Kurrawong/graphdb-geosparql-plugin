@@ -6,6 +6,7 @@ import com.ontotext.test.functional.base.SingleRepositoryFunctionalTest;
 import com.ontotext.test.utils.StandardUtils;
 import com.ontotext.trree.geosparql.jena.GeoSparqlUnits;
 import com.ontotext.trree.geosparql.jena.JenaFunctionEvaluator;
+import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.commons.lang.Validate;
 import org.eclipse.rdf4j.common.exception.RDF4JException;
@@ -17,6 +18,7 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
+import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.query.algebra.evaluation.ValueExprEvaluationException;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -26,7 +28,7 @@ import org.junit.*;
 import static org.junit.Assert.*;
 
 /**
- * Created by avataar on 06.04.2015..
+ * Repository-level SPARQL coverage for GeoSPARQL functions and reusable, datatype-aware geometry results.
  */
 public class TestGeosparql extends SingleRepositoryFunctionalTest {
 	@ClassRule
@@ -233,6 +235,149 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 		assertEquals(0, count(tq.evaluate()));
 	}
 
+	@Test
+	public void geometryResultsUseDatatypeAwareSerializationThroughSparql() throws RDF4JException {
+		IRI geometry = vf().createIRI("u:geometry");
+		conn().add(vf().createIRI("u:wkt"), geometry,
+				vf().createLiteral("LINESTRING Z (0 0 1, 1 1 2)", GeoConstants.GEO_WKT_LITERAL));
+		conn().add(vf().createIRI("u:gml"), geometry, vf().createLiteral(
+				"<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\" srsName="
+						+ "\"http://www.opengis.net/def/crs/EPSG/0/32634\">"
+						+ "<gml:pos>799997.80 4589779.63</gml:pos></gml:Point>",
+				GeoConstants.GEO_GML_LITERAL));
+
+		Literal wktResult = singleLiteralResult("SELECT ?result WHERE { <u:wkt> <u:geometry> ?source . "
+				+ "BIND(<" + GeoConstants.EXT_SIMPLIFY + ">(?source, 0.0) AS ?result) }");
+		Literal gmlResult = singleLiteralResult("SELECT ?result WHERE { <u:gml> <u:geometry> ?source . "
+				+ "BIND(<" + GeoConstants.GEOF_ENVELOPE + ">(?source) AS ?result) }");
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, wktResult.getDatatype());
+		assertEquals("LINESTRING (0 0, 1 1)", wktResult.stringValue());
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(wktResult)
+				.asGeometryWrapper().getCoordinateDimension());
+		assertEquals(GeoConstants.GEO_GML_LITERAL, gmlResult.getDatatype());
+		assertTrue(gmlResult.stringValue().startsWith("<gml:"));
+		assertEquals("http://www.opengis.net/def/crs/EPSG/0/32634",
+				JenaGeometryAdapter.toSourceGeometryLiteral(gmlResult).effectiveCrsUri());
+	}
+
+	@Test
+	public void storedGeoJsonGraphPatternIsVisibleAndReusableThroughSparql() throws RDF4JException {
+		IRI subject = vf().createIRI("u:geojson");
+		IRI boundsPredicate = vf().createIRI("u:bounds");
+		Literal stored = vf().createLiteral(
+				"{\"type\":\"LineString\",\"coordinates\":[[0,0,10],[1,0.1,20],[2,0,30]]}",
+				GeoConstants.GEO_JSON_LITERAL);
+		Literal bounds = vf().createLiteral(
+				"{\"type\":\"Polygon\",\"coordinates\":[[[-1,-1],[-1,1],[3,1],[3,-1],[-1,-1]]]}",
+				GeoConstants.GEO_JSON_LITERAL);
+		conn().add(subject, GeoConstants.GEO_AS_GEO_JSON, stored);
+		conn().add(subject, boundsPredicate, bounds);
+
+		Literal retrieved = singleLiteralResult("SELECT ?result WHERE { <u:geojson> <"
+				+ GeoConstants.GEO_AS_GEO_JSON + "> ?result }");
+		Literal simplified = singleLiteralResult("SELECT ?result WHERE { <u:geojson> <"
+				+ GeoConstants.GEO_AS_GEO_JSON + "> ?source . BIND(<" + GeoConstants.EXT_SIMPLIFY
+				+ ">(?source, 0.2) AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { <u:geojson> <" + GeoConstants.GEO_AS_GEO_JSON + "> ?source ; "
+						+ "<u:bounds> ?bounds . FILTER(<" + GeoConstants.GEOF_SF_WITHIN
+						+ ">(?source, ?bounds)) }").evaluate();
+
+		assertEquals(stored, retrieved);
+		assertTrue(within);
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, simplified.getDatatype());
+		assertEquals(2, JenaGeometryAdapter.toSourceGeometryLiteral(simplified)
+				.asGeometryWrapper().getCoordinateDimension());
+	}
+
+	@Test
+	public void asGeoJsonConvertsWktAndComposesThroughSparql() {
+		String asGeoJson = "http://www.opengis.net/def/function/geosparql/asGeoJSON";
+		Literal result = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<"
+						+ asGeoJson
+						+ ">(\"POINT(1 2)\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL
+						+ ">) AS ?result) }");
+		Literal envelope = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<"
+						+ asGeoJson
+						+ ">(\"LINESTRING(1 2,2 3)\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL
+						+ ">) AS ?converted) BIND(<"
+						+ GeoConstants.GEOF_ENVELOPE
+						+ ">(?converted) AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<"
+						+ asGeoJson
+						+ ">(\"POINT(1 2)\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL
+						+ ">) AS ?result) "
+						+ "FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?result, "
+						+ "\"{\\\"type\\\":\\\"Polygon\\\",\\\"coordinates\\\":[[[0,0],[0,3],[3,3],[3,0],[0,0]]]}\""
+						+ "^^<" + GeoConstants.GEO_JSON_LITERAL + ">)) }").evaluate();
+
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, result.getDatatype());
+		assertEquals("{\"type\":\"Point\",\"coordinates\":[1,2]}", result.stringValue());
+		assertEquals(GeoConstants.GEO_JSON_LITERAL, envelope.getDatatype());
+		assertTrue(within);
+	}
+
+	@Test
+	public void asWktConvertsGeoJsonAndComposesThroughSparql() {
+		String asWkt = "http://www.opengis.net/def/function/geosparql/asWKT";
+		String point = "{\"type\":\"Point\",\"coordinates\":[1,2]}";
+		Literal result = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<"
+						+ asWkt
+						+ ">(\"" + point.replace("\"", "\\\"") + "\"^^<"
+						+ GeoConstants.GEO_JSON_LITERAL
+						+ ">) AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<"
+						+ asWkt
+						+ ">(\"" + point.replace("\"", "\\\"") + "\"^^<"
+						+ GeoConstants.GEO_JSON_LITERAL
+						+ ">) AS ?result) FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?result, "
+						+ "\"POLYGON((0 0,0 3,3 3,3 0,0 0))\"^^<"
+						+ GeoConstants.GEO_WKT_LITERAL + ">)) }").evaluate();
+
+		assertEquals(GeoConstants.GEO_WKT_LITERAL, result.getDatatype());
+		assertTrue(JenaGeometryAdapter.toSourceGeometryLiteral(result).asGeometryWrapper().getParsingGeometry()
+				.equalsExact(JenaGeometryAdapter.toSourceGeometryLiteral(
+						vf().createLiteral("POINT(1 2)", GeoConstants.GEO_WKT_LITERAL))
+						.asGeometryWrapper().getParsingGeometry()));
+		assertTrue(within);
+	}
+
+	@Test
+	public void asGmlUsesTheSupportedProfileAndComposesThroughSparql() {
+		String asGml = "http://www.opengis.net/def/function/geosparql/asGML";
+		String profile = "http://www.opengis.net/def/profile/ogc/2.0/gml-sf0";
+		Literal result = singleLiteralResult(
+				"SELECT ?result WHERE { BIND(<" + asGml + ">(" +
+						"\"POINT(1 2)\"^^<" + GeoConstants.GEO_WKT_LITERAL + ">, " +
+						"\"" + profile + "\") AS ?result) }");
+		boolean within = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<" + asGml + ">(" +
+						"\"POINT(1 2)\"^^<" + GeoConstants.GEO_WKT_LITERAL + ">, " +
+						"\"" + profile + "\") AS ?result) " +
+						"FILTER(<" + GeoConstants.GEOF_SF_WITHIN + ">(?result, " +
+						"\"POLYGON((0 0,0 3,3 3,3 0,0 0))\"^^<" +
+						GeoConstants.GEO_WKT_LITERAL + ">)) }").evaluate();
+		boolean unsupportedProfileBinds = conn().prepareBooleanQuery(QueryLanguage.SPARQL,
+				"ASK WHERE { BIND(<" + asGml + ">(" +
+						"\"POINT(1 2)\"^^<" + GeoConstants.GEO_WKT_LITERAL + ">, " +
+						"\"http://example.com/profile\") AS ?result) FILTER(BOUND(?result)) }").evaluate();
+
+		assertEquals(GeoConstants.GEO_GML_LITERAL, result.getDatatype());
+		assertTrue(result.stringValue().startsWith(
+				"<gml:Point xmlns:gml=\"http://www.opengis.net/gml/3.2\""));
+		assertTrue(within);
+		assertFalse(unsupportedProfileBinds);
+	}
+
 	@Test public void invalidGeometriesReportValidityAndRejectDifference() throws RDF4JException {
 		Literal invalidGeo = asLiteral("POLYGON((2 2, 3 3, 3 2, 2 3, 2 2))");
 		Literal validGeo = asLiteral("POLYGON((2 2, 2 3, 3 3, 3 2, 2 2))");
@@ -277,6 +422,16 @@ public class TestGeosparql extends SingleRepositoryFunctionalTest {
 
 	private Value evaluate(IRI functionUri, Value... args) throws ValueExprEvaluationException {
 		return JenaFunctionEvaluator.evaluate(vf(), functionUri.stringValue(), args);
+	}
+
+	private Literal singleLiteralResult(String query) {
+		try (TupleQueryResult results = conn().prepareTupleQuery(QueryLanguage.SPARQL, query).evaluate()) {
+			assertTrue(results.hasNext());
+			Value result = results.next().getValue("result");
+			assertFalse(results.hasNext());
+			assertTrue(result instanceof Literal);
+			return (Literal) result;
+		}
 	}
 
 	private Literal asLiteral(String geom) {

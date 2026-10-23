@@ -124,6 +124,19 @@ public class LuceneGeoSchemaTest {
 	}
 
 	@Test
+	public void indexWithoutGeoJsonSerializationDiscoveryPolicyRequiresReindex() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("missing-geojson-discovery-policy");
+		Files.createDirectories(dataDir);
+		writeIndexWithoutGeoJsonDiscoveryPolicy(dataDir);
+
+		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+
+		PluginException exception = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(exception);
+	}
+
+	@Test
 	public void forceReindexAdoptsCurrentCrsEnvironment() throws Exception {
 		Path dataDir = tmpFolder.getRoot().toPath().resolve("reindexed-crs-environment");
 		Files.createDirectories(dataDir);
@@ -398,20 +411,29 @@ public class LuceneGeoSchemaTest {
     }
 
     @Test
-    public void testEmptyIndexWithoutCommitSchemaMarkerAcceptsV2WritesAndGainsMarker() throws Exception {
+    public void emptyIndexWithoutCompatibilityMetadataRequiresForceReindex() throws Exception {
         Path emptyDataDir = tmpFolder.getRoot().toPath().resolve("empty-no-marker");
         Files.createDirectories(emptyDataDir);
         writeEmptyIndexWithoutCommitMarker(emptyDataDir);
 
         LuceneGeoIndexer indexer = createIndexer(emptyDataDir.toFile());
+		PluginException exception = assertThrows(PluginException.class,
+				() -> indexer.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(exception);
+
         indexer.begin();
-        indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		indexer.freshIndex();
         indexer.commit();
 		indexer.complete();
 
+		LuceneGeoIndexer restarted = createIndexer(emptyDataDir.toFile());
+		try (CloseableIterator<SourceGeometryLiteral> geometries = restarted.getSourceGeometryLiteralsFor(0)) {
+			assertFalse(geometries.hasNext());
+		}
+
         try (FSDirectory dir = FSDirectory.open(GeoSparqlConfig.resolveIndexPath(emptyDataDir));
              IndexReader reader = DirectoryReader.open(dir)) {
-            assertEquals(1, reader.numDocs());
+			assertEquals(0, reader.numDocs());
             assertCurrentSchemaCommitData(reader);
         }
     }
@@ -467,6 +489,24 @@ public class LuceneGeoSchemaTest {
     }
 
 	@Test
+	public void forceReindexRollbackRetainsMissingGeoJsonDiscoveryPolicy() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("rollback-geojson-discovery-policy");
+		Files.createDirectories(dataDir);
+		writeIndexWithoutGeoJsonDiscoveryPolicy(dataDir);
+
+		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+		indexer.begin();
+		indexer.freshIndex();
+		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		indexer.rollback();
+
+		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
+		PluginException exception = assertThrows(PluginException.class,
+				() -> restarted.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(exception);
+	}
+
+	@Test
 	public void forceReindexPostCommitAbortRestoresPreviousSchemaGateAfterRestart() throws Exception {
 		Path dataDir = tmpFolder.getRoot().toPath().resolve("post-commit-reindex-abort");
 		Files.createDirectories(dataDir);
@@ -483,6 +523,41 @@ public class LuceneGeoSchemaTest {
 		PluginException exception = assertThrows(PluginException.class,
 				() -> restarted.getSourceGeometryLiteralsFor(0));
 		assertForceReindexMessage(exception);
+	}
+
+	@Test
+	public void commitlessForceReindexPostCommitAbortRestoresIncompatibleEmptyState() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("commitless-post-commit-reindex-abort");
+		Files.createDirectories(dataDir);
+
+		LuceneGeoIndexer indexer = createIndexer(dataDir.toFile());
+		indexer.begin();
+		indexer.freshIndex();
+		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		indexer.commit();
+		indexer.rollback();
+
+		PluginException liveReadException = assertThrows(PluginException.class, () -> {
+			try (CloseableIterator<SourceGeometryLiteral> ignored = indexer.getSourceGeometryLiteralsFor(0)) {
+				// The compatibility gate rejects the query before iteration starts.
+			}
+		});
+		assertForceReindexMessage(liveReadException);
+
+		indexer.begin();
+		try {
+			PluginException liveWriteException = assertThrows(PluginException.class,
+					() -> indexer.indexGeometryList(
+							2L, subject -> "Subject " + subject, List.of(sampleGeometry)));
+			assertForceReindexMessage(liveWriteException);
+		} finally {
+			indexer.rollback();
+		}
+
+		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
+		PluginException restartException = assertThrows(PluginException.class,
+				() -> restarted.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(restartException);
 	}
 
     @Test
@@ -528,6 +603,27 @@ public class LuceneGeoSchemaTest {
 				() -> indexer.getSourceGeometryLiteralsFor(0));
 		assertForceReindexMessage(mismatch);
     }
+
+	@Test
+	public void failedForceReindexRetainsMissingGeoJsonDiscoveryPolicy() throws Exception {
+		Path dataDir = tmpFolder.getRoot().toPath().resolve("failed-geojson-discovery-policy");
+		Files.createDirectories(dataDir);
+		writeIndexWithoutGeoJsonDiscoveryPolicy(dataDir);
+
+		FailingCommitLuceneGeoIndexer indexer = createFailingCommitIndexer(dataDir.toFile());
+		indexer.begin();
+		indexer.freshIndex();
+		indexer.indexGeometryList(1L, subject -> "Subject " + subject, List.of(sampleGeometry));
+		indexer.failCommitClose();
+
+		assertThrows(IOException.class, indexer::commit);
+		indexer.rollback();
+
+		LuceneGeoIndexer restarted = createIndexer(dataDir.toFile());
+		PluginException exception = assertThrows(PluginException.class,
+				() -> restarted.getSourceGeometryLiteralsFor(0));
+		assertForceReindexMessage(exception);
+	}
 
     @Test
     public void testSuccessfulForceReindexFromSchemaMismatchClearsGateAndWritesMarker() throws Exception {
@@ -609,6 +705,9 @@ public class LuceneGeoSchemaTest {
         assertEquals(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_VALUE,
                 ((DirectoryReader) reader).getIndexCommit().getUserData()
                         .get(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY));
+		assertEquals("wkt-gml-geojson",
+				((DirectoryReader) reader).getIndexCommit().getUserData()
+						.get("geosparql.serializationDiscovery"));
     }
 
     private boolean hasRequiredEntityIdDocValues(IndexReader reader) {
@@ -657,6 +756,23 @@ public class LuceneGeoSchemaTest {
             writer.addDocument(currentSchemaDocument(1L, sampleGeometry));
         }
     }
+
+	private void writeIndexWithoutGeoJsonDiscoveryPolicy(Path dataDir) throws Exception {
+		Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
+		Files.createDirectories(indexDir);
+		try (FSDirectory dir = FSDirectory.open(indexDir);
+				IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig())) {
+			writer.addDocument(currentSchemaDocument(1L, sampleGeometry));
+			Map<String, String> commitData = new HashMap<>();
+			commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_KEY,
+					LuceneGeoDocumentSchema.COMMIT_SCHEMA_VERSION_VALUE);
+			commitData.put(LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_KEY,
+					LuceneGeoDocumentSchema.COMMIT_SCHEMA_LAYOUT_VALUE);
+			commitData.put(LuceneGeoDocumentSchema.COMMIT_CRS_ENVIRONMENT_FINGERPRINT_KEY,
+					"test-crs-environment");
+			writer.setLiveCommitData(commitData.entrySet());
+		}
+	}
 
     private void writeMarkedCurrentSchemaIndex(Path dataDir) throws Exception {
         Path indexDir = GeoSparqlConfig.resolveIndexPath(dataDir);
