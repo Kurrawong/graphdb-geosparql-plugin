@@ -159,6 +159,7 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 | `geomLiteral geof:envelope(geomLiteral geometry)` | Returns the axis-aligned bounding rectangle of `geometry`. |
 | `geomLiteral geof:intersection(geomLiteral left, geomLiteral right)` | Returns the point-set intersection of `left` and `right` in the CRS of `left`. |
 | `geomLiteral geof:symDifference(geomLiteral left, geomLiteral right)` | Returns the points that occur in either input but not in both, in the CRS of `left`. |
+| `geomLiteral geof:simplify(geomLiteral geometry, numeric tolerance)` | Simplifies `geometry` using Douglas-Peucker with a finite, nonnegative `tolerance` in source CRS coordinate units. The result retains the source CRS and literal datatype; topology is not guaranteed to be preserved. |
 | `geomLiteral geof:union(geomLiteral left, geomLiteral right)` | Returns the point-set union of `left` and `right` in the CRS of `left`. |
 
 ## Measurements
@@ -194,6 +195,12 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 | `xsd:double geof:minX(geomLiteral geometry)` | Returns the smallest first ordinate in source SRS coordinate order. |
 | `xsd:double geof:minY(geomLiteral geometry)` | Returns the smallest second ordinate in source SRS coordinate order. |
 | `xsd:double geof:minZ(geomLiteral geometry)` | Returns the smallest finite Z ordinate. An XY or XYM geometry produces an error. |
+| `xsd:double geof:X(geomLiteral point)` | Returns a Point's first ordinate in source SRS coordinate order. |
+| `xsd:double geof:Y(geomLiteral point)` | Returns a Point's second ordinate in source SRS coordinate order. |
+| `xsd:double geof:Z(geomLiteral point)` | Returns a Point's Z ordinate. A missing or non-finite Z produces an error. |
+| `xsd:double geof:M(geomLiteral point)` | Returns a Point's M ordinate. A missing or non-finite M produces an error. |
+| `xsd:double geof:easting(geomLiteral point)` | Returns the ordinate on the Point CRS's eastward axis, in that axis's unit. A CRS without an eastward axis produces an error. |
+| `xsd:double geof:northing(geomLiteral point)` | Returns the ordinate on the Point CRS's northward axis, in that axis's unit. A CRS without a northward axis produces an error. |
 | `xsd:integer geof:numGeometries(geomLiteral geometry)` | Returns the number of direct structural geometry members. An atomic geometry counts as one. |
 | `xsd:integer geof:spatialDimension(geomLiteral geometry)` | Returns the number of spatial coordinate dimensions. |
 
@@ -202,6 +209,7 @@ and the [EPSG units catalogue](https://epsg.io/?q=+kind%3AUNIT).
 | Function | Description |
 | --- | --- |
 | `geomLiteral geof:transform(geomLiteral geometry, uri targetSrs)` | Transforms the geometry coordinates to `targetSrs`. |
+| `geomLiteral geof:transformCRS84(geomLiteral geometry)` | Transforms the geometry coordinates to CRS84, retaining the input geometry literal datatype. |
 | `xsd:anyURI geof:getSRID(geomLiteral geometry)` | Returns the source geometry literal's CRS URI. |
 
 ## Spatial relationships
