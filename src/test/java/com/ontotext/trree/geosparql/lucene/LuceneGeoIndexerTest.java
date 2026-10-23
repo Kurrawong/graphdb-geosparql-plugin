@@ -10,6 +10,7 @@ import com.ontotext.trree.geosparql.TestIndexGeometries;
 import com.ontotext.trree.geosparql.jena.JenaGeoSparqlException;
 import com.ontotext.trree.geosparql.jena.SourceGeometryLiteral;
 import com.ontotext.trree.geosparql.jena.IndexGeometry;
+import com.ontotext.trree.geosparql.jena.JenaGeometryAdapter;
 import com.ontotext.trree.sdk.PluginException;
 import com.ontotext.trree.geosparql.vocabulary.GeoConstants;
 import org.apache.lucene.document.Document;
@@ -114,6 +115,7 @@ public class LuceneGeoIndexerTest {
 
     @Before
     public void init() throws Exception {
+        JenaGeometryAdapter.initialize();
         initializeTestSpatialStrategy();
 		sampleGeometry = TestIndexGeometries.fromWkt("POINT(1 2)");
     }
