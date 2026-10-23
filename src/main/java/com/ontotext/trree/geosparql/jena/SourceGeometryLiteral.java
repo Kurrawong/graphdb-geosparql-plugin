@@ -138,31 +138,48 @@ public final class SourceGeometryLiteral {
 
 	public GeometryWrapper asGeometryWrapper() {
 		if (geometryWrapper == null) {
-			try {
-				geometryWrapper = GeometryWrapper.extract(jenaLexicalForm, jenaDatatype.stringValue());
-			} catch (DatatypeFormatException e) {
-				throw new JenaGeoSparqlException("Invalid GeoSPARQL geometry literal: " + e.getMessage(), e);
-			} catch (ServiceConfigurationError e) {
-				throw new JenaGeoSparqlException("Invalid GeoSPARQL geometry literal: " + e.getMessage(), e);
-			} catch (RuntimeException e) {
-				throw new JenaGeoSparqlException("Invalid GeoSPARQL geometry literal: " + e.getMessage(), e);
-			}
-
+			geometryWrapper = extractGeometryWrapper();
 			validateGeometryWrapper();
 		}
 		return geometryWrapper;
 	}
 
-	private void validateGeometryWrapper() {
-		if (!geometryWrapper.isSRSRecognised()) {
-			throw new JenaGeoSparqlException(unsupportedCrsMessage(geometryWrapper.getSrsURI()), null, true);
+	GeometryWrapper asTransformResultGeometryWrapper() {
+		GeometryWrapper wrapper = extractGeometryWrapper();
+		requireRecognizedCrs(wrapper);
+		return wrapper;
+	}
+
+	private GeometryWrapper extractGeometryWrapper() {
+		try {
+			return GeometryWrapper.extract(jenaLexicalForm, jenaDatatype.stringValue());
+		} catch (DatatypeFormatException e) {
+			throw new JenaGeoSparqlException("Invalid GeoSPARQL geometry literal: " + e.getMessage(), e);
+		} catch (ServiceConfigurationError e) {
+			throw new JenaGeoSparqlException("Invalid GeoSPARQL geometry literal: " + e.getMessage(), e);
+		} catch (RuntimeException e) {
+			throw new JenaGeoSparqlException("Invalid GeoSPARQL geometry literal: " + e.getMessage(), e);
 		}
-		if (geometryWrapper.getSrsInfo().isGeographic()
-				&& !geometryWrapper.isEmpty()
-				&& !geometryWrapper.getSrsInfo().getDomainEnvelope()
-						.contains(geometryWrapper.getXYGeometry().getEnvelopeInternal())) {
+	}
+
+	private void validateGeometryWrapper() {
+		validateGeometryWrapper(geometryWrapper);
+	}
+
+	static void validateGeometryWrapper(GeometryWrapper wrapper) {
+		requireRecognizedCrs(wrapper);
+		if (wrapper.getSrsInfo().isGeographic()
+				&& !wrapper.isEmpty()
+				&& !wrapper.getSrsInfo().getDomainEnvelope()
+						.contains(wrapper.getXYGeometry().getEnvelopeInternal())) {
 			throw new JenaGeoSparqlException("Geometry coordinates are outside the CRS domain for "
-					+ geometryWrapper.getSrsURI());
+					+ wrapper.getSrsURI());
+		}
+	}
+
+	static void requireRecognizedCrs(GeometryWrapper wrapper) {
+		if (!wrapper.isSRSRecognised()) {
+			throw new JenaGeoSparqlException(unsupportedCrsMessage(wrapper.getSrsURI()), null, true);
 		}
 	}
 

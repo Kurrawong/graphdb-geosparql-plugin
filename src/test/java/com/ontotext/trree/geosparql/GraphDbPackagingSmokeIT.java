@@ -1,10 +1,10 @@
 package com.ontotext.trree.geosparql;
 
-import org.junit.ClassRule;
 import org.junit.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.images.builder.ImageFromDockerfile;
+import org.testcontainers.utility.MountableFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -30,6 +30,10 @@ public class GraphDbPackagingSmokeIT {
 	private static final String SIS_DATA_DIR_PROPERTY = "graphdb.packagingSmoke.sisDataDir";
 	private static final String GRAPHDB_IMAGE_PROPERTY = "graphdb.packagingSmoke.graphdbImage";
 	private static final String JAVA_IMAGE_PROPERTY = "graphdb.packagingSmoke.javaImage";
+	private static final String DATUM_GRID_FILENAME = "nzgd2kgrid0005.gsb";
+	private static final String DATUM_GRID_RESOURCE = "datum-grids/" + DATUM_GRID_FILENAME;
+	private static final String CONTAINER_DATUM_GRID_PATH =
+			"/opt/graphdb/sis-data/DatumChanges/" + DATUM_GRID_FILENAME;
 
 	/*
 	 * The EPSG:3006 points reuse the GDB-10773 3-4-5 metre fixture. The surrounding polygon is the smallest
@@ -91,8 +95,25 @@ public class GraphDbPackagingSmokeIT {
 			+ "  FILTER(abs(?distance - 5.0) < 0.01)\n"
 			+ "}";
 
+	/* The NZGD49 point and NZGD2000 result use LINZ's distortion-grid example 1, converted to decimal degrees. */
+	private static final String NZGD49_TO_NZGD2000_GRID_QUERY = ""
+			+ "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+			+ "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
+			+ "PREFIX uom: <http://www.opengis.net/def/uom/OGC/1.0/>\n"
+			+ "ASK {\n"
+			+ "  BIND(geof:transform(\n"
+			+ "    \"<http://www.opengis.net/def/crs/EPSG/0/4272> POINT(-36.5 175)\"^^geo:wktLiteral,\n"
+			+ "    <http://www.opengis.net/def/crs/EPSG/0/4167>\n"
+			+ "  ) AS ?transformed)\n"
+			+ "  BIND(\"<http://www.opengis.net/def/crs/EPSG/0/4167> "
+			+ "POINT(-36.498190227778 175.000192969444)\"^^geo:wktLiteral AS ?expected)\n"
+			+ "  FILTER(geof:distance(?transformed, ?expected, uom:metre) < 0.1)\n"
+			+ "}";
+
 	private static final Pattern TRUE_BOOLEAN_RESULT =
 			Pattern.compile("\\\"boolean\\\"\\s*:\\s*true");
+	private static final Pattern FALSE_BOOLEAN_RESULT =
+			Pattern.compile("\\\"boolean\\\"\\s*:\\s*false");
 
 	private static final ImageFromDockerfile IMAGE = new ImageFromDockerfile()
 			.withFileFromPath("Dockerfile", requiredPath(DOCKERFILE_PROPERTY, "packaging-smoke Dockerfile"))
@@ -103,61 +124,108 @@ public class GraphDbPackagingSmokeIT {
 			.withBuildArg("GRAPHDB_IMAGE", requiredProperty(GRAPHDB_IMAGE_PROPERTY))
 			.withBuildArg("JAVA_IMAGE", requiredProperty(JAVA_IMAGE_PROPERTY));
 
-	@SuppressWarnings("resource") // JUnit's class rule stops the container after the test class finishes.
-	@ClassRule
-	public static final GenericContainer<?> GRAPHDB = new GenericContainer<>(IMAGE)
-			.withExposedPorts(7200)
-			.waitingFor(Wait.forHttp("/rest/repositories")
-					.forStatusCode(200)
-					.withStartupTimeout(Duration.ofMinutes(2)));
-
 	private final HttpClient httpClient = HttpClient.newBuilder()
 			.connectTimeout(Duration.ofSeconds(10))
 			.build();
 
 	@Test
-	public void assembledPluginUsesExternalCrsDataForIndexedPropertyRelationAndDistanceFunction() throws Exception {
-		createRepository(REPOSITORY_ID);
-		executeUpdate(REPOSITORY_ID, INSERT_GEOMETRIES, "insert smoke-test geometries");
-		executeUpdate(REPOSITORY_ID, ENABLE_GEOSPARQL, "enable GeoSPARQL and build its index");
+	public void datumGridKnownPointValidationReturnsFalseAndWarnsWhenGridIsMissing() throws Exception {
+		try (GenericContainer<?> graphDb = graphDbWithoutDatumGrid()) {
+			graphDb.start();
+			createRepository(graphDb, REPOSITORY_ID);
 
-		assertAskTrue(REPOSITORY_ID, WITHIN_QUERY, "execute indexed geo:sfWithin query");
-		assertAskTrue(REPOSITORY_ID, GEOJSON_WITHIN_QUERY, "execute GeoJSON indexed geo:sfWithin query");
-		assertAskTrue(REPOSITORY_ID, EPSG_3006_WITHIN_QUERY, "execute EPSG:3006 indexed geo:sfWithin query");
-		assertAskTrue(REPOSITORY_ID, EPSG_3006_DISTANCE_QUERY, "evaluate EPSG:3006 five-metre distance function");
+			assertAskFalse(graphDb, REPOSITORY_ID, NZGD49_TO_NZGD2000_GRID_QUERY,
+					"evaluate NZGD49 to NZGD2000 transformation without the datum grid");
+			String logs = graphDb.getLogs();
+			assertTrue("Expected GraphDB to report the missing NTv2 grid. Logs:\n" + logs,
+					logs.contains("Cannot find NTv2 file") && logs.contains(DATUM_GRID_FILENAME));
+		}
+	}
+
+	@Test
+	public void assembledPluginUsesExternalCrsDataForQueriesAndDatumGridTransformation() throws Exception {
+		try (GenericContainer<?> graphDb = graphDbWithDatumGrid()) {
+			graphDb.start();
+			createRepository(graphDb, REPOSITORY_ID);
+			executeUpdate(graphDb, REPOSITORY_ID, INSERT_GEOMETRIES, "insert smoke-test geometries");
+			executeUpdate(graphDb, REPOSITORY_ID, ENABLE_GEOSPARQL, "enable GeoSPARQL and build its index");
+
+			assertAskTrue(graphDb, REPOSITORY_ID, WITHIN_QUERY, "execute indexed geo:sfWithin query");
+			assertAskTrue(graphDb, REPOSITORY_ID, GEOJSON_WITHIN_QUERY, "execute GeoJSON indexed geo:sfWithin query");
+			assertAskTrue(graphDb, REPOSITORY_ID, EPSG_3006_WITHIN_QUERY,
+					"execute EPSG:3006 indexed geo:sfWithin query");
+			assertAskTrue(graphDb, REPOSITORY_ID, EPSG_3006_DISTANCE_QUERY,
+					"evaluate EPSG:3006 five-metre distance function");
+			assertAskTrue(graphDb, REPOSITORY_ID, NZGD49_TO_NZGD2000_GRID_QUERY,
+					"evaluate NZGD49 to NZGD2000 datum-grid transformation");
+		}
 	}
 
 	@Test
 	public void repositoriesShareExternalCrsDataAcrossRepositoryCreationAndDeletion() throws Exception {
-		assertIndexedEpsg3006("shared-crs-first");
-		assertIndexedEpsg3006("shared-crs-second");
-		deleteRepository("shared-crs-first");
-		assertAskTrue("shared-crs-second", EPSG_3006_WITHIN_QUERY,
-				"execute EPSG:3006 indexed geo:sfWithin query in shared-crs-second after deleting shared-crs-first");
-		assertIndexedEpsg3006("shared-crs-third");
+		try (GenericContainer<?> graphDb = graphDbWithoutDatumGrid()) {
+			graphDb.start();
+			assertIndexedEpsg3006(graphDb, "shared-crs-first");
+			assertIndexedEpsg3006(graphDb, "shared-crs-second");
+			deleteRepository(graphDb, "shared-crs-first");
+			assertAskTrue(graphDb, "shared-crs-second", EPSG_3006_WITHIN_QUERY,
+					"execute EPSG:3006 indexed geo:sfWithin query in shared-crs-second after deleting shared-crs-first");
+			assertIndexedEpsg3006(graphDb, "shared-crs-third");
+		}
 	}
 
-	private void assertIndexedEpsg3006(String repositoryId) throws Exception {
-		createRepository(repositoryId);
-		executeUpdate(repositoryId, INSERT_GEOMETRIES, "insert geometries into " + repositoryId);
-		executeUpdate(repositoryId, ENABLE_GEOSPARQL, "enable GeoSPARQL and build the index of " + repositoryId);
-		assertAskTrue(repositoryId, EPSG_3006_WITHIN_QUERY, "execute EPSG:3006 indexed geo:sfWithin query in "
+	private void assertIndexedEpsg3006(GenericContainer<?> graphDb, String repositoryId) throws Exception {
+		createRepository(graphDb, repositoryId);
+		executeUpdate(graphDb, repositoryId, INSERT_GEOMETRIES, "insert geometries into " + repositoryId);
+		executeUpdate(graphDb, repositoryId, ENABLE_GEOSPARQL, "enable GeoSPARQL and build the index of "
 				+ repositoryId);
+		assertAskTrue(graphDb, repositoryId, EPSG_3006_WITHIN_QUERY,
+				"execute EPSG:3006 indexed geo:sfWithin query in " + repositoryId);
 	}
 
-	private void assertAskTrue(String repositoryId, String query, String operation) throws Exception {
-		HttpResponse<String> response = send(HttpRequest.newBuilder(
-				endpoint("/repositories/" + repositoryId + "?query=" + encode(query)))
+	private GenericContainer<?> graphDbWithoutDatumGrid() {
+		return new GenericContainer<>(IMAGE)
+				.withExposedPorts(7200)
+				.waitingFor(Wait.forHttp("/rest/repositories")
+						.forStatusCode(200)
+						.withStartupTimeout(Duration.ofMinutes(2)));
+	}
+
+	private GenericContainer<?> graphDbWithDatumGrid() {
+		GenericContainer<?> graphDb = graphDbWithoutDatumGrid();
+		graphDb.withCopyFileToContainer(
+				MountableFile.forClasspathResource(DATUM_GRID_RESOURCE),
+				CONTAINER_DATUM_GRID_PATH);
+		return graphDb;
+	}
+
+	private void assertAskTrue(GenericContainer<?> graphDb, String repositoryId, String query, String operation)
+			throws Exception {
+		HttpResponse<String> response = send(graphDb, HttpRequest.newBuilder(
+				endpoint(graphDb, "/repositories/" + repositoryId + "?query=" + encode(query)))
 				.header("Accept", "application/sparql-results+json")
 				.timeout(Duration.ofMinutes(2))
 				.GET()
 				.build(), operation);
 
-		assertTrue(failureMessage("Expected the ASK query to return true", response),
+		assertTrue(failureMessage(graphDb, "Expected the ASK query to return true", response),
 				TRUE_BOOLEAN_RESULT.matcher(response.body()).find());
 	}
 
-	private void createRepository(String repositoryId) throws Exception {
+	private void assertAskFalse(GenericContainer<?> graphDb, String repositoryId, String query, String operation)
+			throws Exception {
+		HttpResponse<String> response = send(graphDb, HttpRequest.newBuilder(
+				endpoint(graphDb, "/repositories/" + repositoryId + "?query=" + encode(query)))
+				.header("Accept", "application/sparql-results+json")
+				.timeout(Duration.ofMinutes(2))
+				.GET()
+				.build(), operation);
+
+		assertTrue(failureMessage(graphDb, "Expected the ASK query to return false", response),
+				FALSE_BOOLEAN_RESULT.matcher(response.body()).find());
+	}
+
+	private void createRepository(GenericContainer<?> graphDb, String repositoryId) throws Exception {
 		byte[] repositoryConfig = new String(readResource("/graphdb-packaging-smoke-repository.ttl"),
 				StandardCharsets.UTF_8)
 				.replace("rep:repositoryID \"" + REPOSITORY_ID + "\"", "rep:repositoryID \"" + repositoryId + "\"")
@@ -171,43 +239,46 @@ public class GraphDbPackagingSmokeIT {
 		body.write(repositoryConfig);
 		body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
 
-		send(HttpRequest.newBuilder(endpoint("/rest/repositories"))
+		send(graphDb, HttpRequest.newBuilder(endpoint(graphDb, "/rest/repositories"))
 				.header("Content-Type", "multipart/form-data; boundary=" + boundary)
 				.timeout(Duration.ofMinutes(2))
 				.POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
 				.build(), "create ephemeral GraphDB repository " + repositoryId);
 	}
 
-	private void deleteRepository(String repositoryId) throws Exception {
-		send(HttpRequest.newBuilder(endpoint("/rest/repositories/" + repositoryId))
+	private void deleteRepository(GenericContainer<?> graphDb, String repositoryId) throws Exception {
+		send(graphDb, HttpRequest.newBuilder(endpoint(graphDb, "/rest/repositories/" + repositoryId))
 				.timeout(Duration.ofMinutes(2))
 				.DELETE()
 				.build(), "delete GraphDB repository " + repositoryId);
 	}
 
-	private void executeUpdate(String repositoryId, String update, String operation) throws Exception {
-		send(HttpRequest.newBuilder(endpoint("/repositories/" + repositoryId + "/statements"))
+	private void executeUpdate(GenericContainer<?> graphDb, String repositoryId, String update, String operation)
+			throws Exception {
+		send(graphDb, HttpRequest.newBuilder(endpoint(graphDb,
+				"/repositories/" + repositoryId + "/statements"))
 				.header("Content-Type", "application/x-www-form-urlencoded")
 				.timeout(Duration.ofMinutes(2))
 				.POST(HttpRequest.BodyPublishers.ofString("update=" + encode(update)))
 				.build(), operation);
 	}
 
-	private HttpResponse<String> send(HttpRequest request, String operation) throws Exception {
+	private HttpResponse<String> send(GenericContainer<?> graphDb, HttpRequest request, String operation)
+			throws Exception {
 		HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-		assertTrue(failureMessage("Failed to " + operation, response),
+		assertTrue(failureMessage(graphDb, "Failed to " + operation, response),
 				response.statusCode() >= 200 && response.statusCode() < 300);
 		return response;
 	}
 
-	private URI endpoint(String path) {
-		return URI.create("http://" + GRAPHDB.getHost() + ":" + GRAPHDB.getMappedPort(7200) + path);
+	private URI endpoint(GenericContainer<?> graphDb, String path) {
+		return URI.create("http://" + graphDb.getHost() + ":" + graphDb.getMappedPort(7200) + path);
 	}
 
-	private String failureMessage(String message, HttpResponse<String> response) {
+	private String failureMessage(GenericContainer<?> graphDb, String message, HttpResponse<String> response) {
 		return message + ". HTTP status: " + response.statusCode()
 				+ ", response body: " + response.body()
-				+ "\nGraphDB container logs:\n" + GRAPHDB.getLogs();
+				+ "\nGraphDB container logs:\n" + graphDb.getLogs();
 	}
 
 	private static String encode(String value) {
