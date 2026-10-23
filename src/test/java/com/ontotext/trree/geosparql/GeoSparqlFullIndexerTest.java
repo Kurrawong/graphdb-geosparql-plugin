@@ -32,6 +32,7 @@ public class GeoSparqlFullIndexerTest {
 	private static final long AS_GML = 11L;
 	private static final long AS_GEO_JSON = 12L;
 	private static final long HAS_DEFAULT_GEOMETRY = 13L;
+	private static final long HAS_SERIALIZATION = 14L;
 	private static final long GEOMETRY_1 = 100L;
 	private static final long GEOMETRY_2 = 101L;
 	private static final long LITERAL_1 = 200L;
@@ -124,11 +125,89 @@ public class GeoSparqlFullIndexerTest {
 				indexer.sourceDatatypes);
 	}
 
+	@Test
+	public void fullIndexUsesDatatypeForGenericSerializationOfGeometryAndFeature() throws Exception {
+		CountingGeoSparqlPlugin plugin = newPlugin();
+		FakeEntities entities = new FakeEntities();
+		entities.add(GEOMETRY_1, SimpleValueFactory.getInstance().createIRI("http://example.com/geometry/1"));
+		entities.add(LITERAL_1, SimpleValueFactory.getInstance()
+				.createLiteral("POINT(1 1)", GeoConstants.GEO_WKT_LITERAL));
+		entities.add(LITERAL_2, SimpleValueFactory.getInstance().createLiteral(
+				"<gml:Point xmlns:gml='http://www.opengis.net/gml/3.2' "
+						+ "srsName='http://www.opengis.net/def/crs/OGC/1.3/CRS84'>"
+						+ "<gml:pos>2 2</gml:pos></gml:Point>", GeoConstants.GEO_GML_LITERAL));
+		entities.add(202L, SimpleValueFactory.getInstance().createLiteral(
+				"{\"type\":\"Point\",\"coordinates\":[3,3]}", GeoConstants.GEO_JSON_LITERAL));
+		entities.add(203L, SimpleValueFactory.getInstance().createLiteral("POINT(4 4)"));
+		entities.add(204L, SimpleValueFactory.getInstance().createIRI("http://example.com/distribution"));
+
+		FakeStatements statements = new FakeStatements((Runnable) null);
+		statements.add(GEOMETRY_1, HAS_SERIALIZATION, LITERAL_1);
+		statements.add(GEOMETRY_1, HAS_SERIALIZATION, LITERAL_2);
+		statements.add(GEOMETRY_1, HAS_SERIALIZATION, 202L);
+		statements.add(GEOMETRY_1, HAS_SERIALIZATION, 203L);
+		statements.add(GEOMETRY_1, HAS_SERIALIZATION, 204L);
+		statements.add(FEATURE_1, HAS_DEFAULT_GEOMETRY, GEOMETRY_1);
+
+		RecordingIndexer indexer = new RecordingIndexer();
+		new GeoSparqlFullIndexer(indexer, plugin).reindex(new FakePluginConnection(entities, statements));
+
+		assertEquals(List.of(GEOMETRY_1, GEOMETRY_1, GEOMETRY_1, FEATURE_1, FEATURE_1, FEATURE_1),
+				indexer.indexedSubjects);
+		assertEquals(List.of(GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_GML_LITERAL,
+				GeoConstants.GEO_JSON_LITERAL, GeoConstants.GEO_WKT_LITERAL, GeoConstants.GEO_GML_LITERAL,
+				GeoConstants.GEO_JSON_LITERAL), indexer.sourceDatatypes);
+		assertEquals(6, plugin.conversionCount);
+	}
+
+	@Test
+	public void fullIndexAppendsOverlappingSerializationsOncePerEntity() throws Exception {
+		List<Literal> literals = List.of(
+				SimpleValueFactory.getInstance().createLiteral("POINT(1 1)", GeoConstants.GEO_WKT_LITERAL),
+				SimpleValueFactory.getInstance().createLiteral(
+						"<gml:Point xmlns:gml='http://www.opengis.net/gml/3.2' "
+								+ "srsName='http://www.opengis.net/def/crs/OGC/1.3/CRS84'>"
+								+ "<gml:pos>1 1</gml:pos></gml:Point>", GeoConstants.GEO_GML_LITERAL),
+				SimpleValueFactory.getInstance().createLiteral(
+						"{\"type\":\"Point\",\"coordinates\":[1,1]}", GeoConstants.GEO_JSON_LITERAL));
+		List<Long> predicates = List.of(AS_WKT, AS_GML, AS_GEO_JSON);
+		Literal distinct = SimpleValueFactory.getInstance().createLiteral("POINT(2 2)", GeoConstants.GEO_WKT_LITERAL);
+		for (int i = 0; i < literals.size(); i++) {
+			Literal literal = literals.get(i);
+			CountingGeoSparqlPlugin plugin = newPlugin();
+			FakeEntities entities = new FakeEntities();
+			entities.add(GEOMETRY_1, SimpleValueFactory.getInstance().createIRI("http://example.com/geometry/1"));
+			entities.add(GEOMETRY_2, SimpleValueFactory.getInstance().createIRI("http://example.com/geometry/2"));
+			entities.add(LITERAL_1, literal);
+			entities.add(LITERAL_2, distinct);
+			FakeStatements statements = new FakeStatements((Runnable) null);
+			statements.add(GEOMETRY_1, predicates.get(i), LITERAL_1);
+			statements.add(GEOMETRY_1, HAS_SERIALIZATION, LITERAL_1);
+			statements.add(GEOMETRY_1, HAS_SERIALIZATION, LITERAL_2);
+			statements.add(GEOMETRY_2, HAS_SERIALIZATION, LITERAL_1);
+			statements.add(FEATURE_1, HAS_DEFAULT_GEOMETRY, GEOMETRY_1);
+			statements.add(FEATURE_2, HAS_DEFAULT_GEOMETRY, GEOMETRY_2);
+
+			RecordingIndexer indexer = new RecordingIndexer();
+			new GeoSparqlFullIndexer(indexer, plugin).reindex(new FakePluginConnection(entities, statements));
+
+			String context = literal.getDatatype().stringValue();
+			assertEquals(context, List.of(GEOMETRY_1, GEOMETRY_1, GEOMETRY_2, FEATURE_1, FEATURE_1, FEATURE_2),
+					indexer.indexedSubjects);
+			assertEquals(context, List.of(literal.stringValue(), distinct.stringValue(), literal.stringValue(),
+					literal.stringValue(), distinct.stringValue(), literal.stringValue()), indexer.sourceLexicalForms);
+			assertEquals(context, List.of(literal.getDatatype(), distinct.getDatatype(), literal.getDatatype(),
+					literal.getDatatype(), distinct.getDatatype(), literal.getDatatype()), indexer.sourceDatatypes);
+			assertEquals(context, 6, plugin.conversionCount);
+		}
+	}
+
 	private static CountingGeoSparqlPlugin newPlugin() {
 		CountingGeoSparqlPlugin plugin = new CountingGeoSparqlPlugin();
 		plugin.asWKT = AS_WKT;
 		plugin.asGML = AS_GML;
 		plugin.asGeoJSON = AS_GEO_JSON;
+		plugin.hasSerialization = HAS_SERIALIZATION;
 		plugin.hasDefaultGeometry = HAS_DEFAULT_GEOMETRY;
 		plugin.setConfig(new GeoSparqlConfig());
 		plugin.setLogger(LoggerFactory.getLogger(GeoSparqlFullIndexerTest.class));
@@ -151,11 +230,13 @@ public class GeoSparqlFullIndexerTest {
 	private static final class RecordingIndexer implements GeoSparqlIndexer {
 		private final List<Long> indexedSubjects = new ArrayList<>();
 		private final List<IRI> sourceDatatypes = new ArrayList<>();
+		private final List<String> sourceLexicalForms = new ArrayList<>();
 
 		@Override
 		public void appendGeometry(long subject, Function<Long, String> subjectMapper, IndexGeometry geometry) {
 			indexedSubjects.add(subject);
 			sourceDatatypes.add(geometry.sourceGeometryLiteral().datatype());
+			sourceLexicalForms.add(geometry.sourceGeometryLiteral().lexicalForm());
 		}
 
 		@Override

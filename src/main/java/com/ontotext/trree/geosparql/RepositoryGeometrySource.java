@@ -44,6 +44,7 @@ final class RepositoryGeometrySource {
 		addGeometriesWithPredicate(geometryResourceId, plugin.asWKT, geometries);
 		addGeometriesWithPredicate(geometryResourceId, plugin.asGML, geometries);
 		addGeometriesWithPredicate(geometryResourceId, plugin.asGeoJSON, geometries);
+		addGeometriesWithPredicate(geometryResourceId, plugin.hasSerialization, geometries);
 		return Collections.unmodifiableList(geometries);
 	}
 

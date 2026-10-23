@@ -68,7 +68,8 @@ class GeoSparqlUpdateListener implements ParallelTransactionListener, StatementL
 	}
 
 	private void recordAffectedEntity(long subject, long predicate) {
-		if (predicate == asWKT || predicate == asGML || predicate == asGeoJSON) {
+		if (predicate == asWKT || predicate == asGML || predicate == asGeoJSON
+				|| predicate == parent.hasSerialization) {
 			geometriesToUpdate.add(subject);
 		} else if (predicate == hasDefaultGeometry) {
 			featuresToUpdate.add(subject);
